@@ -56,19 +56,43 @@ import com.phoenixgames.launcher.model.GameManifest
 import com.phoenixgames.launcher.ui.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.telegram.login.TelegramLogin
 
 class MainActivity : ComponentActivity() {
-    private val authCallback = mutableStateOf<Uri?>(null)
+    private val telegramIdToken = mutableStateOf<String?>(null)
+    private val telegramLoginError = mutableStateOf<String?>(null)
+
+    companion object {
+        private const val TELEGRAM_CLIENT_ID = "8476557926"
+        private const val TELEGRAM_REDIRECT = "https://app2153925360-login.tg.dev/tglogin"
+        private const val TELEGRAM_HOST = "app2153925360-login.tg.dev"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        authCallback.value = intent?.data?.takeIf { it.scheme == "phoenixlauncher" && it.host == "auth" }
+
+        TelegramLogin.init(
+            clientId = TELEGRAM_CLIENT_ID,
+            redirectUri = TELEGRAM_REDIRECT,
+            scopes = listOf("profile")
+        )
+
+        handleTelegramIntent(intent)
+
         setContent {
             PhoenixTheme {
                 PhoenixLauncherApp(
-                    authCallback = authCallback.value,
-                    onAuthCallbackConsumed = { authCallback.value = null }
+                    telegramIdToken = telegramIdToken.value,
+                    telegramLoginError = telegramLoginError.value,
+                    onTelegramStart = {
+                        telegramLoginError.value = null
+                        TelegramLogin.startLogin(this@MainActivity)
+                    },
+                    onTelegramResultConsumed = {
+                        telegramIdToken.value = null
+                        telegramLoginError.value = null
+                    }
                 )
             }
         }
@@ -77,10 +101,26 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val uri = intent.data
-        if (uri?.scheme == "phoenixlauncher" && uri.host == "auth") {
-            authCallback.value = uri
+        handleTelegramIntent(intent)
+    }
+
+    private fun handleTelegramIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "https" || uri.host != TELEGRAM_HOST || !uri.path.orEmpty().startsWith("/tglogin")) {
+            return
         }
+
+        TelegramLogin.handleLoginResponse(
+            uri = uri,
+            onSuccess = { data ->
+                telegramLoginError.value = null
+                telegramIdToken.value = data.idToken
+            },
+            onError = { error ->
+                telegramIdToken.value = null
+                telegramLoginError.value = error.message
+            }
+        )
     }
 }
 
@@ -95,8 +135,10 @@ private enum class Tab(val title: String, val glyph: String) {
 
 @Composable
 private fun PhoenixLauncherApp(
-    authCallback: Uri?,
-    onAuthCallbackConsumed: () -> Unit
+    telegramIdToken: String?,
+    telegramLoginError: String?,
+    onTelegramStart: () -> Unit,
+    onTelegramResultConsumed: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -123,12 +165,12 @@ private fun PhoenixLauncherApp(
         stage = if (account != null) Stage.Launcher else Stage.Login
     }
 
-    LaunchedEffect(authCallback?.toString()) {
-        val uri = authCallback ?: return@LaunchedEffect
+    LaunchedEffect(telegramIdToken) {
+        val idToken = telegramIdToken ?: return@LaunchedEffect
         authBusy = true
         authError = null
         try {
-            val result = PhoenixAuth.exchangeTelegram(context, uri)
+            val result = PhoenixAuth.exchangeNativeTelegram(context, idToken)
             account = result.account
             stage = Stage.Launcher
             tab = Tab.Home
@@ -137,8 +179,16 @@ private fun PhoenixLauncherApp(
             stage = Stage.Login
         } finally {
             authBusy = false
-            onAuthCallbackConsumed()
+            onTelegramResultConsumed()
         }
+    }
+
+    LaunchedEffect(telegramLoginError) {
+        val message = telegramLoginError ?: return@LaunchedEffect
+        authError = message.ifBlank { "Не удалось войти через Telegram" }
+        authBusy = false
+        stage = Stage.Login
+        onTelegramResultConsumed()
     }
 
     LaunchedEffect(downloading) {
@@ -153,16 +203,13 @@ private fun PhoenixLauncherApp(
 
     fun beginTelegram() {
         if (authBusy) return
-        scope.launch {
-            authBusy = true
-            authError = null
-            try {
-                PhoenixAuth.startTelegram(context)
-            } catch (t: Throwable) {
-                authError = t.message ?: "Не удалось открыть Telegram"
-            } finally {
-                authBusy = false
-            }
+        authBusy = true
+        authError = null
+        try {
+            onTelegramStart()
+        } catch (t: Throwable) {
+            authBusy = false
+            authError = t.message ?: "Не удалось открыть Telegram"
         }
     }
 
