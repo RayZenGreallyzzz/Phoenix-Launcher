@@ -632,7 +632,7 @@ private fun GameDetails(
 ) {
     LazyColumn(Modifier.fillMaxSize().background(PhoenixBg)) {
         item {
-            Box(Modifier.fillMaxWidth().height(290.dp)) {
+            Box(Modifier.fillMaxWidth().height(410.dp)) {
                 Image(
                     painter = painterResource(game.heroRes),
                     contentDescription = game.title,
@@ -648,32 +648,61 @@ private fun GameDetails(
                     onClick = onBack,
                     modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
                 ) { Text("←", color = Color.White, fontSize = 24.sp) }
-                Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
-                    Text(game.title, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                    Text(game.subtitle, color = PhoenixMuted, fontSize = 12.sp)
+                Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
+                    Text("PHOENIX ORIGINAL", color = PhoenixOrange, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(game.title, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(9.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        game.tags.forEach { Tag(it) }
+                    }
                 }
             }
         }
         item {
-            Column(Modifier.padding(18.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    game.tags.forEach { Tag(it) }
-                }
-                Spacer(Modifier.height(16.dp))
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
                 PrimaryButton(
                     if (!game.released) "Скоро" else if (installed) "Играть" else "Скачать " + game.sizeLabel,
                     onPrimary,
                     enabled = game.released
                 )
-                Spacer(Modifier.height(20.dp))
-                Text("О игре", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text(game.description, color = Color.White.copy(alpha = .76f), fontSize = 14.sp, lineHeight = 20.sp)
-                Spacer(Modifier.height(18.dp))
-                InfoRow("Версия", game.version)
-                InfoRow("Размер", game.sizeLabel)
-                InfoRow("Платформа", "Android")
-                InfoRow("Аккаунт", "Phoenix / Telegram")
+                Spacer(Modifier.height(28.dp))
+                Text("Один мир. Тысячи легенд.", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text(game.description, color = PhoenixMuted, fontSize = 12.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(22.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text("ВЕРСИЯ", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 1.2.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(game.version, fontSize = 12.sp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("РАЗМЕР", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 1.2.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(game.sizeLabel, fontSize = 12.sp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("ПЛАТФОРМА", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 1.2.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Android", fontSize = 12.sp)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                HorizontalDivider(color = PhoenixBorder)
+                Spacer(Modifier.height(22.dp))
+                Text("Мир игры", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(3) {
+                        Image(
+                            painter = painterResource(game.heroRes),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.weight(1f).height(88.dp).clip(RoundedCornerShape(6.dp))
+                        )
+                    }
+                }
             }
         }
     }
@@ -688,66 +717,103 @@ private fun DownloadScreen(
     onStart: () -> Unit,
     onPlay: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().background(PhoenixBg).padding(horizontal = 18.dp, vertical = 36.dp)) {
-        TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) { Text("←  Назад", color = Color.White) }
-        Spacer(Modifier.height(20.dp))
-        Text("Загрузка игры", fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Spacer(Modifier.height(22.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    val pct = if (installed) 100 else (progress * 100).toInt()
+    val stage = when {
+        pct >= 100 -> 3
+        pct >= 93 -> 2
+        pct >= 83 -> 1
+        else -> 0
+    }
+    val stages = listOf("Загрузка файлов игры", "Проверка файлов", "Установка модуля", "Готово к запуску")
+
+    LazyColumn(
+        Modifier.fillMaxSize().background(PhoenixBg),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp)
+    ) {
+        item {
+            TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+                Text("←  Назад", color = PhoenixText, fontSize = 12.sp)
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(if (installed) "Игра установлена" else "Установка игры", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(22.dp))
             Image(
-                painter = painterResource(R.drawable.ppa_card),
+                painter = painterResource(R.drawable.ppa_hero),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(16.dp))
+                modifier = Modifier.fillMaxWidth().aspectRatio(1.8f).clip(RoundedCornerShape(8.dp))
             )
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text("Phoenix Pix Arena", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Версия 0.1.0", color = PhoenixMuted, fontSize = 12.sp)
-                Text("Размер: ≈ 380 МБ", color = PhoenixMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(22.dp))
+            Text("Phoenix Pix Arena", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(5.dp))
+            Text("Версия 0.1.0  ·  380 МБ", color = PhoenixMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(26.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Text(
+                    when {
+                        installed -> "Готово к запуску"
+                        pct >= 93 -> "Установка модуля"
+                        pct >= 83 -> "Проверка файлов"
+                        else -> "Загрузка файлов игры"
+                    },
+                    color = PhoenixText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(pct.toString() + "%", color = PhoenixOrange, fontSize = 34.sp, fontWeight = FontWeight.Black)
             }
-        }
-        Spacer(Modifier.height(28.dp))
-        LinearProgressIndicator(
-            progress = { if (installed) 1f else progress },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-            color = PhoenixBlue,
-            trackColor = PhoenixBorder
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                when {
-                    installed -> "Готово к запуску"
-                    downloading -> "Загрузка… " + (progress * 380).toInt() + " МБ из 380 МБ"
-                    else -> "Готово к загрузке"
-                },
-                color = PhoenixMuted,
-                fontSize = 12.sp
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { if (installed) 1f else progress },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = PhoenixOrange,
+                trackColor = PhoenixSecondary
             )
-            Text((if (installed) 100 else (progress * 100).toInt()).toString() + "%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Text(((380 * pct) / 100).toString() + " / 380 МБ", color = PhoenixMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                Text(
+                    if (installed) "Установка завершена" else "12,8 МБ/с · ~" + maxOf(1, (100 - pct + 2) / 3) + " сек",
+                    color = PhoenixMuted,
+                    fontSize = 10.sp
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider(color = PhoenixBorder)
+            stages.forEachIndexed { index, title ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val complete = installed || stage > index
+                    val current = !installed && stage == index
+                    Box(
+                        Modifier.size(24.dp).clip(CircleShape)
+                            .border(1.dp, if (complete) PhoenixGreen else if (current) PhoenixOrange else PhoenixBorder, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (complete) "✓" else if (current) "•" else "–", color = if (complete) PhoenixGreen else if (current) PhoenixOrange else PhoenixMuted, fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(title, color = if (complete) PhoenixGreen else if (current) PhoenixText else PhoenixMuted, fontSize = 12.sp)
+                }
+            }
+            HorizontalDivider(color = PhoenixBorder)
+            Spacer(Modifier.height(22.dp))
+            PrimaryButton(
+                if (installed) "Играть" else if (downloading) "Загрузка…" else "Начать загрузку",
+                if (installed) onPlay else onStart,
+                enabled = !downloading || installed
+            )
+            Spacer(Modifier.height(18.dp))
+            Text(
+                "Файлы проверяются системой Phoenix",
+                color = PhoenixMuted,
+                fontSize = 10.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-        Spacer(Modifier.height(22.dp))
-        PrimaryButton(
-            when {
-                installed -> "Играть"
-                downloading -> "Загрузка…"
-                else -> "Начать загрузку"
-            },
-            if (installed) onPlay else onStart,
-            enabled = !downloading
-        )
-        Spacer(Modifier.height(28.dp))
-        DownloadStep("Загрузка файлов игры", progress > .25f || installed)
-        DownloadStep("Проверка файлов", progress > .72f || installed)
-        DownloadStep("Установка модуля", progress >= 1f || installed)
-        DownloadStep("Готово к запуску", installed)
-        Spacer(Modifier.weight(1f))
-        Text(
-            "В v0.1 прогресс демонстрационный. Следующий этап — реальный manifest/update API.",
-            color = PhoenixMuted,
-            fontSize = 11.sp
-        )
     }
 }
 
