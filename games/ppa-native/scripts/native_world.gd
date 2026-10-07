@@ -87,8 +87,8 @@ func _build_map_layer() -> void:
     map_texture_rect.stretch_mode = TextureRect.STRETCH_SCALE
     map_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-    if ResourceLoader.exists("res://assets/peace_city.png"):
-        map_texture_rect.texture = load("res://assets/peace_city.png")
+    if ResourceLoader.exists("res://assets/peace_city.jpg"):
+        map_texture_rect.texture = load("res://assets/peace_city.jpg")
 
     add_child(map_texture_rect)
 
