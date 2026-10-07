@@ -1,6 +1,7 @@
 package com.phoenixgames.launcher
 
 import android.os.Bundle
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,12 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,14 +62,18 @@ private enum class Tab(val title: String, val glyph: String) {
 
 @Composable
 private fun PhoenixLauncherApp() {
-    var stage by remember { mutableStateOf(Stage.Splash) }
-    var tab by remember { mutableStateOf(Tab.Home) }
-    var selectedGame by remember { mutableStateOf<GameManifest?>(null) }
-    var downloadOpen by remember { mutableStateOf(false) }
-    var runtimeOpen by remember { mutableStateOf(false) }
-    var installed by remember { mutableStateOf(false) }
-    var downloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableFloatStateOf(0f) }
+    var stage by rememberSaveable { mutableStateOf(Stage.Splash) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    var selectedGameId by rememberSaveable { mutableStateOf<String?>(null) }
+    var downloadOpen by rememberSaveable { mutableStateOf(false) }
+    var runtimeOpen by rememberSaveable { mutableStateOf(false) }
+    var installed by rememberSaveable { mutableStateOf(false) }
+    var downloading by rememberSaveable { mutableStateOf(false) }
+    var progress by rememberSaveable { mutableFloatStateOf(0f) }
+
+    val selectedGame = remember(selectedGameId) {
+        selectedGameId?.let { id -> GameCatalog.games.firstOrNull { it.id == id } }
+    }
 
     LaunchedEffect(Unit) {
         delay(1200)
@@ -112,7 +119,7 @@ private fun PhoenixLauncherApp() {
                     selectedGame != null -> GameDetails(
                         game = selectedGame!!,
                         installed = installed && selectedGame!!.id == GameCatalog.ppa.id,
-                        onBack = { selectedGame = null },
+                        onBack = { selectedGameId = null },
                         onPrimary = {
                             if (selectedGame!!.id == GameCatalog.ppa.id) {
                                 if (installed) runtimeOpen = true else downloadOpen = true
@@ -123,7 +130,7 @@ private fun PhoenixLauncherApp() {
                         tab = tab,
                         onTab = { tab = it },
                         installed = installed,
-                        onOpenGame = { selectedGame = it },
+                        onOpenGame = { selectedGameId = it.id },
                         onInstall = { downloadOpen = true }
                     )
                 }
@@ -468,7 +475,7 @@ private fun LibraryScreen(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
-    var filter by remember { mutableStateOf("Все игры") }
+    var filter by rememberSaveable { mutableStateOf("Все игры") }
     val visibleGames = GameCatalog.games.filter { game ->
         when (filter) {
             "Установлены" -> installed && game.id == GameCatalog.ppa.id
@@ -574,7 +581,7 @@ private fun LibraryScreen(
 
 @Composable
 private fun NewsScreen() {
-    var filter by remember { mutableStateOf("Все") }
+    var filter by rememberSaveable { mutableStateOf("Все") }
     val newsItems = listOf(
         Triple("Новая арена. Новая легенда.", "PPA", "7 октября 2026"),
         Triple("Будущее уже близко", "События", "5 октября 2026"),
@@ -725,10 +732,10 @@ private fun ProfileScreen() {
 
 @Composable
 private fun SettingsScreen() {
-    var autoUpdate by remember { mutableStateOf(true) }
-    var wifiOnly by remember { mutableStateOf(true) }
-    var notifications by remember { mutableStateOf(true) }
-    var darkTheme by remember { mutableStateOf(true) }
+    var autoUpdate by rememberSaveable { mutableStateOf(true) }
+    var wifiOnly by rememberSaveable { mutableStateOf(true) }
+    var notifications by rememberSaveable { mutableStateOf(true) }
+    var darkTheme by rememberSaveable { mutableStateOf(true) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
