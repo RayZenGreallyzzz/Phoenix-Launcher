@@ -30,6 +30,7 @@
         </activity>
     </application>
     <queries>
+        <package android:name="com.phoenixgames.ppa" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tg" />
