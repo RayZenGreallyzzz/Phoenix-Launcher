@@ -16,11 +16,35 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+
           echo "HEALTH:"
           curl --fail-with-body --silent --show-error "$BASE/api/health"
           echo
-          echo "LAUNCHER_AUTH_PROBE:"
+
+          echo "EMAIL_ROUTE:"
           body="$(curl --silent --show-error -X POST "$BASE/api/launcher/email/register"             -H 'content-type: application/json'             --data '{"email":"invalid","password":"12345678"}')"
           echo "$body"
           echo "$body" | grep -q '"code":"INVALID_EMAIL"'
+
+          echo "TELEGRAM_START:"
+          STATE="phoenix_auth_smoke_state_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+          CHALLENGE="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          start="$(curl --fail-with-body --silent --show-error -X POST "$BASE/api/launcher/auth/telegram/start"             -H 'content-type: application/json'             --data "{\"state\":\"$STATE\",\"codeChallenge\":\"$CHALLENGE\"}")"
+          echo "$start"
+          AUTH_URL="$(echo "$start" | jq -r '.authUrl')"
+          test -n "$AUTH_URL"
+          test "$AUTH_URL" != "null"
+
+          curl --silent --show-error -D /tmp/tg.headers -o /tmp/tg.body "$AUTH_URL"
+          if grep -q 'telegram-widget.js' /tmp/tg.body; then
+            echo "TELEGRAM_WIDGET_READY"
+          elif grep -qi 'oauth.telegram.org' /tmp/tg.headers; then
+            echo "TELEGRAM_OIDC_READY"
+          else
+            echo "Telegram auth page did not initialize"
+            cat /tmp/tg.headers
+            cat /tmp/tg.body
+            exit 1
+          fi
+
           echo "PHOENIX_AUTH_BACKEND_OK"
