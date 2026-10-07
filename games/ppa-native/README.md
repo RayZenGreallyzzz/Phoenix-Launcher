@@ -8,19 +8,19 @@ Current native bridge:
 - 60-second one-time Launcher ticket -> 12-hour game session
 - same Phoenix/PPA profile and nickname from the shared backend
 
-Current 2.5D movement milestone:
-- PPA architecture is now enforced: flat map/gameplay layer, 3D only for player characters
-- no 3D buildings, no 3D mob conversion, no dynamic shadow map
-- native player slot is ready for the approved PPA GLB; the first smart-joystick performance build keeps the ultra-light fallback body while the private model asset is transferred safely
-- orthographic camera mirrors the current PPA Player3D overlay geometry
-- native smart floating joystick ports the current web behavior:
-  - appears at the first touch point on the left half
-  - one dedicated touch owns movement
-  - 8 px dead zone
-  - 50 px movement radius
-  - input remains full-rate; decorative redraw is capped around 30 Hz
-  - release/focus loss resets movement
-  - other touches remain free for attack/UI
-- live FPS and native coordinates remain visible for tablet testing
+Current Peace City milestone:
+- real current PPA Peace City background is used, not a replacement map
+- canonical PPA world remains 3048 x 3048 gameplay pixels
+- source art coordinates keep the existing 1024 -> 3048 scale
+- current PPA start position is preserved: source (500,620)
+- current PPA return position is preserved: source (640,600)
+- current four Peace City building collision rectangles are ported exactly
+- current safe-zone outer bounds are preserved
+- current dungeon-portal coordinates are preserved
+- map remains true 2D screen-space rendering
+- only the player visual is rendered in a transparent 3D Godot overlay
+- the 3D overlay uses the same 34 px/unit projection baseline as the current PPA Player3D runtime
+- smart floating joystick remains native and multi-touch safe
+- HUD reports canonical PPA X/Y coordinates plus FPS
 
-The current flat test layer is intentionally lightweight. The next migration step replaces it with the real PPA city/map data and the 2D walk/collision mask; mobs, bosses, pets and effects stay 2D.
+Mobs, bosses, pets, world effects and gameplay objects remain 2D by design. The current build still uses the lightweight fallback 3D body until the approved GLB is transferred into the native project.

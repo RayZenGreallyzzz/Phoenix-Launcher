@@ -103,6 +103,16 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
+      - name: Fetch current PPA Peace City map
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p games/ppa-native/assets
+          curl -L --fail --retry 4 --retry-delay 2 \
+            -o games/ppa-native/assets/peace_city.png \
+            "https://media.base44.com/images/public/6a8b1c398fe3fffe744a9e59/8fc1c7d20_a733f7151_5c5c79fd3_generated_image.png"
+          test "$(stat -c%s games/ppa-native/assets/peace_city.png)" -gt 100000
+
       - name: Import native PPA project
         run: godot --headless --path games/ppa-native --editor --import --quit
 
