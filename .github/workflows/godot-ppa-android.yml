@@ -109,12 +109,49 @@ jobs:
           set -euo pipefail
           mkdir -p games/ppa-native/assets
           curl -L --fail --retry 4 --retry-delay 2 \
-            -o games/ppa-native/assets/peace_city.png \
+            -o /tmp/peace_city_source \
             "https://media.base44.com/images/public/6a8b1c398fe3fffe744a9e59/8fc1c7d20_a733f7151_5c5c79fd3_generated_image.png"
-          test "$(stat -c%s games/ppa-native/assets/peace_city.png)" -gt 100000
+
+          test "$(stat -c%s /tmp/peace_city_source)" -gt 100000
+          echo "Peace City source:"
+          file /tmp/peace_city_source
+
+          # The CDN may negotiate WebP/JPEG even though the legacy URL ends in .png.
+          # Godot's importer keys off the extension, so normalize the downloaded
+          # bytes to a real PNG before import instead of shipping an invalid texture.
+          if python3 - <<'PY'
+          from pathlib import Path
+          data = Path('/tmp/peace_city_source').read_bytes()
+          raise SystemExit(0 if data.startswith(b'\x89PNG\r\n\x1a\n') else 1)
+          PY
+          then
+            mv /tmp/peace_city_source games/ppa-native/assets/peace_city.png
+          else
+            convert /tmp/peace_city_source games/ppa-native/assets/peace_city.png
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('games/ppa-native/assets/peace_city.png')
+          data = p.read_bytes()
+          assert data.startswith(b'\x89PNG\r\n\x1a\n'), 'Peace City is not a real PNG'
+          assert p.stat().st_size > 100000, 'Peace City PNG is unexpectedly small'
+          print('normalized Peace City PNG bytes=', p.stat().st_size)
+          PY
 
       - name: Import native PPA project
-        run: godot --headless --path games/ppa-native --editor --import --quit
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --editor --import --quit
+          IMPORT_META="games/ppa-native/assets/peace_city.png.import"
+          test -s "$IMPORT_META"
+          if grep -q 'valid=false' "$IMPORT_META"; then
+            echo "Peace City texture import is invalid; refusing to build a blank-map APK."
+            cat "$IMPORT_META"
+            exit 1
+          fi
+          grep -q 'path=' "$IMPORT_META"
 
       - name: Build native PPA APK
         shell: bash
