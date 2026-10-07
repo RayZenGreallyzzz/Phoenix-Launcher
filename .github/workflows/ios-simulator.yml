@@ -1,0 +1,31 @@
+name: Build Phoenix Launcher iOS Simulator
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-simulator.yml"
+
+jobs:
+  ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        run: xcodebuild -resolvePackageDependencies -project PhoenixLauncherIOS.xcodeproj -scheme PhoenixLauncher
+
+      - name: Build iPhone/iPad simulator app
+        working-directory: ios
+        run: |
+          xcodebuild             -project PhoenixLauncherIOS.xcodeproj             -scheme PhoenixLauncher             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             build
