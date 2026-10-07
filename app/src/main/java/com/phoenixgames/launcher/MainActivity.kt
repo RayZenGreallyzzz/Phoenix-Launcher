@@ -520,6 +520,7 @@ private fun PhoenixMark(
 
 @Composable
 private fun NotificationDialog(
+    nickname: String,
     onClose: () -> Unit,
     onOpenPpa: () -> Unit
 ) {
@@ -548,7 +549,7 @@ private fun NotificationDialog(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Добро пожаловать в Phoenix, RayZenGX!",
+                    "Добро пожаловать в Phoenix, $nickname!",
                     color = PhoenixText,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
@@ -588,9 +589,15 @@ private fun NotificationDialog(
 private fun LauncherShell(
     tab: Tab,
     onTab: (Tab) -> Unit,
+    account: PhoenixAccount,
     installed: Boolean,
     onOpenGame: (GameManifest) -> Unit,
-    onInstall: () -> Unit
+    onInstall: () -> Unit,
+    onLinkTelegram: () -> Unit,
+    onBindEmail: (String, String) -> Unit,
+    onLogout: () -> Unit,
+    authBusy: Boolean,
+    authError: String?
 ) {
     var notificationsOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -598,6 +605,7 @@ private fun LauncherShell(
         containerColor = PhoenixBg,
         topBar = {
             PhoenixTopBar(
+                account = account,
                 onHome = { onTab(Tab.Home) },
                 onNotifications = { notificationsOpen = true },
                 onProfile = { onTab(Tab.Profile) }
@@ -608,6 +616,7 @@ private fun LauncherShell(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 Tab.Home -> HomeScreen(
+                    nickname = account.nickname,
                     installed = installed,
                     onOpenGame = onOpenGame,
                     onInstall = onInstall,
@@ -615,7 +624,15 @@ private fun LauncherShell(
                 )
                 Tab.Library -> LibraryScreen(installed, onOpenGame, onInstall)
                 Tab.News -> NewsScreen()
-                Tab.Profile -> ProfileScreen()
+                Tab.Profile -> ProfileScreen(
+                    account = account,
+                    installed = installed,
+                    busy = authBusy,
+                    error = authError,
+                    onLinkTelegram = onLinkTelegram,
+                    onBindEmail = onBindEmail,
+                    onLogout = onLogout
+                )
                 Tab.Settings -> SettingsScreen()
             }
         }
@@ -623,6 +640,7 @@ private fun LauncherShell(
 
     if (notificationsOpen) {
         NotificationDialog(
+            nickname = account.nickname,
             onClose = { notificationsOpen = false },
             onOpenPpa = { onOpenGame(GameCatalog.ppa) }
         )
@@ -631,6 +649,7 @@ private fun LauncherShell(
 
 @Composable
 private fun PhoenixTopBar(
+    account: PhoenixAccount,
     onHome: () -> Unit,
     onNotifications: () -> Unit,
     onProfile: () -> Unit
@@ -688,18 +707,35 @@ private fun PhoenixTopBar(
                 }
             }
 
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
 
-            Box(
-                Modifier
-                    .size(37.dp)
-                    .clip(CircleShape)
-                    .background(PhoenixSecondary)
-                    .border(1.dp, PhoenixBorder, CircleShape)
-                    .clickable(onClick = onProfile),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onProfile)
+                    .padding(start = 8.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("R", color = PhoenixOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    account.nickname,
+                    color = PhoenixText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 92.dp)
+                )
+                Spacer(Modifier.width(7.dp))
+                Box(
+                    Modifier
+                        .size(37.dp)
+                        .clip(CircleShape)
+                        .background(PhoenixSecondary)
+                        .border(1.dp, PhoenixBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(account.avatarLetter, color = PhoenixOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
         HorizontalDivider(color = PhoenixBorder, thickness = 1.dp)
@@ -708,6 +744,7 @@ private fun PhoenixTopBar(
 
 @Composable
 private fun HomeScreen(
+    nickname: String,
     installed: Boolean,
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit,
@@ -748,7 +785,7 @@ private fun HomeScreen(
                     )
                     Spacer(Modifier.height(5.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Привет, RayZenGX", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        Text("Привет, $nickname", fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.width(6.dp))
                         Text("✦", color = PhoenixOrange, fontSize = 15.sp)
                     }
