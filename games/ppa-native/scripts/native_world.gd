@@ -135,9 +135,17 @@ func _physics_process(delta: float) -> void:
     planar_velocity.y = move_toward(planar_velocity.y, desired_planar.y, ACCELERATION * delta)
 
     # Joystick coordinates are PPA map coordinates: +X right, +Y down.
-    # Project them onto the tilted 3D ground so movement still follows the finger.
-    var forward := Vector3(-CAMERA_OFFSET.x, 0.0, -CAMERA_OFFSET.z).normalized()
-    var right := Vector3(forward.z, 0.0, -forward.x).normalized()
+    # Derive screen-space movement from the actual camera basis, projected onto
+    # the gameplay plane. This keeps left/right/up/down correct even if camera
+    # angle or offset changes later.
+    var right := camera.global_transform.basis.x
+    right.y = 0.0
+    right = right.normalized()
+
+    var forward := -camera.global_transform.basis.z
+    forward.y = 0.0
+    forward = forward.normalized()
+
     var ground_velocity := right * planar_velocity.x + forward * (-planar_velocity.y)
 
     player.position += ground_velocity * delta
