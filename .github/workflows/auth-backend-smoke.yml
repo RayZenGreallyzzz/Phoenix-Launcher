@@ -1,0 +1,26 @@
+name: Phoenix Auth Backend Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/auth-backend-smoke.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe deployed Phoenix auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+          echo "HEALTH:"
+          curl --fail-with-body --silent --show-error "$BASE/api/health"
+          echo
+          echo "LAUNCHER_AUTH_PROBE:"
+          body="$(curl --silent --show-error -X POST "$BASE/api/launcher/email/register"             -H 'content-type: application/json'             --data '{"email":"invalid","password":"12345678"}')"
+          echo "$body"
+          echo "$body" | grep -q '"code":"INVALID_EMAIL"'
+          echo "PHOENIX_AUTH_BACKEND_OK"
