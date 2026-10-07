@@ -407,7 +407,7 @@ private fun LoginScreen(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     error,
-                    color = PhoenixRed,
+                    color = PhoenixDanger,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.widthIn(max = formWidth)
@@ -1349,7 +1349,7 @@ private fun ProfileScreen(
 
             if (!error.isNullOrBlank()) {
                 Spacer(Modifier.height(14.dp))
-                Text(error, color = PhoenixRed, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(error, color = PhoenixDanger, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             Spacer(Modifier.height(24.dp))
