@@ -18,6 +18,10 @@ var planar_velocity := Vector2.ZERO
 var fps_label: Label
 var coords_label: Label
 var input_label: Label
+var joystick_visual: Control
+var _joy_touch_id := -1
+var _joy_mouse_active := false
+var _joy_center := Vector2.ZERO
 var _fps_clock := 0.0
 var _animation_player: AnimationPlayer
 var _run_animation := ""
@@ -31,6 +35,82 @@ func _ready() -> void:
     _build_player()
     _build_camera()
     _build_hud()
+
+func _input(event: InputEvent) -> void:
+    # Android-native input path. One touch on the left half exclusively owns
+    # movement; every other touch stays available for attack/skills/UI.
+    if event is InputEventScreenTouch:
+        if event.pressed:
+            if _joy_touch_id == -1 and _joy_point_allowed(event.position):
+                _joy_touch_id = event.index
+                _joy_begin(event.position)
+                get_viewport().set_input_as_handled()
+        elif event.index == _joy_touch_id:
+            _joy_touch_id = -1
+            _joy_end()
+            get_viewport().set_input_as_handled()
+        return
+
+    if event is InputEventScreenDrag:
+        if event.index == _joy_touch_id:
+            _joy_update(event.position)
+            get_viewport().set_input_as_handled()
+        return
+
+    # Godot/Android can also expose the primary finger as mouse input depending
+    # on platform settings. Keep this fallback so movement works in both modes.
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+        if event.pressed:
+            if not _joy_mouse_active and _joy_touch_id == -1 and _joy_point_allowed(event.position):
+                _joy_mouse_active = true
+                _joy_begin(event.position)
+                get_viewport().set_input_as_handled()
+        elif _joy_mouse_active:
+            _joy_mouse_active = false
+            _joy_end()
+            get_viewport().set_input_as_handled()
+        return
+
+    if event is InputEventMouseMotion and _joy_mouse_active:
+        _joy_update(event.position)
+        get_viewport().set_input_as_handled()
+
+func _joy_point_allowed(point: Vector2) -> bool:
+    var rect := get_viewport().get_visible_rect()
+    return rect.size.x > 1.0 and point.x <= rect.size.x * 0.5
+
+func _joy_begin(point: Vector2) -> void:
+    _joy_center = point
+    move_input = Vector2.ZERO
+    if joystick_visual:
+        joystick_visual.begin_at(point)
+    if input_label:
+        input_label.text = "JOY ACTIVE · 0.00  0.00"
+
+func _joy_update(point: Vector2) -> void:
+    var raw := point - _joy_center
+    var distance := raw.length()
+    const DEAD := 8.0
+    const MAX_R := 50.0
+
+    if distance <= DEAD:
+        move_input = Vector2.ZERO
+    else:
+        var magnitude := (min(distance, MAX_R) - DEAD) / (MAX_R - DEAD)
+        move_input = raw / max(distance, 0.001) * magnitude
+
+    if joystick_visual:
+        joystick_visual.set_offset(raw)
+    if input_label:
+        input_label.text = "JOY ACTIVE · %.2f  %.2f" % [move_input.x, move_input.y]
+
+func _joy_end() -> void:
+    move_input = Vector2.ZERO
+    _joy_center = Vector2.ZERO
+    if joystick_visual:
+        joystick_visual.end()
+    if input_label:
+        input_label.text = "SMART JOYSTICK · коснись левой половины"
 
 func _physics_process(delta: float) -> void:
     if player == null:
@@ -296,12 +376,10 @@ func _build_hud() -> void:
     input_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.42))
     root.add_child(input_label)
 
-    var joystick: Control = JOYSTICK_SCRIPT.new()
-    joystick.name = "SmartFloatingJoystick"
-    joystick.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    joystick.vector_changed.connect(_on_joystick_changed)
-    joystick.active_changed.connect(_on_joystick_active_changed)
-    root.add_child(joystick)
+    joystick_visual = JOYSTICK_SCRIPT.new()
+    joystick_visual.name = "SmartFloatingJoystickVisual"
+    root.add_child(joystick_visual)
+    joystick_visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
     var exit_button := Button.new()
     exit_button.text = "ВЫХОД"
@@ -315,18 +393,15 @@ func _build_hud() -> void:
     exit_button.pressed.connect(_exit_game)
     root.add_child(exit_button)
 
-func _on_joystick_changed(value: Vector2) -> void:
-    move_input = value
-
-func _on_joystick_active_changed(active: bool) -> void:
-    if input_label:
-        input_label.visible = not active
-
 func _exit_game() -> void:
     get_tree().quit()
 
 func _notification(what: int) -> void:
-    if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+    if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+    elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
         get_tree().quit()
 
 func _add_flat_rect(size: Vector2, position: Vector3, color: Color) -> void:
