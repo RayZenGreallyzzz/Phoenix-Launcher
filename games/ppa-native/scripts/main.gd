@@ -136,7 +136,7 @@ func _build_ui() -> void:
     play_button.text = "ВОЙТИ В НАТИВНЫЙ МИР"
     play_button.custom_minimum_size = Vector2(0, 58)
     play_button.disabled = true
-    play_button.pressed.connect(_show_native_world)
+    play_button.pressed.connect(_enter_native_world)
     _style_primary_button(play_button)
     stack.add_child(play_button)
 
@@ -268,13 +268,11 @@ func _retry() -> void:
     else:
         _show_error("Нужен новый запуск через Phoenix Launcher.")
 
-func _show_native_world() -> void:
-    title_label.text = "PPA NATIVE WORLD · BRIDGE ONLINE"
-    status_label.text = "✓ Launcher → Godot → Phoenix Backend → PPA профиль работает"
-    status_label.add_theme_color_override("font_color", Color("#53CDAB"))
-    details_label.text = "Следующий слой: город, карта, Player3D, управление и боевая логика."
-    play_button.text = "МОСТ ПОДКЛЮЧЁН"
-    play_button.disabled = true
+func _enter_native_world() -> void:
+    get_tree().set_meta("phoenix_account", account.duplicate(true))
+    var err := get_tree().change_scene_to_file("res://world.tscn")
+    if err != OK:
+        _show_error("Не удалось открыть native world: %s" % error_string(err))
 
 func _save_session(token: String) -> void:
     var file := FileAccess.open(SESSION_FILE, FileAccess.WRITE)
