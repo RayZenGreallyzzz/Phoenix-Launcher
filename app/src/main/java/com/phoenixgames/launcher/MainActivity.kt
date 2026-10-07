@@ -53,6 +53,7 @@ import com.phoenixgames.launcher.auth.PhoenixAccount
 import com.phoenixgames.launcher.auth.PhoenixAuth
 import com.phoenixgames.launcher.data.GameCatalog
 import com.phoenixgames.launcher.model.GameManifest
+import com.phoenixgames.launcher.runtime.GameRuntime
 import com.phoenixgames.launcher.ui.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -147,10 +148,11 @@ private fun PhoenixLauncherApp(
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var selectedGameId by rememberSaveable { mutableStateOf<String?>(null) }
     var downloadOpen by rememberSaveable { mutableStateOf(false) }
-    var runtimeOpen by rememberSaveable { mutableStateOf(false) }
-    var installed by rememberSaveable { mutableStateOf(false) }
+    var installed by rememberSaveable { mutableStateOf(GameRuntime.isPpaInstalled(context)) }
     var downloading by rememberSaveable { mutableStateOf(false) }
     var progress by rememberSaveable { mutableFloatStateOf(0f) }
+    var gameBusy by remember { mutableStateOf(false) }
+    var gameError by remember { mutableStateOf<String?>(null) }
     var account by remember { mutableStateOf<PhoenixAccount?>(null) }
     var authBusy by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
@@ -161,6 +163,7 @@ private fun PhoenixLauncherApp(
 
     LaunchedEffect(Unit) {
         delay(900)
+        installed = GameRuntime.isPpaInstalled(context)
         account = PhoenixAuth.restore(context)?.account
         stage = if (account != null) Stage.Launcher else Stage.Login
     }
@@ -189,16 +192,6 @@ private fun PhoenixLauncherApp(
         authBusy = false
         stage = Stage.Login
         onTelegramResultConsumed()
-    }
-
-    LaunchedEffect(downloading) {
-        if (!downloading) return@LaunchedEffect
-        while (progress < 1f) {
-            delay(180)
-            progress = (progress + .06f).coerceAtMost(1f)
-        }
-        downloading = false
-        installed = true
     }
 
     fun beginTelegram() {
@@ -250,6 +243,23 @@ private fun PhoenixLauncherApp(
         }
     }
 
+    fun launchPpa() {
+        if (gameBusy) return
+        scope.launch {
+            gameBusy = true
+            gameError = null
+            try {
+                installed = GameRuntime.isPpaInstalled(context)
+                if (!installed) error("Phoenix Pix Arena ещё не установлена. Установи native PPA APK, затем вернись в Launcher.")
+                GameRuntime.launchPpa(context)
+            } catch (t: Throwable) {
+                gameError = t.message ?: "Не удалось запустить Phoenix Pix Arena"
+            } finally {
+                gameBusy = false
+            }
+        }
+    }
+
     fun logout() {
         scope.launch {
             authBusy = true
@@ -258,7 +268,6 @@ private fun PhoenixLauncherApp(
                 tab = Tab.Home
                 selectedGameId = null
                 downloadOpen = false
-                runtimeOpen = false
                 stage = Stage.Login
                 authBusy = false
                 authError = null
@@ -290,21 +299,23 @@ private fun PhoenixLauncherApp(
                             onEmail = ::submitEmail
                         )
                     } else when {
-                        runtimeOpen -> RuntimePlaceholder { runtimeOpen = false }
                         downloadOpen -> DownloadScreen(
                             progress = progress,
                             downloading = downloading,
                             installed = installed,
                             onBack = { downloadOpen = false },
                             onStart = {
-                                if (!installed) {
-                                    progress = 0f
-                                    downloading = true
+                                installed = GameRuntime.isPpaInstalled(context)
+                                if (installed) {
+                                    downloadOpen = false
+                                    launchPpa()
+                                } else {
+                                    gameError = "Native PPA APK ещё не установлена. Сейчас собираю отдельный Godot-клиент для установки."
                                 }
                             },
                             onPlay = {
                                 downloadOpen = false
-                                runtimeOpen = true
+                                launchPpa()
                             }
                         )
                         selectedGame != null -> GameDetails(
@@ -313,7 +324,8 @@ private fun PhoenixLauncherApp(
                             onBack = { selectedGameId = null },
                             onPrimary = {
                                 if (selectedGame!!.id == GameCatalog.ppa.id) {
-                                    if (installed) runtimeOpen = true else downloadOpen = true
+                                    installed = GameRuntime.isPpaInstalled(context)
+                                    if (installed) launchPpa() else downloadOpen = true
                                 }
                             }
                         )
@@ -334,6 +346,20 @@ private fun PhoenixLauncherApp(
                 }
             }
         }
+    }
+
+    if (gameError != null) {
+        AlertDialog(
+            onDismissRequest = { gameError = null },
+            containerColor = PhoenixCard,
+            title = { Text("Phoenix Pix Arena") },
+            text = { Text(gameError.orEmpty(), color = PhoenixMuted) },
+            confirmButton = {
+                TextButton(onClick = { gameError = null }) {
+                    Text("Понятно", color = PhoenixOrange)
+                }
+            }
+        )
     }
 }
 
