@@ -90,7 +90,7 @@ private struct LoginView: View {
             .padding(24)
         }
         .sheet(isPresented: $showEmail) {
-            NavigationStack {
+            NavigationView {
                 Form {
                     TextField("Email", text: $email)
                         .textInputAutocapitalization(.never)
@@ -106,7 +106,6 @@ private struct LoginView: View {
                 }
                 .navigationTitle(register ? "Phoenix Account" : "Вход по Email")
             }
-            .presentationDetents([.medium])
         }
     }
 }
