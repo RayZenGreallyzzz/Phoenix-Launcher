@@ -35,10 +35,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install Android signing tools
-        run: sdkmanager "platform-tools" "build-tools;35.0.0"
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" "build-tools;35.0.0"
 
       - name: Cache stable PPA debug signing key
         uses: actions/cache@v4
