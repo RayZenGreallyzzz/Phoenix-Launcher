@@ -1294,7 +1294,15 @@ private fun NewsCard(title: String, text: String, date: String) {
 }
 
 @Composable
-private fun ProfileScreen() {
+private fun ProfileScreen(
+    account: PhoenixAccount,
+    installed: Boolean,
+    busy: Boolean,
+    error: String?,
+    onLinkTelegram: () -> Unit,
+    onBindEmail: (String, String) -> Unit,
+    onLogout: () -> Unit
+) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.smallestScreenWidthDp >= 600
@@ -1304,6 +1312,9 @@ private fun ProfileScreen() {
         isTablet -> 48.dp
         else -> 20.dp
     }
+    var bindEmailOpen by rememberSaveable { mutableStateOf(false) }
+    var bindEmailValue by rememberSaveable { mutableStateOf("") }
+    var bindPassword by rememberSaveable { mutableStateOf("") }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -1320,37 +1331,148 @@ private fun ProfileScreen() {
                     Modifier.size(86.dp).clip(CircleShape).background(PhoenixSecondary)
                         .border(1.dp, PhoenixOrange.copy(alpha = .55f), CircleShape),
                     contentAlignment = Alignment.Center
-                ) { Text("R", color = PhoenixOrange, fontSize = 36.sp, fontWeight = FontWeight.Bold) }
+                ) {
+                    Text(account.avatarLetter, color = PhoenixOrange, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.height(16.dp))
-                Text("RayZenGX", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                Text(
+                    account.nickname,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text("Phoenix Account", color = PhoenixMuted, fontSize = 12.sp)
                 Spacer(Modifier.height(14.dp))
-                Tag("✓ АККАУНТ ПОДТВЕРЖДЁН")
+                Tag(if (account.telegramId != null) "✓ TELEGRAM ПОДТВЕРЖДЁН" else "PHOENIX ACCOUNT")
             }
+
+            if (!error.isNullOrBlank()) {
+                Spacer(Modifier.height(14.dp))
+                Text(error, color = PhoenixRed, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
+
             Spacer(Modifier.height(24.dp))
             HorizontalDivider(color = PhoenixBorder)
             Spacer(Modifier.height(22.dp))
             Text("Связанные аккаунты", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            InfoRow("Telegram", "@RayZenGX   ·   ✓ Привязан")
+
+            val telegramLabel = when {
+                account.telegramId == null -> "Не привязан"
+                !account.telegramUsername.isNullOrBlank() -> "@" + account.telegramUsername + "   ·   ✓ Привязан"
+                else -> "Telegram ID " + account.telegramId + "   ·   ✓ Привязан"
+            }
+            InfoRow("Telegram", telegramLabel)
+            if (account.telegramId == null) {
+                Spacer(Modifier.height(8.dp))
+                PrimaryButton(
+                    text = if (busy) "Подключение…" else "Привязать Telegram",
+                    onClick = onLinkTelegram,
+                    enabled = !busy
+                )
+            }
             HorizontalDivider(color = PhoenixBorder)
-            InfoRow("Phoenix Pix Arena", "RayZenGX · Phoenix ID   ·   ✓")
+
+            InfoRow(
+                "Email",
+                account.email?.let { it + "   ·   ✓ Привязан" } ?: "Не привязан"
+            )
+            if (account.email == null) {
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton("Привязать Email") {
+                    if (!busy) bindEmailOpen = true
+                }
+            }
             HorizontalDivider(color = PhoenixBorder)
+
+            InfoRow(
+                "Phoenix Pix Arena",
+                account.ppaNickname?.let { it + " · тот же игровой профиль   ·   ✓" }
+                    ?: "Персонаж PPA появится после привязки Telegram"
+            )
+            HorizontalDivider(color = PhoenixBorder)
+
             Spacer(Modifier.height(24.dp))
             Text("Твоя активность", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(18.dp))
             Row(Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("1", color = PhoenixOrange, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text(if (installed) "1" else "0", color = PhoenixOrange, fontSize = 30.sp, fontWeight = FontWeight.Black)
                     Text("Установлено игр", color = PhoenixMuted, fontSize = 9.sp)
                 }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("1", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text(if (account.telegramId != null) "1" else "0", fontSize = 30.sp, fontWeight = FontWeight.Black)
                     Text("Игровой аккаунт", color = PhoenixMuted, fontSize = 9.sp)
                 }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("2026", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text(if (account.createdAt > 0L) "2026" else "—", fontSize = 30.sp, fontWeight = FontWeight.Black)
                     Text("С нами с", color = PhoenixMuted, fontSize = 9.sp)
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+            OutlinedButton(
+                onClick = onLogout,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(49.dp),
+                border = BorderStroke(1.dp, PhoenixBorder),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text("Выйти из аккаунта", color = PhoenixMuted)
+            }
+        }
+    }
+
+    if (bindEmailOpen) {
+        Dialog(onDismissRequest = { if (!busy) bindEmailOpen = false }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 430.dp),
+                color = PhoenixCard,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, PhoenixBorder)
+            ) {
+                Column(Modifier.padding(22.dp)) {
+                    Text("Привязать Email", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "После привязки этот Email и пароль можно использовать для входа в тот же Phoenix Account.",
+                        color = PhoenixMuted,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    OutlinedTextField(
+                        value = bindEmailValue,
+                        onValueChange = { bindEmailValue = it },
+                        enabled = !busy,
+                        singleLine = true,
+                        label = { Text("Email") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = bindPassword,
+                        onValueChange = { bindPassword = it },
+                        enabled = !busy,
+                        singleLine = true,
+                        label = { Text("Пароль") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton(
+                        text = if (busy) "Подключение…" else "Привязать Email",
+                        onClick = { onBindEmail(bindEmailValue, bindPassword) },
+                        enabled = !busy && bindEmailValue.isNotBlank() && bindPassword.length >= 8
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    TextButton(
+                        enabled = !busy,
+                        onClick = { bindEmailOpen = false },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) { Text("Закрыть", color = PhoenixMuted) }
                 }
             }
         }
