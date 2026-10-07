@@ -13,7 +13,7 @@ object GameCatalog {
         description = "Исследуй огромный мир, сражайся, развивай персонажа, вступай в кланы и играй вместе с другими игроками. Один сервер для Telegram и Phoenix Launcher.",
         tags = listOf("Онлайн", "Кланы", "PvP", "Подземелья"),
         heroRes = R.drawable.ppa_hero,
-        cardRes = R.drawable.ppa_card,
+        cardRes = R.drawable.ppa_hero,
         released = true
     )
 
