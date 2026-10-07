@@ -13,6 +13,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -230,27 +232,40 @@ private fun LauncherShell(
 @Composable
 private fun PhoenixTopBar() {
     Row(
-        Modifier.fillMaxWidth().background(PhoenixPanel).padding(horizontal = 18.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .height(73.dp)
+            .background(PhoenixBg)
+            .padding(horizontal = 20.dp)
+            .border(width = 0.dp, color = Color.Transparent),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                .background(Brush.linearGradient(listOf(PhoenixOrange, Color(0xFF671700)))),
+            Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+                .background(Brush.linearGradient(listOf(PhoenixOrange, Color(0xFF8F2500), PhoenixScrim)))
+                .border(1.dp, PhoenixOrange.copy(alpha = .35f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
-        ) { Text("🔥", fontSize = 19.sp) }
-        Spacer(Modifier.width(10.dp))
+        ) { Text("🔥", fontSize = 17.sp) }
+        Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text("PHOENIX", fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
-            Text("Game Launcher", color = PhoenixMuted, fontSize = 10.sp)
+            Text("PHOENIX", fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            Text("GAME LAUNCHER", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 2.sp)
         }
-        Text("●", color = PhoenixOrange, fontSize = 8.sp)
-        Spacer(Modifier.width(10.dp))
+        Box {
+            Text("●", color = PhoenixMuted, fontSize = 18.sp)
+            Box(
+                Modifier.size(5.dp).clip(CircleShape).background(PhoenixOrange)
+                    .align(Alignment.TopEnd)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
         Box(
-            Modifier.size(38.dp).clip(CircleShape).background(PhoenixCard)
+            Modifier.size(37.dp).clip(CircleShape).background(PhoenixSecondary)
                 .border(1.dp, PhoenixBorder, CircleShape),
             contentAlignment = Alignment.Center
-        ) { Text("R", fontWeight = FontWeight.Bold) }
+        ) { Text("R", color = PhoenixOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
     }
+    HorizontalDivider(color = PhoenixBorder, thickness = 1.dp)
 }
 
 @Composable
@@ -259,7 +274,37 @@ private fun HomeScreen(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp)
+    ) {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "ТВОЯ ИГРОВАЯ ВСЕЛЕННАЯ",
+                        color = PhoenixMuted,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.7.sp
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Привет, RayZenGX", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(6.dp))
+                        Text("✦", color = PhoenixOrange, fontSize = 15.sp)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(PhoenixGreen))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Все системы онлайн", color = PhoenixGreen, fontSize = 9.sp)
+                }
+            }
+        }
         item {
             HeroCard(
                 GameCatalog.ppa,
@@ -298,9 +343,9 @@ private fun HeroCard(
     onMore: () -> Unit
 ) {
     Box(
-        Modifier.padding(14.dp).fillMaxWidth().height(330.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .border(1.dp, PhoenixBorder, RoundedCornerShape(22.dp))
+        Modifier.fillMaxWidth().height(487.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, PhoenixBorder, RoundedCornerShape(10.dp))
     ) {
         Image(
             painter = painterResource(game.heroRes),
@@ -311,33 +356,74 @@ private fun HeroCard(
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    listOf(Color.Transparent, Color.Black.copy(alpha = .18f), Color.Black.copy(alpha = .9f))
+                    listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = .08f),
+                        PhoenixScrim.copy(alpha = .42f),
+                        PhoenixScrim.copy(alpha = .94f)
+                    )
                 )
             )
         )
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(18.dp)) {
-            Text("ГЛАВНАЯ ИГРА", color = PhoenixOrange2, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(5.dp))
-            Text(game.title, fontSize = 29.sp, fontWeight = FontWeight.Black, lineHeight = 31.sp)
-            Text(game.subtitle, color = Color.White.copy(alpha = .78f), fontSize = 12.sp)
+        Row(
+            Modifier.fillMaxWidth().padding(17.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Tag("⚡ ВЫБОР PHOENIX")
+            Tag("РАННИЙ ДОСТУП")
+        }
+        Column(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 23.dp)
+        ) {
+            Text(
+                "ТВОЯ ЛЕГЕНДА НАЧИНАЕТСЯ ЗДЕСЬ",
+                color = PhoenixOrange,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.8.sp
+            )
+            Spacer(Modifier.height(7.dp))
+            Text("PHOENIX", fontSize = 53.sp, fontWeight = FontWeight.Black, lineHeight = 45.sp)
+            Text("PIX ARENA", fontSize = 53.sp, fontWeight = FontWeight.Black, lineHeight = 45.sp)
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(
+                "Стань частью нового мира. Собери клан.\nЗажги свою легенду на арене.",
+                color = PhoenixArtText.copy(alpha = .72f),
+                fontSize = 10.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 game.tags.take(4).forEach { Tag(it) }
             }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onPrimary,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PhoenixOrange, contentColor = Color.Black),
-                    shape = RoundedCornerShape(13.dp)
-                ) { Text(if (installed) "Играть" else "Скачать", fontWeight = FontWeight.Black) }
+                    modifier = Modifier.height(44.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PhoenixOrange,
+                        contentColor = PhoenixArtText
+                    ),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 21.dp)
+                ) {
+                    Text(if (installed) "▶  Играть" else "↓  Скачать", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
                 OutlinedButton(
                     onClick = onMore,
-                    modifier = Modifier.width(58.dp).height(48.dp),
-                    shape = RoundedCornerShape(13.dp),
-                    border = BorderStroke(1.dp, PhoenixBorder)
-                ) { Text("•••") }
+                    modifier = Modifier.height(44.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, PhoenixArtText.copy(alpha = .22f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = PhoenixScrim.copy(alpha = .55f),
+                        contentColor = PhoenixArtText
+                    )
+                ) { Text("Об игре  ›", fontSize = 11.sp) }
             }
         }
     }
@@ -346,24 +432,33 @@ private fun HeroCard(
 @Composable
 private fun GameCard(game: GameManifest, installed: Boolean, onClick: () -> Unit) {
     Column(
-        Modifier.width(160.dp).clip(RoundedCornerShape(17.dp)).background(PhoenixCard)
-            .border(1.dp, PhoenixBorder, RoundedCornerShape(17.dp))
-            .clickable(onClick = onClick).padding(10.dp)
+        Modifier.width(154.dp).clip(RoundedCornerShape(8.dp)).background(PhoenixCard)
+            .border(1.dp, PhoenixBorder, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
     ) {
         Image(
             painter = painterResource(game.cardRes),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().height(94.dp).clip(RoundedCornerShape(12.dp))
+            modifier = Modifier.fillMaxWidth().height(114.dp)
         )
-        Spacer(Modifier.height(9.dp))
-        Text(game.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            if (installed) "● Установлено" else if (game.released) game.sizeLabel else "◌ Скоро",
-            color = if (installed) PhoenixGreen else PhoenixMuted,
-            fontSize = 11.sp
-        )
+        Column(Modifier.padding(11.dp)) {
+            Text(game.title, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (game.id == GameCatalog.ppa.id) "MMORPG · Открытый мир" else game.subtitle,
+                color = PhoenixMuted,
+                fontSize = 8.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (installed) "Готово к запуску" else if (game.released) "Доступна сейчас" else "Следи за новостями",
+                color = if (installed || game.released) PhoenixGreen else PhoenixMuted,
+                fontSize = 8.sp
+            )
+        }
     }
 }
 
@@ -703,21 +798,41 @@ private fun DownloadStep(text: String, complete: Boolean) {
 
 @Composable
 private fun BottomNav(selected: Tab, onSelect: (Tab) -> Unit) {
-    NavigationBar(containerColor = PhoenixPanel, tonalElevation = 0.dp) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(PhoenixBg.copy(alpha = .98f))
+            .height(76.dp)
+            .padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.Top
+    ) {
         Tab.entries.forEach { tab ->
-            NavigationBarItem(
-                selected = selected == tab,
-                onClick = { onSelect(tab) },
-                icon = { Text(tab.glyph, fontSize = 18.sp) },
-                label = { Text(tab.title, fontSize = 9.sp, maxLines = 1) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = PhoenixOrange,
-                    selectedTextColor = PhoenixOrange,
-                    indicatorColor = PhoenixOrange.copy(alpha = .12f),
-                    unselectedIconColor = PhoenixMuted,
-                    unselectedTextColor = PhoenixMuted
+            val active = selected == tab
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { onSelect(tab) }
+                    .padding(top = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(Modifier.height(3.dp).width(27.dp)) {
+                    if (active) Box(Modifier.fillMaxSize().background(PhoenixOrange))
+                }
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    tab.glyph,
+                    color = if (active) PhoenixOrange else PhoenixMuted,
+                    fontSize = 18.sp
                 )
-            )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    tab.title,
+                    color = if (active) PhoenixOrange else PhoenixMuted,
+                    fontSize = 8.sp,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -725,11 +840,11 @@ private fun BottomNav(selected: Tab, onSelect: (Tab) -> Unit) {
 @Composable
 private fun SectionTitle(title: String, trailing: String) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().padding(top = 25.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        Text(trailing, color = PhoenixMuted, fontSize = 11.sp)
+        Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(trailing, color = PhoenixMuted, fontSize = 9.sp)
     }
 }
 
