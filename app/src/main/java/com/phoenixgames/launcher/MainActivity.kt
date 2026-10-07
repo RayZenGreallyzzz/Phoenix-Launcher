@@ -1,6 +1,8 @@
 package com.phoenixgames.launcher
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,23 +39,48 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.phoenixgames.launcher.auth.PhoenixAccount
+import com.phoenixgames.launcher.auth.PhoenixAuth
 import com.phoenixgames.launcher.data.GameCatalog
 import com.phoenixgames.launcher.model.GameManifest
 import com.phoenixgames.launcher.ui.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val authCallback = mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { PhoenixTheme { PhoenixLauncherApp() } }
+        authCallback.value = intent?.data?.takeIf { it.scheme == "phoenixlauncher" && it.host == "auth" }
+        setContent {
+            PhoenixTheme {
+                PhoenixLauncherApp(
+                    authCallback = authCallback.value,
+                    onAuthCallbackConsumed = { authCallback.value = null }
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val uri = intent.data
+        if (uri?.scheme == "phoenixlauncher" && uri.host == "auth") {
+            authCallback.value = uri
+        }
     }
 }
 
@@ -66,7 +94,13 @@ private enum class Tab(val title: String, val glyph: String) {
 }
 
 @Composable
-private fun PhoenixLauncherApp() {
+private fun PhoenixLauncherApp(
+    authCallback: Uri?,
+    onAuthCallbackConsumed: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var stage by rememberSaveable { mutableStateOf(Stage.Splash) }
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var selectedGameId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -75,15 +109,38 @@ private fun PhoenixLauncherApp() {
     var installed by rememberSaveable { mutableStateOf(false) }
     var downloading by rememberSaveable { mutableStateOf(false) }
     var progress by rememberSaveable { mutableFloatStateOf(0f) }
+    var account by remember { mutableStateOf<PhoenixAccount?>(null) }
+    var authBusy by remember { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
 
     val selectedGame = remember(selectedGameId) {
         selectedGameId?.let { id -> GameCatalog.games.firstOrNull { it.id == id } }
     }
 
     LaunchedEffect(Unit) {
-        delay(1200)
-        stage = Stage.Login
+        delay(900)
+        account = PhoenixAuth.restore(context)?.account
+        stage = if (account != null) Stage.Launcher else Stage.Login
     }
+
+    LaunchedEffect(authCallback?.toString()) {
+        val uri = authCallback ?: return@LaunchedEffect
+        authBusy = true
+        authError = null
+        try {
+            val result = PhoenixAuth.exchangeTelegram(context, uri)
+            account = result.account
+            stage = Stage.Launcher
+            tab = Tab.Home
+        } catch (t: Throwable) {
+            authError = t.message ?: "Не удалось войти через Telegram"
+            stage = Stage.Login
+        } finally {
+            authBusy = false
+            onAuthCallbackConsumed()
+        }
+    }
+
     LaunchedEffect(downloading) {
         if (!downloading) return@LaunchedEffect
         while (progress < 1f) {
@@ -94,6 +151,74 @@ private fun PhoenixLauncherApp() {
         installed = true
     }
 
+    fun beginTelegram() {
+        if (authBusy) return
+        scope.launch {
+            authBusy = true
+            authError = null
+            try {
+                PhoenixAuth.startTelegram(context)
+            } catch (t: Throwable) {
+                authError = t.message ?: "Не удалось открыть Telegram"
+            } finally {
+                authBusy = false
+            }
+        }
+    }
+
+    fun submitEmail(email: String, password: String, register: Boolean) {
+        if (authBusy) return
+        scope.launch {
+            authBusy = true
+            authError = null
+            try {
+                val result = if (register) {
+                    PhoenixAuth.emailRegister(context, email, password)
+                } else {
+                    PhoenixAuth.emailLogin(context, email, password)
+                }
+                account = result.account
+                stage = Stage.Launcher
+                tab = Tab.Home
+            } catch (t: Throwable) {
+                authError = t.message ?: "Ошибка входа Phoenix Account"
+            } finally {
+                authBusy = false
+            }
+        }
+    }
+
+    fun bindEmail(email: String, password: String) {
+        if (authBusy) return
+        scope.launch {
+            authBusy = true
+            authError = null
+            try {
+                account = PhoenixAuth.bindEmail(context, email, password)
+            } catch (t: Throwable) {
+                authError = t.message ?: "Не удалось привязать Email"
+            } finally {
+                authBusy = false
+            }
+        }
+    }
+
+    fun logout() {
+        scope.launch {
+            authBusy = true
+            try { PhoenixAuth.logout(context) } finally {
+                account = null
+                tab = Tab.Home
+                selectedGameId = null
+                downloadOpen = false
+                runtimeOpen = false
+                stage = Stage.Login
+                authBusy = false
+                authError = null
+            }
+        }
+    }
+
     Surface(Modifier.fillMaxSize(), color = PhoenixBg) {
         AnimatedContent(
             targetState = stage,
@@ -102,42 +227,63 @@ private fun PhoenixLauncherApp() {
         ) { current ->
             when (current) {
                 Stage.Splash -> SplashScreen()
-                Stage.Login -> LoginScreen { stage = Stage.Launcher }
-                Stage.Launcher -> when {
-                    runtimeOpen -> RuntimePlaceholder { runtimeOpen = false }
-                    downloadOpen -> DownloadScreen(
-                        progress = progress,
-                        downloading = downloading,
-                        installed = installed,
-                        onBack = { downloadOpen = false },
-                        onStart = {
-                            if (!installed) {
-                                progress = 0f
-                                downloading = true
+                Stage.Login -> LoginScreen(
+                    busy = authBusy,
+                    error = authError,
+                    onTelegram = ::beginTelegram,
+                    onEmail = ::submitEmail
+                )
+                Stage.Launcher -> {
+                    val currentAccount = account
+                    if (currentAccount == null) {
+                        LoginScreen(
+                            busy = authBusy,
+                            error = authError,
+                            onTelegram = ::beginTelegram,
+                            onEmail = ::submitEmail
+                        )
+                    } else when {
+                        runtimeOpen -> RuntimePlaceholder { runtimeOpen = false }
+                        downloadOpen -> DownloadScreen(
+                            progress = progress,
+                            downloading = downloading,
+                            installed = installed,
+                            onBack = { downloadOpen = false },
+                            onStart = {
+                                if (!installed) {
+                                    progress = 0f
+                                    downloading = true
+                                }
+                            },
+                            onPlay = {
+                                downloadOpen = false
+                                runtimeOpen = true
                             }
-                        },
-                        onPlay = {
-                            downloadOpen = false
-                            runtimeOpen = true
-                        }
-                    )
-                    selectedGame != null -> GameDetails(
-                        game = selectedGame!!,
-                        installed = installed && selectedGame!!.id == GameCatalog.ppa.id,
-                        onBack = { selectedGameId = null },
-                        onPrimary = {
-                            if (selectedGame!!.id == GameCatalog.ppa.id) {
-                                if (installed) runtimeOpen = true else downloadOpen = true
+                        )
+                        selectedGame != null -> GameDetails(
+                            game = selectedGame!!,
+                            installed = installed && selectedGame!!.id == GameCatalog.ppa.id,
+                            onBack = { selectedGameId = null },
+                            onPrimary = {
+                                if (selectedGame!!.id == GameCatalog.ppa.id) {
+                                    if (installed) runtimeOpen = true else downloadOpen = true
+                                }
                             }
-                        }
-                    )
-                    else -> LauncherShell(
-                        tab = tab,
-                        onTab = { tab = it },
-                        installed = installed,
-                        onOpenGame = { selectedGameId = it.id },
-                        onInstall = { downloadOpen = true }
-                    )
+                        )
+                        else -> LauncherShell(
+                            tab = tab,
+                            onTab = { tab = it },
+                            account = currentAccount,
+                            installed = installed,
+                            onOpenGame = { selectedGameId = it.id },
+                            onInstall = { downloadOpen = true },
+                            onLinkTelegram = ::beginTelegram,
+                            onBindEmail = ::bindEmail,
+                            onLogout = ::logout,
+                            authBusy = authBusy,
+                            authError = authError
+                        )
+                    }
                 }
             }
         }
