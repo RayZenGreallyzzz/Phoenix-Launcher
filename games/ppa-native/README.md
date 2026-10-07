@@ -11,7 +11,7 @@ Current native bridge:
 Current 2.5D movement milestone:
 - PPA architecture is now enforced: flat map/gameplay layer, 3D only for player characters
 - no 3D buildings, no 3D mob conversion, no dynamic shadow map
-- approved current PPA `Dwarf.glb` is imported into the APK during CI
+- native player slot is ready for the approved PPA GLB; the first smart-joystick performance build keeps the ultra-light fallback body while the private model asset is transferred safely
 - orthographic camera mirrors the current PPA Player3D overlay geometry
 - native smart floating joystick ports the current web behavior:
   - appears at the first touch point on the left half

@@ -143,13 +143,16 @@ func _build_player() -> void:
     player_visual.name = "Player3DVisual"
     player.add_child(player_visual)
 
-    var model_resource := load("res://assets/Dwarf.glb")
-    if model_resource is PackedScene:
-        var model := (model_resource as PackedScene).instantiate()
-        model.name = "ApprovedDwarf"
-        model.scale = Vector3.ONE * 0.88
-        player_visual.add_child(model)
-        _find_model_animations(model)
+    if ResourceLoader.exists("res://assets/Dwarf.glb"):
+        var model_resource := load("res://assets/Dwarf.glb")
+        if model_resource is PackedScene:
+            var model := (model_resource as PackedScene).instantiate()
+            model.name = "ApprovedDwarf"
+            model.scale = Vector3.ONE * 0.88
+            player_visual.add_child(model)
+            _find_model_animations(model)
+        else:
+            _build_fallback_player()
     else:
         _build_fallback_player()
 

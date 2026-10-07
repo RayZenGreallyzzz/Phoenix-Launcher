@@ -103,16 +103,6 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Fetch approved current PPA gnome model
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p games/ppa-native/assets
-          curl -L --fail --retry 3 \
-            -o games/ppa-native/assets/Dwarf.glb \
-            "https://raw.githubusercontent.com/RayZenGreallyzzz/ppa-phoenixpixarena/main/Dwarf.glb"
-          test "$(stat -c%s games/ppa-native/assets/Dwarf.glb)" -gt 1000000
-
       - name: Import native PPA project
         run: godot --headless --path games/ppa-native --editor --import --quit
 
