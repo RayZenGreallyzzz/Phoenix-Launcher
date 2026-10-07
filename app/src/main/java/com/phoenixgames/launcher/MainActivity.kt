@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -30,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
@@ -38,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.phoenixgames.launcher.data.GameCatalog
 import com.phoenixgames.launcher.model.GameManifest
 import com.phoenixgames.launcher.ui.*
@@ -160,6 +165,11 @@ private fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom
         ) {
+            PhoenixMark(
+                modifier = Modifier.size(62.dp),
+                color = PhoenixOrange
+            )
+            Spacer(Modifier.height(14.dp))
             Text("PHOENIX", fontSize = 34.sp, fontWeight = FontWeight.Black, letterSpacing = 5.sp)
             Text("LAUNCHER", color = PhoenixOrange2, fontSize = 12.sp, letterSpacing = 4.sp)
             Spacer(Modifier.height(28.dp))
@@ -193,11 +203,9 @@ private fun LoginScreen(onContinue: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(R.drawable.phoenix_emblem),
-                contentDescription = "Phoenix",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(if (compactHeight) 92.dp else 132.dp).clip(RoundedCornerShape(28.dp))
+            PhoenixMark(
+                modifier = Modifier.size(if (compactHeight) 84.dp else 112.dp),
+                color = PhoenixOrange
             )
             Spacer(Modifier.height(14.dp))
             Text("PHOENIX", fontSize = if (compactHeight) 24.sp else 28.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
@@ -220,6 +228,103 @@ private fun LoginScreen(onContinue: () -> Unit) {
 }
 
 @Composable
+private fun PhoenixMark(
+    modifier: Modifier = Modifier,
+    color: Color = PhoenixOrange
+) {
+    Canvas(modifier = modifier) {
+        val sx = size.width / 64f
+        val sy = size.height / 64f
+        fun x(v: Float) = v * sx
+        fun y(v: Float) = v * sy
+        val path = Path().apply {
+            moveTo(x(32f), y(4f))
+            lineTo(x(37f), y(19f))
+            lineTo(x(59f), y(9f))
+            lineTo(x(48f), y(31f))
+            lineTo(x(62f), y(23f))
+            lineTo(x(46f), y(44f))
+            lineTo(x(32f), y(61f))
+            lineTo(x(18f), y(44f))
+            lineTo(x(2f), y(23f))
+            lineTo(x(16f), y(31f))
+            lineTo(x(5f), y(9f))
+            lineTo(x(27f), y(19f))
+            close()
+            moveTo(x(32f), y(21f))
+            lineTo(x(25f), y(36f))
+            lineTo(x(32f), y(51f))
+            lineTo(x(39f), y(36f))
+            close()
+        }
+        drawPath(path = path, color = color)
+    }
+}
+
+@Composable
+private fun NotificationDialog(
+    onClose: () -> Unit,
+    onOpenPpa: () -> Unit
+) {
+    Dialog(onDismissRequest = onClose) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 440.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = PhoenixCard,
+            border = BorderStroke(1.dp, PhoenixBorder),
+            tonalElevation = 0.dp
+        ) {
+            Column(Modifier.padding(22.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = null,
+                        tint = PhoenixOrange,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Уведомления", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onClose) {
+                        Text("✕", color = PhoenixMuted, fontSize = 16.sp)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Добро пожаловать в Phoenix, RayZenGX!",
+                    color = PhoenixText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PhoenixSecondary)
+                        .border(1.dp, PhoenixBorder, RoundedCornerShape(10.dp))
+                        .padding(16.dp)
+                ) {
+                    Text("Phoenix Pix Arena уже доступна", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        "Новая арена ждёт своих героев. Первая версия готова к установке.",
+                        color = PhoenixMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    Spacer(Modifier.height(15.dp))
+                    PrimaryButton("Открыть игру") {
+                        onClose()
+                        onOpenPpa()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LauncherShell(
     tab: Tab,
     onTab: (Tab) -> Unit,
@@ -227,14 +332,27 @@ private fun LauncherShell(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
+    var notificationsOpen by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         containerColor = PhoenixBg,
-        topBar = { PhoenixTopBar() },
+        topBar = {
+            PhoenixTopBar(
+                onHome = { onTab(Tab.Home) },
+                onNotifications = { notificationsOpen = true },
+                onProfile = { onTab(Tab.Profile) }
+            )
+        },
         bottomBar = { BottomNav(tab, onTab) }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                Tab.Home -> HomeScreen(installed, onOpenGame, onInstall)
+                Tab.Home -> HomeScreen(
+                    installed = installed,
+                    onOpenGame = onOpenGame,
+                    onInstall = onInstall,
+                    onProfile = { onTab(Tab.Profile) }
+                )
                 Tab.Library -> LibraryScreen(installed, onOpenGame, onInstall)
                 Tab.News -> NewsScreen()
                 Tab.Profile -> ProfileScreen()
@@ -242,55 +360,98 @@ private fun LauncherShell(
             }
         }
     }
+
+    if (notificationsOpen) {
+        NotificationDialog(
+            onClose = { notificationsOpen = false },
+            onOpenPpa = { onOpenGame(GameCatalog.ppa) }
+        )
+    }
 }
 
 @Composable
-private fun PhoenixTopBar() {
+private fun PhoenixTopBar(
+    onHome: () -> Unit,
+    onNotifications: () -> Unit,
+    onProfile: () -> Unit
+) {
     val configuration = LocalConfiguration.current
     val barHeight = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 60.dp else 73.dp
 
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(barHeight)
-            .background(PhoenixBg)
-            .padding(horizontal = 20.dp)
-            .border(width = 0.dp, color = Color.Transparent),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
-                .background(Brush.linearGradient(listOf(PhoenixOrange, Color(0xFF8F2500), PhoenixScrim)))
-                .border(1.dp, PhoenixOrange.copy(alpha = .35f), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) { Text("🔥", fontSize = 17.sp) }
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text("PHOENIX", fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-            Text("GAME LAUNCHER", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 2.sp)
-        }
-        Box {
-            Text("●", color = PhoenixMuted, fontSize = 18.sp)
+    Column(Modifier.fillMaxWidth().background(PhoenixBg)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(barHeight)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onHome)
+                    .padding(vertical = 4.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+                        .background(Brush.linearGradient(listOf(PhoenixOrange, Color(0xFF8F2500), PhoenixScrim)))
+                        .border(1.dp, PhoenixOrange.copy(alpha = .35f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PhoenixMark(Modifier.size(21.dp), Color.White)
+                }
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text("PHOENIX", fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text("GAME LAUNCHER", color = PhoenixMuted, fontSize = 8.sp, letterSpacing = 2.sp)
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            IconButton(onClick = onNotifications) {
+                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = "Уведомления",
+                        tint = PhoenixMuted,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(PhoenixOrange)
+                            .align(Alignment.TopEnd)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(6.dp))
+
             Box(
-                Modifier.size(5.dp).clip(CircleShape).background(PhoenixOrange)
-                    .align(Alignment.TopEnd)
-            )
+                Modifier
+                    .size(37.dp)
+                    .clip(CircleShape)
+                    .background(PhoenixSecondary)
+                    .border(1.dp, PhoenixBorder, CircleShape)
+                    .clickable(onClick = onProfile),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("R", color = PhoenixOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        Box(
-            Modifier.size(37.dp).clip(CircleShape).background(PhoenixSecondary)
-                .border(1.dp, PhoenixBorder, CircleShape),
-            contentAlignment = Alignment.Center
-        ) { Text("R", color = PhoenixOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+        HorizontalDivider(color = PhoenixBorder, thickness = 1.dp)
     }
-    HorizontalDivider(color = PhoenixBorder, thickness = 1.dp)
 }
 
 @Composable
 private fun HomeScreen(
     installed: Boolean,
     onOpenGame: (GameManifest) -> Unit,
-    onInstall: () -> Unit
+    onInstall: () -> Unit,
+    onProfile: () -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -311,7 +472,13 @@ private fun HomeScreen(
                 Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(7.dp))
+                        .clickable(onClick = onProfile)
+                        .padding(vertical = 2.dp)
+                ) {
                     Text(
                         "ТВОЯ ИГРОВАЯ ВСЕЛЕННАЯ",
                         color = PhoenixMuted,
