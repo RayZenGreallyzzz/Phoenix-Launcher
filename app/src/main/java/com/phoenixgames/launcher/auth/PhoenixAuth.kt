@@ -82,6 +82,13 @@ object PhoenixAuth {
         return parseAccount(json.getJSONObject("account"))
     }
 
+    suspend fun createGameTicket(context: Context, gameId: String): String {
+        val token = sessionToken(context) ?: error("Сессия Phoenix не найдена")
+        val payload = JSONObject().put("gameId", gameId)
+        val json = request("/api/launcher/game-ticket", "POST", payload, token)
+        return json.getJSONObject("ticket").getString("ticket")
+    }
+
     suspend fun logout(context: Context) {
         val token = sessionToken(context)
         if (token != null) {
