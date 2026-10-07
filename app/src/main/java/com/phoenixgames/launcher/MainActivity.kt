@@ -331,10 +331,19 @@ private fun SplashScreen() {
 }
 
 @Composable
-private fun LoginScreen(onContinue: () -> Unit) {
+private fun LoginScreen(
+    busy: Boolean,
+    error: String?,
+    onTelegram: () -> Unit,
+    onEmail: (String, String, Boolean) -> Unit
+) {
     val configuration = LocalConfiguration.current
     val compactHeight = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val formWidth = if (configuration.smallestScreenWidthDp >= 600 || compactHeight) 420.dp else 560.dp
+    var emailOpen by rememberSaveable { mutableStateOf(false) }
+    var registerMode by rememberSaveable { mutableStateOf(false) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize().background(PhoenixBg)) {
         Image(
@@ -360,15 +369,117 @@ private fun LoginScreen(onContinue: () -> Unit) {
             Text("Вход в аккаунт", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Один аккаунт для всех игр Phoenix", color = PhoenixMuted, fontSize = 13.sp)
             Spacer(Modifier.height(if (compactHeight) 12.dp else 22.dp))
+
             Box(Modifier.widthIn(max = formWidth).fillMaxWidth()) {
-                PrimaryButton("✈  Войти через Telegram", onContinue)
+                PrimaryButton(
+                    text = if (busy) "Подключение…" else "✈  Войти через Telegram",
+                    onClick = onTelegram,
+                    enabled = !busy
+                )
             }
             Spacer(Modifier.height(10.dp))
             Box(Modifier.widthIn(max = formWidth).fillMaxWidth()) {
-                SecondaryButton("Войти по Email", onContinue)
+                SecondaryButton("Войти по Email") {
+                    if (!busy) {
+                        registerMode = false
+                        emailOpen = true
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
-            TextButton(onClick = onContinue) { Text("Создать аккаунт", color = PhoenixBlue) }
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    registerMode = true
+                    emailOpen = true
+                }
+            ) { Text("Создать Phoenix Account", color = PhoenixBlue) }
+
+            if (busy) {
+                Spacer(Modifier.height(14.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = PhoenixOrange,
+                    strokeWidth = 2.dp
+                )
+            }
+            if (!error.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    error,
+                    color = PhoenixRed,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = formWidth)
+                )
+            }
+        }
+    }
+
+    if (emailOpen) {
+        Dialog(onDismissRequest = { if (!busy) emailOpen = false }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 430.dp),
+                color = PhoenixCard,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, PhoenixBorder)
+            ) {
+                Column(Modifier.padding(22.dp)) {
+                    Text(
+                        if (registerMode) "Создать Phoenix Account" else "Войти по Email",
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (registerMode)
+                            "Email станет отдельным способом входа в Phoenix."
+                        else
+                            "Войди в уже созданный Phoenix Account.",
+                        color = PhoenixMuted,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        enabled = !busy,
+                        singleLine = true,
+                        label = { Text("Email") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        enabled = !busy,
+                        singleLine = true,
+                        label = { Text("Пароль") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton(
+                        text = when {
+                            busy -> "Подключение…"
+                            registerMode -> "Создать аккаунт"
+                            else -> "Войти"
+                        },
+                        onClick = { onEmail(email, password, registerMode) },
+                        enabled = !busy && email.isNotBlank() && password.length >= 8
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    TextButton(
+                        enabled = !busy,
+                        onClick = { emailOpen = false },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Отмена", color = PhoenixMuted)
+                    }
+                }
+            }
         }
     }
 }
