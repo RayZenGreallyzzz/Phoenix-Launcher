@@ -1,16 +1,11 @@
 package com.phoenixgames.launcher.auth
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
-import java.security.SecureRandom
 
 data class PhoenixAccount(
     val accountId: String,
@@ -39,10 +34,6 @@ object PhoenixAuth {
 
     private const val PREFS = "phoenix_launcher_auth"
     private const val KEY_TOKEN = "session_token"
-    private const val KEY_TG_STATE = "telegram_state"
-    private const val KEY_TG_VERIFIER = "telegram_verifier"
-
-    private val random = SecureRandom()
 
     suspend fun restore(context: Context): PhoenixAuthResult? {
         val token = sessionToken(context) ?: return null
@@ -55,63 +46,15 @@ object PhoenixAuth {
         }
     }
 
-    suspend fun startTelegram(context: Context) {
-        val verifier = randomUrlToken(48)
-        val state = randomUrlToken(48)
-        val challenge = base64Url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.UTF_8)))
-
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_TG_STATE, state)
-            .putString(KEY_TG_VERIFIER, verifier)
-            .apply()
-
-        val payload = JSONObject()
-            .put("state", state)
-            .put("codeChallenge", challenge)
-
+    suspend fun exchangeNativeTelegram(context: Context, idToken: String): PhoenixAuthResult {
+        val payload = JSONObject().put("idToken", idToken)
         val json = request(
-            path = "/api/launcher/auth/telegram/start",
+            path = "/api/launcher/auth/telegram/native",
             method = "POST",
             body = payload,
             bearer = sessionToken(context)
         )
-        val authUrl = json.optString("authUrl")
-        if (authUrl.isBlank()) error("Сервер не вернул ссылку Telegram")
-
-        withContext(Dispatchers.Main) {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
-    }
-
-    suspend fun exchangeTelegram(context: Context, uri: Uri): PhoenixAuthResult {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val expectedState = prefs.getString(KEY_TG_STATE, null).orEmpty()
-        val verifier = prefs.getString(KEY_TG_VERIFIER, null).orEmpty()
-        val state = uri.getQueryParameter("state").orEmpty()
-        val code = uri.getQueryParameter("code").orEmpty()
-
-        if (expectedState.isBlank() || verifier.isBlank() || state != expectedState || code.isBlank()) {
-            error("Некорректный ответ Telegram. Повтори вход.")
-        }
-
-        val payload = JSONObject()
-            .put("state", state)
-            .put("code", code)
-            .put("codeVerifier", verifier)
-        val json = request("/api/launcher/auth/exchange", "POST", payload, null)
-        val result = parseLogin(json)
-
-        prefs.edit()
-            .remove(KEY_TG_STATE)
-            .remove(KEY_TG_VERIFIER)
-            .putString(KEY_TOKEN, result.sessionToken)
-            .apply()
-
-        return result
+        return parseLogin(json).also { saveToken(context, it.sessionToken) }
     }
 
     suspend fun emailLogin(context: Context, email: String, password: String): PhoenixAuthResult {
@@ -224,12 +167,4 @@ object PhoenixAuth {
         }
     }
 
-    private fun randomUrlToken(bytes: Int): String {
-        val data = ByteArray(bytes)
-        random.nextBytes(data)
-        return base64Url(data)
-    }
-
-    private fun base64Url(bytes: ByteArray): String =
-        Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
 }
