@@ -468,56 +468,104 @@ private fun LibraryScreen(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
+    var filter by remember { mutableStateOf("Все игры") }
+    val visibleGames = GameCatalog.games.filter { game ->
+        when (filter) {
+            "Установлены" -> installed && game.id == GameCatalog.ppa.id
+            "Скоро" -> !game.released
+            else -> true
+        }
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Библиотека", fontSize = 26.sp, fontWeight = FontWeight.Black)
-            Text("Все игры Phoenix в одном месте", color = PhoenixMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tag("Все игры 3")
-                Tag("Установленные 1")
-                Tag("Скоро 2")
-            }
-        }
-        items(GameCatalog.games) { game ->
+            Text("Библиотека", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text("Твои миры всегда рядом", color = PhoenixMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(18.dp))
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PhoenixCard)
-                    .border(1.dp, PhoenixBorder, RoundedCornerShape(16.dp))
-                    .clickable { onOpenGame(game) }.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    painter = painterResource(game.cardRes),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(62.dp).clip(RoundedCornerShape(13.dp))
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(game.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text(
-                        if (installed && game.id == GameCatalog.ppa.id) "● Установлено" else game.sizeLabel,
-                        color = if (installed && game.id == GameCatalog.ppa.id) PhoenixGreen else PhoenixMuted,
-                        fontSize = 11.sp
-                    )
+                listOf("Все игры", "Установлены", "Скоро").forEach { item ->
+                    val selected = filter == item
+                    OutlinedButton(
+                        onClick = { filter = item },
+                        modifier = Modifier.height(34.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, if (selected) PhoenixOrange.copy(alpha = .55f) else PhoenixBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (selected) PhoenixOrange.copy(alpha = .08f) else Color.Transparent,
+                            contentColor = if (selected) PhoenixOrange else PhoenixMuted
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            if (item == "Установлены") item + " " + if (installed) "1" else "0" else item,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
-                Button(
-                    onClick = {
-                        if (game.id == GameCatalog.ppa.id && !installed) onInstall() else onOpenGame(game)
-                    },
-                    enabled = game.released,
-                    colors = ButtonDefaults.buttonColors(containerColor = PhoenixOrange, contentColor = Color.Black),
-                    shape = RoundedCornerShape(11.dp)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (visibleGames.isEmpty()) {
+            item {
+                Column(
+                    Modifier.fillMaxWidth().padding(vertical = 60.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        if (installed && game.id == GameCatalog.ppa.id) "Играть" else if (game.released) "Скачать" else "Скоро",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    Text("Пока нет установленных игр", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Phoenix Pix Arena уже ждёт тебя.", color = PhoenixMuted, fontSize = 11.sp)
+                    Spacer(Modifier.height(20.dp))
+                    PrimaryButton("Скачать Phoenix Pix Arena", onInstall)
+                }
+            }
+        } else {
+            items(visibleGames) { game ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PhoenixCard)
+                        .border(1.dp, PhoenixBorder, RoundedCornerShape(8.dp))
+                        .clickable { onOpenGame(game) }
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(game.cardRes),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(72.dp).clip(RoundedCornerShape(6.dp))
                     )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(game.title, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            if (installed && game.id == GameCatalog.ppa.id) "● Установлено" else if (game.released) "Доступна сейчас" else "Скоро",
+                            color = if (installed && game.id == GameCatalog.ppa.id) PhoenixGreen else PhoenixMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    if (game.id == GameCatalog.ppa.id) {
+                        Button(
+                            onClick = { if (installed) onOpenGame(game) else onInstall() },
+                            modifier = Modifier.height(36.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PhoenixOrange, contentColor = PhoenixArtText),
+                            contentPadding = PaddingValues(horizontal = 13.dp)
+                        ) {
+                            Text(if (installed) "Играть" else "Скачать", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -526,23 +574,84 @@ private fun LibraryScreen(
 
 @Composable
 private fun NewsScreen() {
+    var filter by remember { mutableStateOf("Все") }
+    val newsItems = listOf(
+        Triple("Новая арена. Новая легенда.", "PPA", "7 октября 2026"),
+        Triple("Будущее уже близко", "События", "5 октября 2026"),
+        Triple("Phoenix Launcher: обновление 0.2", "Обновления", "7 октября 2026"),
+        Triple("По ту сторону портала", "События", "1 октября 2026")
+    )
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { Text("Новости", fontSize = 26.sp, fontWeight = FontWeight.Black) }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tag("Все")
-                Tag("PPA")
-                Tag("Обновления")
-                Tag("События")
+            Text("Новости", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text("Всё, чем живёт вселенная Phoenix", color = PhoenixMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(18.dp))
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Все", "PPA", "Обновления", "События").forEach { item ->
+                    val selected = filter == item
+                    OutlinedButton(
+                        onClick = { filter = item },
+                        modifier = Modifier.height(34.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, if (selected) PhoenixOrange.copy(alpha = .55f) else PhoenixBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (selected) PhoenixOrange.copy(alpha = .08f) else Color.Transparent,
+                            contentColor = if (selected) PhoenixOrange else PhoenixMuted
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) { Text(item, fontSize = 11.sp) }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        items(newsItems.filter { filter == "Все" || it.second == filter }) { item ->
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(PhoenixCard)
+                    .border(1.dp, PhoenixBorder, RoundedCornerShape(8.dp))
+            ) {
+                Image(
+                    painter = painterResource(
+                        when (item.second) {
+                            "PPA", "Обновления" -> R.drawable.ppa_hero
+                            else -> R.drawable.cyber_card
+                        }
+                    ),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(190.dp)
+                )
+                Column(Modifier.padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(item.second.uppercase(), color = PhoenixOrange, fontSize = 9.sp, modifier = Modifier.weight(1f))
+                        Text(item.third, color = PhoenixMuted, fontSize = 9.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(item.first, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        "Новости и события игровой вселенной Phoenix. Следи за обновлениями и новыми мирами.",
+                        color = PhoenixMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text("Читать  ›", color = PhoenixText, fontSize = 11.sp)
+                }
             }
         }
-        item { NewsCard("Сезон 1: Пробуждение", "Новые локации, события и развитие мира Phoenix Pix Arena.", "Скоро") }
-        item { NewsCard("Phoenix Launcher 0.1", "Первая нативная версия лаунчера.", "Сегодня") }
-        item { NewsCard("Project 02", "Вторая игра уже зарезервирована в библиотеке Phoenix.", "В разработке") }
     }
 }
 
