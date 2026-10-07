@@ -1,0 +1,30 @@
+name: PhoenixLauncherIOS
+options:
+  bundleIdPrefix: com.phoenixgames
+  deploymentTarget:
+    iOS: "15.0"
+
+packages:
+  TelegramLogin:
+    url: https://github.com/TelegramMessenger/telegram-login-ios
+    revision: 215851df7e3cd32787a0054e5d1a97d7aa62796e
+
+targets:
+  PhoenixLauncher:
+    type: application
+    platform: iOS
+    sources:
+      - path: PhoenixLauncher
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.phoenixgames.launcher
+        PRODUCT_NAME: Phoenix Launcher
+        INFOPLIST_FILE: PhoenixLauncher/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PhoenixLauncher/PhoenixLauncher.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "2"
+    dependencies:
+      - package: TelegramLogin
+        product: TelegramLogin
