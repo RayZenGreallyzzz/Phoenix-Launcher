@@ -107,9 +107,15 @@ jobs:
         run: godot --headless --path games/ppa-native --editor --import --quit
 
       - name: Build native PPA APK
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p build
-          godot --headless --verbose --path games/ppa-native --export-debug "Android" "$GITHUB_WORKSPACE/build/PhoenixPixArena-native-debug.apk"
+          godot --headless --verbose --path games/ppa-native --export-debug "Android" "$GITHUB_WORKSPACE/build/PhoenixPixArena-native-debug.apk" 2>&1 | tee build/godot-export.log
+          if grep -E "SCRIPT ERROR: Parse Error|Failed to load script" build/godot-export.log; then
+            echo "Godot script parse error detected; refusing to publish broken APK."
+            exit 1
+          fi
 
       - name: Verify APK
         shell: bash

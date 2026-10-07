@@ -22,7 +22,7 @@ func begin_at(screen_position: Vector2) -> void:
     _offset = Vector2.ZERO
     queue_redraw()
 
-func set_offset(screen_offset: Vector2) -> void:
+func update_visual_offset(screen_offset: Vector2) -> void:
     _offset = screen_offset.limit_length(MAX_RADIUS_PX)
     queue_redraw()
 

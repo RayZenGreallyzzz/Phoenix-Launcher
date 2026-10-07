@@ -96,11 +96,11 @@ func _joy_update(point: Vector2) -> void:
     if distance <= DEAD:
         move_input = Vector2.ZERO
     else:
-        var magnitude := (min(distance, MAX_R) - DEAD) / (MAX_R - DEAD)
+        var magnitude: float = (minf(distance, MAX_R) - DEAD) / (MAX_R - DEAD)
         move_input = raw / max(distance, 0.001) * magnitude
 
     if joystick_visual:
-        joystick_visual.set_offset(raw)
+        joystick_visual.update_visual_offset(raw)
     if input_label:
         input_label.text = "JOY ACTIVE · %.2f  %.2f" % [move_input.x, move_input.y]
 
