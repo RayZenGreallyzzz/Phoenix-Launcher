@@ -103,39 +103,60 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Fetch current PPA Peace City map
+      - name: Fetch current City of Ashes 2D assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p games/ppa-native/assets
-          curl -L --fail --retry 4 --retry-delay 2 \
-            -o games/ppa-native/assets/peace_city.jpg \
-            "https://media.base44.com/images/public/6a8b1c398fe3fffe744a9e59/8fc1c7d20_a733f7151_5c5c79fd3_generated_image.png"
+          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev/assets"
 
-          test "$(stat -c%s games/ppa-native/assets/peace_city.jpg)" -gt 100000
-          file games/ppa-native/assets/peace_city.jpg
-          python3 - <<'PY'
+          fetch_webp() {
+            local hash="$1"
+            local out="$2"
+            curl -L --fail --retry 4 --retry-delay 2 -o "games/ppa-native/assets/$out" "$BASE/$hash.webp"
+            python3 - "$out" <<'PY'
+          import sys
           from pathlib import Path
-          p=Path('games/ppa-native/assets/peace_city.jpg')
+          p=Path('games/ppa-native/assets')/sys.argv[1]
           data=p.read_bytes()
-          assert data[:2] == b'\xff\xd8', 'Peace City CDN payload is not JPEG'
-          assert data[-2:] == b'\xff\xd9', 'Peace City JPEG is truncated'
-          print('Peace City JPEG bytes=', p.stat().st_size)
+          assert len(data)>1000, f'{p} is unexpectedly small'
+          assert data[:4]==b'RIFF' and data[8:12]==b'WEBP', f'{p} is not WebP'
+          print(p.name, p.stat().st_size)
           PY
+          }
+
+          # Exact externalized hashes from the latest approved City of Ashes source.
+          fetch_webp 3d81b1f0958c85a1 city_map_left.webp
+          fetch_webp ec6151e2e58f6d88 city_map_right.webp
+
+          fetch_webp 17ec528aea0f1531 city_building_0.webp
+          fetch_webp e2a43a86ccc091c5 city_building_1.webp
+          fetch_webp 2465fc146f6196e9 city_building_2.webp
+          fetch_webp 83aebcd153e5d81a city_building_3.webp
+          fetch_webp 1eec49dd3ef0d3ea city_building_4.webp
+          fetch_webp 0bf7cdf906bff16c city_building_5.webp
+          fetch_webp 511bfd5e792c6512 city_building_6.webp
+          fetch_webp 3db269751e591dc8 city_building_7.webp
+          fetch_webp 8964440e727c0a0e city_building_8.webp
 
       - name: Import native PPA project
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path games/ppa-native --editor --import --quit
-          IMPORT_META="games/ppa-native/assets/peace_city.jpg.import"
-          test -s "$IMPORT_META"
-          if grep -q 'valid=false' "$IMPORT_META"; then
-            echo "Peace City texture import is invalid; refusing to build a blank-map APK."
-            cat "$IMPORT_META"
+          godot --headless --path games/ppa-native --editor --import --quit 2>&1 | tee /tmp/godot-import.log
+          if grep -Eq 'SCRIPT ERROR: Parse Error|Failed to load script' /tmp/godot-import.log; then
+            echo "Godot parse/load failure; refusing to publish."
             exit 1
           fi
-          grep -q 'path=' "$IMPORT_META"
+          for src in games/ppa-native/assets/city_map_left.webp games/ppa-native/assets/city_map_right.webp games/ppa-native/assets/city_building_*.webp; do
+            meta="$src.import"
+            test -s "$meta"
+            if grep -q 'valid=false' "$meta"; then
+              echo "Invalid Godot texture import: $src"
+              cat "$meta"
+              exit 1
+            fi
+          done
 
       - name: Build native PPA APK
         shell: bash
