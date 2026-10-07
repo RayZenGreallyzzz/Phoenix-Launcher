@@ -103,62 +103,28 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Fetch live City of Ashes 2D assets
+      - name: Inspect live PPA world source
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p games/ppa-native/assets
           curl -L --fail --retry 4 --retry-delay 2 \
             -o /tmp/ppa-live-index.html \
             "https://ppa-phoenixpixarena.1988stella1988.workers.dev/"
 
           python3 <<'PY'
           import re
-          import urllib.parse
-          import urllib.request
           from pathlib import Path
-
-          root = 'https://ppa-phoenixpixarena.1988stella1988.workers.dev/'
-          html = Path('/tmp/ppa-live-index.html').read_text('utf-8', errors='replace')
-
-          def img_src(element_id):
-              tag = re.search(r'<img\\b[^>]*\\bid=["\\\']' + re.escape(element_id) + r'["\\\'][^>]*>', html, re.I)
-              if not tag:
-                  raise SystemExit(f'live PPA is missing #{element_id}')
-              src = re.search(r'\\bsrc=["\\\']([^"\\\']+)["\\\']', tag.group(0), re.I)
-              if not src:
-                  raise SystemExit(f'live PPA #{element_id} has no src')
-              return src.group(1)
-
-          map_urls = [img_src('mapTileLeft'), img_src('mapTileRight')]
-
-          block = re.search(r'(?:var|const)\\s+BUILDING_ASSETS\\s*=\\s*\\[([\\s\\S]*?)\\];', html)
-          if not block:
-              raise SystemExit('live PPA BUILDING_ASSETS not found')
-          building_urls = re.findall(r'["\\\']([^"\\\']+\\.(?:webp|png|jpg|jpeg)(?:\\?[^"\\\']*)?)["\\\']', block.group(1), re.I)
-          if len(building_urls) != 9:
-              raise SystemExit(f'expected 9 live City building assets, found {len(building_urls)}')
-
-          targets = [
-              (map_urls[0], 'city_map_left.webp'),
-              (map_urls[1], 'city_map_right.webp'),
-          ] + [(url, f'city_building_{i}.webp') for i, url in enumerate(building_urls)]
-
-          def fetch(url, out_name):
-              url = urllib.parse.urljoin(root, url)
-              req = urllib.request.Request(url, headers={'User-Agent':'PhoenixPPA-NativeBuild/1.0'})
-              with urllib.request.urlopen(req, timeout=45) as resp:
-                  data = resp.read()
-              if len(data) < 1000:
-                  raise SystemExit(f'{out_name}: live asset too small ({len(data)} bytes) from {url}')
-              if data[:4] != b'RIFF' or data[8:12] != b'WEBP':
-                  raise SystemExit(f'{out_name}: live asset is not WebP from {url}')
-              out = Path('games/ppa-native/assets') / out_name
-              out.write_bytes(data)
-              print(out_name, len(data), url)
-
-          for url, name in targets:
-              fetch(url, name)
+          s=Path('/tmp/ppa-live-index.html').read_text('utf-8',errors='replace')
+          print('LIVE_INDEX_BYTES', len(s.encode('utf-8')))
+          for term in ['BG_SAFE','imgSafe','const TOWN','const WORLD','SCENES={','safe:{','МИРНЫЙ ГОРОД','CITY_WORLD_W','mapTileLeft','painted-city']:
+              hits=[m.start() for m in re.finditer(re.escape(term),s)]
+              print('\nTERM',repr(term),'COUNT',len(hits))
+              for p in hits[:4]:
+                  print(s[max(0,p-700):p+2200].replace('\n',' ')[:2900])
+          urls=sorted(set(re.findall(r'(?:\\./|/)?assets/[A-Za-z0-9_.-]+',s)))
+          print('\nASSET_URL_COUNT',len(urls))
+          print('\n'.join(urls[:120]))
+          raise SystemExit('diagnostic stop after live world inspection')
           PY
 
       - name: Import native PPA project
