@@ -176,6 +176,10 @@ private fun SplashScreen() {
 
 @Composable
 private fun LoginScreen(onContinue: () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val compactHeight = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val formWidth = if (configuration.smallestScreenWidthDp >= 600 || compactHeight) 420.dp else 560.dp
+
     Box(Modifier.fillMaxSize().background(PhoenixBg)) {
         Image(
             painter = painterResource(R.drawable.phoenix_splash),
@@ -193,18 +197,22 @@ private fun LoginScreen(onContinue: () -> Unit) {
                 painter = painterResource(R.drawable.phoenix_emblem),
                 contentDescription = "Phoenix",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(132.dp).clip(RoundedCornerShape(32.dp))
+                modifier = Modifier.size(if (compactHeight) 92.dp else 132.dp).clip(RoundedCornerShape(28.dp))
             )
             Spacer(Modifier.height(14.dp))
-            Text("PHOENIX", fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+            Text("PHOENIX", fontSize = if (compactHeight) 24.sp else 28.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
             Text("LAUNCHER", color = PhoenixOrange2, fontSize = 11.sp, letterSpacing = 3.sp)
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(if (compactHeight) 14.dp else 32.dp))
             Text("Вход в аккаунт", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Один аккаунт для всех игр Phoenix", color = PhoenixMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(22.dp))
-            PrimaryButton("✈  Войти через Telegram", onContinue)
+            Spacer(Modifier.height(if (compactHeight) 12.dp else 22.dp))
+            Box(Modifier.widthIn(max = formWidth).fillMaxWidth()) {
+                PrimaryButton("✈  Войти через Telegram", onContinue)
+            }
             Spacer(Modifier.height(10.dp))
-            SecondaryButton("Войти по Email", onContinue)
+            Box(Modifier.widthIn(max = formWidth).fillMaxWidth()) {
+                SecondaryButton("Войти по Email", onContinue)
+            }
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = onContinue) { Text("Создать аккаунт", color = PhoenixBlue) }
         }
@@ -602,6 +610,15 @@ private fun LibraryScreen(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 56.dp
+        isLandscape -> 32.dp
+        isTablet -> 40.dp
+        else -> 20.dp
+    }
     var filter by rememberSaveable { mutableStateOf("Все игры") }
     val visibleGames = GameCatalog.games.filter { game ->
         when (filter) {
@@ -613,7 +630,7 @@ private fun LibraryScreen(
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -708,6 +725,15 @@ private fun LibraryScreen(
 
 @Composable
 private fun NewsScreen() {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 56.dp
+        isLandscape -> 32.dp
+        isTablet -> 40.dp
+        else -> 20.dp
+    }
     var filter by rememberSaveable { mutableStateOf("Все") }
     val newsItems = listOf(
         Triple("Новая арена. Новая легенда.", "PPA", "7 октября 2026"),
@@ -718,7 +744,7 @@ private fun NewsScreen() {
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
@@ -805,9 +831,19 @@ private fun NewsCard(title: String, text: String, date: String) {
 
 @Composable
 private fun ProfileScreen() {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 64.dp
+        isLandscape -> 40.dp
+        isTablet -> 48.dp
+        else -> 20.dp
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp)
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 22.dp)
     ) {
         item {
             Text("Профиль", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -859,6 +895,16 @@ private fun ProfileScreen() {
 
 @Composable
 private fun SettingsScreen() {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 64.dp
+        isLandscape -> 40.dp
+        isTablet -> 48.dp
+        else -> 20.dp
+    }
+
     var autoUpdate by rememberSaveable { mutableStateOf(true) }
     var wifiOnly by rememberSaveable { mutableStateOf(true) }
     var notifications by rememberSaveable { mutableStateOf(true) }
@@ -866,7 +912,7 @@ private fun SettingsScreen() {
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp)
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 22.dp)
     ) {
         item {
             Text("Настройки", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -905,9 +951,25 @@ private fun GameDetails(
     onBack: () -> Unit,
     onPrimary: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val heroHeight = when {
+        isLandscape && isTablet -> 300.dp
+        isLandscape -> 250.dp
+        isTablet -> 460.dp
+        else -> 410.dp
+    }
+    val sidePadding = when {
+        isLandscape && isTablet -> 64.dp
+        isLandscape -> 40.dp
+        isTablet -> 48.dp
+        else -> 20.dp
+    }
+
     LazyColumn(Modifier.fillMaxSize().background(PhoenixBg)) {
         item {
-            Box(Modifier.fillMaxWidth().height(410.dp)) {
+            Box(Modifier.fillMaxWidth().height(heroHeight)) {
                 Image(
                     painter = painterResource(game.heroRes),
                     contentDescription = game.title,
@@ -935,7 +997,7 @@ private fun GameDetails(
             }
         }
         item {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
+            Column(Modifier.padding(horizontal = sidePadding, vertical = 22.dp)) {
                 PrimaryButton(
                     if (!game.released) "Скоро" else if (installed) "Играть" else "Скачать " + game.sizeLabel,
                     onPrimary,
@@ -992,6 +1054,17 @@ private fun DownloadScreen(
     onStart: () -> Unit,
     onPlay: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 72.dp
+        isLandscape -> 48.dp
+        isTablet -> 56.dp
+        else -> 20.dp
+    }
+    val artRatio = if (isLandscape) 2.7f else 1.8f
+
     val pct = if (installed) 100 else (progress * 100).toInt()
     val stage = when {
         pct >= 100 -> 3
@@ -1003,7 +1076,7 @@ private fun DownloadScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(PhoenixBg),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp)
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 20.dp)
     ) {
         item {
             TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
@@ -1016,7 +1089,7 @@ private fun DownloadScreen(
                 painter = painterResource(R.drawable.ppa_hero),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(1.8f).clip(RoundedCornerShape(8.dp))
+                modifier = Modifier.fillMaxWidth().aspectRatio(artRatio).clip(RoundedCornerShape(8.dp))
             )
             Spacer(Modifier.height(22.dp))
             Text("Phoenix Pix Arena", fontSize = 18.sp, fontWeight = FontWeight.Bold)
