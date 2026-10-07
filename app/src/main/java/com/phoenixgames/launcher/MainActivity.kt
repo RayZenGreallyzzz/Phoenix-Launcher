@@ -562,34 +562,53 @@ private fun NewsCard(title: String, text: String, date: String) {
 
 @Composable
 private fun ProfileScreen() {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp)
+    ) {
         item {
-            Text("Профиль", fontSize = 26.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(18.dp))
+            Text("Профиль", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(24.dp))
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(PhoenixCard)
-                    .border(1.dp, PhoenixBorder, RoundedCornerShape(20.dp)).padding(20.dp),
+                Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
-                    Modifier.size(76.dp).clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(PhoenixOrange, Color(0xFF341009)))),
+                    Modifier.size(86.dp).clip(CircleShape).background(PhoenixSecondary)
+                        .border(1.dp, PhoenixOrange.copy(alpha = .55f), CircleShape),
                     contentAlignment = Alignment.Center
-                ) { Text("R", fontSize = 28.sp, fontWeight = FontWeight.Black) }
-                Spacer(Modifier.height(10.dp))
-                Text("RayZenGX", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("Phoenix Account", color = PhoenixMuted, fontSize = 12.sp)
+                ) { Text("R", color = PhoenixOrange, fontSize = 36.sp, fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Tag("Telegram привязан")
-                    Tag("PPA")
-                }
+                Text("RayZenGX", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                Text("Phoenix Account", color = PhoenixMuted, fontSize = 12.sp)
+                Spacer(Modifier.height(14.dp))
+                Tag("✓ АККАУНТ ПОДТВЕРЖДЁН")
             }
-            Spacer(Modifier.height(16.dp))
-            SettingCard {
-                InfoRow("Аккаунт", "Phoenix ID")
-                InfoRow("Telegram", "Привязан")
-                InfoRow("Игры", "1 активная")
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider(color = PhoenixBorder)
+            Spacer(Modifier.height(22.dp))
+            Text("Связанные аккаунты", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            InfoRow("Telegram", "@RayZenGX   ·   ✓ Привязан")
+            HorizontalDivider(color = PhoenixBorder)
+            InfoRow("Phoenix Pix Arena", "RayZenGX · Phoenix ID   ·   ✓")
+            HorizontalDivider(color = PhoenixBorder)
+            Spacer(Modifier.height(24.dp))
+            Text("Твоя активность", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("1", color = PhoenixOrange, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("Установлено игр", color = PhoenixMuted, fontSize = 9.sp)
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("1", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("Игровой аккаунт", color = PhoenixMuted, fontSize = 9.sp)
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("2026", fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("С нами с", color = PhoenixMuted, fontSize = 9.sp)
+                }
             }
         }
     }
@@ -598,27 +617,40 @@ private fun ProfileScreen() {
 @Composable
 private fun SettingsScreen() {
     var autoUpdate by remember { mutableStateOf(true) }
-    var wifiOnly by remember { mutableStateOf(false) }
+    var wifiOnly by remember { mutableStateOf(true) }
     var notifications by remember { mutableStateOf(true) }
+    var darkTheme by remember { mutableStateOf(true) }
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp)
     ) {
-        item { Text("Настройки", fontSize = 26.sp, fontWeight = FontWeight.Black) }
         item {
-            SettingCard {
-                ToggleRow("Автообновление игр", "Обновлять игровые модули автоматически", autoUpdate) { autoUpdate = it }
-                ToggleRow("Только Wi‑Fi", "Не тратить мобильный трафик", wifiOnly) { wifiOnly = it }
-                ToggleRow("Уведомления", "Новости и готовность обновлений", notifications) { notifications = it }
-            }
-        }
-        item {
-            SettingCard {
-                InfoRow("Тема", "Тёмная")
-                InfoRow("Качество артов", "Высокое")
-                InfoRow("Launcher", "0.1.0")
-            }
+            Text("Настройки", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text("Phoenix по твоим правилам", color = PhoenixMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(26.dp))
+            Text("ЛАУНЧЕР", color = PhoenixMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+            ToggleRow("Автообновление", "Всегда последняя версия игры", autoUpdate) { autoUpdate = it }
+            HorizontalDivider(color = PhoenixBorder)
+            ToggleRow("Только через Wi-Fi", "Не использовать мобильный интернет", wifiOnly) { wifiOnly = it }
+            HorizontalDivider(color = PhoenixBorder)
+            ToggleRow("Уведомления", "Новости игр и важные события", notifications) { notifications = it }
+            HorizontalDivider(color = PhoenixBorder)
+            ToggleRow("Тёмная тема", "Фирменное оформление Phoenix", darkTheme) { darkTheme = it }
+            HorizontalDivider(color = PhoenixBorder)
+            Spacer(Modifier.height(26.dp))
+            Text("О ПРИЛОЖЕНИИ", color = PhoenixMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+            InfoRow("Phoenix Launcher", "v0.2 · Native Visual Lock")
+            HorizontalDivider(color = PhoenixBorder)
+            Spacer(Modifier.height(30.dp))
+            Text(
+                "PHOENIX · РОЖДЁН ДЛЯ ИГРЫ",
+                color = PhoenixMuted,
+                fontSize = 9.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -917,10 +949,10 @@ private fun SectionTitle(title: String, trailing: String) {
 @Composable
 private fun Tag(text: String) {
     Box(
-        Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .35f))
-            .border(1.dp, Color.White.copy(alpha = .14f), RoundedCornerShape(50))
-            .padding(horizontal = 9.dp, vertical = 6.dp)
-    ) { Text(text, fontSize = 10.sp, color = Color.White.copy(alpha = .88f)) }
+        Modifier.clip(RoundedCornerShape(4.dp)).background(PhoenixScrim.copy(alpha = .45f))
+            .border(1.dp, PhoenixArtText.copy(alpha = .15f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 5.dp)
+    ) { Text(text, fontSize = 9.sp, color = if (text.contains("Онлайн")) PhoenixGreen else PhoenixArtText) }
 }
 
 @Composable
@@ -928,20 +960,29 @@ private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = 
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(50.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = PhoenixOrange, contentColor = Color.Black),
-        shape = RoundedCornerShape(14.dp)
-    ) { Text(text, fontWeight = FontWeight.Black) }
+        modifier = Modifier.fillMaxWidth().height(49.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = PhoenixOrange,
+            contentColor = PhoenixArtText,
+            disabledContainerColor = PhoenixSecondary,
+            disabledContentColor = PhoenixMuted
+        ),
+        shape = RoundedCornerShape(6.dp)
+    ) { Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
 private fun SecondaryButton(text: String, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(50.dp),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, PhoenixBorder)
-    ) { Text(text, color = Color.White) }
+        modifier = Modifier.fillMaxWidth().height(49.dp),
+        shape = RoundedCornerShape(6.dp),
+        border = BorderStroke(1.dp, PhoenixArtText.copy(alpha = .22f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = PhoenixScrim.copy(alpha = .50f),
+            contentColor = PhoenixArtText
+        )
+    ) { Text(text, fontSize = 12.sp) }
 }
 
 @Composable
@@ -962,17 +1003,24 @@ private fun ToggleRow(
     onChecked: (Boolean) -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().padding(vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp)
-            Text(subtitle, color = PhoenixMuted, fontSize = 11.sp)
+            Text(title, fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = PhoenixMuted, fontSize = 10.sp)
         }
         Switch(
             checked = checked,
             onCheckedChange = onChecked,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PhoenixBlue)
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = PhoenixArtText,
+                checkedTrackColor = PhoenixOrange,
+                uncheckedThumbColor = PhoenixMuted,
+                uncheckedTrackColor = PhoenixSecondary,
+                uncheckedBorderColor = PhoenixBorder
+            )
         )
     }
 }
