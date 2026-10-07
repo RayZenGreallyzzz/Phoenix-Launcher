@@ -7,10 +7,14 @@ Current milestone:
 - Godot 4.6 stable, GDScript, GL Compatibility renderer
 - Launcher requests a 60-second, one-time game ticket from Phoenix backend
 - Launcher starts the PPA package with the ticket in an explicit Android Intent extra
-- Godot reads the Intent extra through Godot's AndroidRuntime API
-- ticket is exchanged once for a 12-hour game session
+- Godot exchanges the one-time ticket for a 12-hour game session
 - the same existing PPA account/nickname is loaded from the shared D1 backend
+- authenticated client can now enter a real native Godot world scene
+- first native city test area with collisions, follow camera and Player3D controller
+- fixed mobile virtual joystick with multi-touch-safe tracking
+- movement runs in 60 Hz physics and also supports WASD/arrows for desktop testing
+- live FPS and player coordinates HUD are included for performance testing
 
 The Phoenix launcher session token is never placed into the Android Intent.
 
-This first native milestone proves the secure launcher/runtime/account bridge. It does not yet port the full current web MMORPG gameplay. Subsequent native milestones port world rendering, Player3D, movement, combat, realtime and game systems on top of this authenticated runtime.
+The current Player3D visual and city geometry are lightweight native placeholders used to validate movement, camera, collision and mobile input without risking the existing web MMORPG. The next milestone replaces the placeholder visual/world with the approved PPA assets, then ports mobs, targeting, combat and realtime systems.
