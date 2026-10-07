@@ -314,10 +314,13 @@ private fun NotificationDialog(
                         lineHeight = 17.sp
                     )
                     Spacer(Modifier.height(15.dp))
-                    PrimaryButton("Открыть игру") {
-                        onClose()
-                        onOpenPpa()
-                    }
+                    PrimaryButton(
+                        text = "Открыть игру",
+                        onClick = {
+                            onClose()
+                            onOpenPpa()
+                        }
+                    )
                 }
             }
         }
