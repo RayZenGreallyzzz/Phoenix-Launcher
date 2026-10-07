@@ -1,0 +1,16 @@
+name: Runner Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/runner-smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner started
+        run: |
+          echo "Phoenix runner OK"
+          uname -a
