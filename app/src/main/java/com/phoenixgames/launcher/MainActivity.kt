@@ -238,10 +238,13 @@ private fun LauncherShell(
 
 @Composable
 private fun PhoenixTopBar() {
+    val configuration = LocalConfiguration.current
+    val barHeight = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 60.dp else 73.dp
+
     Row(
         Modifier
             .fillMaxWidth()
-            .height(73.dp)
+            .height(barHeight)
             .background(PhoenixBg)
             .padding(horizontal = 20.dp)
             .border(width = 0.dp, color = Color.Transparent),
@@ -281,9 +284,19 @@ private fun HomeScreen(
     onOpenGame: (GameManifest) -> Unit,
     onInstall: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val sidePadding = when {
+        isLandscape && isTablet -> 56.dp
+        isLandscape -> 32.dp
+        isTablet -> 40.dp
+        else -> 20.dp
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp)
+        contentPadding = PaddingValues(horizontal = sidePadding, vertical = 0.dp)
     ) {
         item {
             Row(
@@ -349,88 +362,199 @@ private fun HeroCard(
     onPrimary: () -> Unit,
     onMore: () -> Unit
 ) {
-    Box(
-        Modifier.fillMaxWidth().height(487.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, PhoenixBorder, RoundedCornerShape(10.dp))
-    ) {
-        Image(
-            painter = painterResource(game.heroRes),
-            contentDescription = game.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val wideLayout = isLandscape || configuration.screenWidthDp >= 840
+
+    if (wideLayout) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(if (isTablet) 360.dp else 320.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(PhoenixCard)
+                .border(1.dp, PhoenixBorder, RoundedCornerShape(10.dp))
+        ) {
+            Box(Modifier.weight(1.35f).fillMaxHeight()) {
+                Image(
+                    painter = painterResource(game.heroRes),
+                    contentDescription = game.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                PhoenixScrim.copy(alpha = .12f),
+                                PhoenixScrim.copy(alpha = .82f)
+                            )
+                        )
+                    )
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Tag("⚡ ВЫБОР PHOENIX")
+                    Tag("РАННИЙ ДОСТУП")
+                }
+            }
+
+            Column(
+                Modifier
+                    .weight(.95f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "ТВОЯ ЛЕГЕНДА НАЧИНАЕТСЯ ЗДЕСЬ",
+                    color = PhoenixOrange,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.8.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "PHOENIX",
+                    fontSize = if (isTablet) 45.sp else 38.sp,
+                    fontWeight = FontWeight.Black,
+                    lineHeight = 38.sp
+                )
+                Text(
+                    "PIX ARENA",
+                    fontSize = if (isTablet) 45.sp else 38.sp,
+                    fontWeight = FontWeight.Black,
+                    lineHeight = 38.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Стань частью нового мира. Собери клан. Зажги свою легенду на арене.",
+                    color = PhoenixArtText.copy(alpha = .72f),
+                    fontSize = 10.sp,
+                    lineHeight = 17.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    game.tags.take(4).forEach { Tag(it) }
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onPrimary,
+                        modifier = Modifier.height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PhoenixOrange,
+                            contentColor = PhoenixArtText
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 18.dp)
+                    ) {
+                        Text(if (installed) "▶  Играть" else "↓  Скачать", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = onMore,
+                        modifier = Modifier.height(44.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, PhoenixArtText.copy(alpha = .22f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = PhoenixScrim.copy(alpha = .55f),
+                            contentColor = PhoenixArtText
+                        )
+                    ) { Text("Об игре  ›", fontSize = 11.sp) }
+                }
+            }
+        }
+    } else {
         Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = .08f),
-                        PhoenixScrim.copy(alpha = .42f),
-                        PhoenixScrim.copy(alpha = .94f)
+            Modifier.fillMaxWidth().height(if (isTablet) 520.dp else 487.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, PhoenixBorder, RoundedCornerShape(10.dp))
+        ) {
+            Image(
+                painter = painterResource(game.heroRes),
+                contentDescription = game.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = .08f),
+                            PhoenixScrim.copy(alpha = .42f),
+                            PhoenixScrim.copy(alpha = .94f)
+                        )
                     )
                 )
             )
-        )
-        Row(
-            Modifier.fillMaxWidth().padding(17.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Tag("⚡ ВЫБОР PHOENIX")
-            Tag("РАННИЙ ДОСТУП")
-        }
-        Column(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 23.dp)
-        ) {
-            Text(
-                "ТВОЯ ЛЕГЕНДА НАЧИНАЕТСЯ ЗДЕСЬ",
-                color = PhoenixOrange,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.8.sp
-            )
-            Spacer(Modifier.height(7.dp))
-            Text("PHOENIX", fontSize = 53.sp, fontWeight = FontWeight.Black, lineHeight = 45.sp)
-            Text("PIX ARENA", fontSize = 53.sp, fontWeight = FontWeight.Black, lineHeight = 45.sp)
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Стань частью нового мира. Собери клан.\nЗажги свою легенду на арене.",
-                color = PhoenixArtText.copy(alpha = .72f),
-                fontSize = 10.sp,
-                lineHeight = 18.sp
-            )
-            Spacer(Modifier.height(10.dp))
             Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Modifier.fillMaxWidth().padding(17.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                game.tags.take(4).forEach { Tag(it) }
+                Tag("⚡ ВЫБОР PHOENIX")
+                Tag("РАННИЙ ДОСТУП")
             }
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onPrimary,
-                    modifier = Modifier.height(44.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PhoenixOrange,
-                        contentColor = PhoenixArtText
-                    ),
-                    shape = RoundedCornerShape(6.dp),
-                    contentPadding = PaddingValues(horizontal = 21.dp)
+            Column(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 23.dp)
+            ) {
+                Text(
+                    "ТВОЯ ЛЕГЕНДА НАЧИНАЕТСЯ ЗДЕСЬ",
+                    color = PhoenixOrange,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.8.sp
+                )
+                Spacer(Modifier.height(7.dp))
+                Text("PHOENIX", fontSize = if (isTablet) 58.sp else 53.sp, fontWeight = FontWeight.Black, lineHeight = 48.sp)
+                Text("PIX ARENA", fontSize = if (isTablet) 58.sp else 53.sp, fontWeight = FontWeight.Black, lineHeight = 48.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Стань частью нового мира. Собери клан.\nЗажги свою легенду на арене.",
+                    color = PhoenixArtText.copy(alpha = .72f),
+                    fontSize = 10.sp,
+                    lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(if (installed) "▶  Играть" else "↓  Скачать", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    game.tags.take(4).forEach { Tag(it) }
                 }
-                OutlinedButton(
-                    onClick = onMore,
-                    modifier = Modifier.height(44.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, PhoenixArtText.copy(alpha = .22f)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = PhoenixScrim.copy(alpha = .55f),
-                        contentColor = PhoenixArtText
-                    )
-                ) { Text("Об игре  ›", fontSize = 11.sp) }
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onPrimary,
+                        modifier = Modifier.height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PhoenixOrange,
+                            contentColor = PhoenixArtText
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 21.dp)
+                    ) {
+                        Text(if (installed) "▶  Играть" else "↓  Скачать", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = onMore,
+                        modifier = Modifier.height(44.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, PhoenixArtText.copy(alpha = .22f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = PhoenixScrim.copy(alpha = .55f),
+                            contentColor = PhoenixArtText
+                        )
+                    ) { Text("Об игре  ›", fontSize = 11.sp) }
+                }
             }
         }
     }
@@ -438,8 +562,11 @@ private fun HeroCard(
 
 @Composable
 private fun GameCard(game: GameManifest, installed: Boolean, onClick: () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val cardWidth = if (configuration.smallestScreenWidthDp >= 600) 186.dp else 154.dp
+
     Column(
-        Modifier.width(154.dp).clip(RoundedCornerShape(8.dp)).background(PhoenixCard)
+        Modifier.width(cardWidth).clip(RoundedCornerShape(8.dp)).background(PhoenixCard)
             .border(1.dp, PhoenixBorder, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
     ) {
@@ -1012,11 +1139,14 @@ private fun DownloadStep(text: String, complete: Boolean) {
 
 @Composable
 private fun BottomNav(selected: Tab, onSelect: (Tab) -> Unit) {
+    val configuration = LocalConfiguration.current
+    val navHeight = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 62.dp else 76.dp
+
     Row(
         Modifier
             .fillMaxWidth()
             .background(PhoenixBg.copy(alpha = .98f))
-            .height(76.dp)
+            .height(navHeight)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.Top
     ) {
