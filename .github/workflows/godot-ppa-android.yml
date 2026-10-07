@@ -103,41 +103,63 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Fetch current City of Ashes 2D assets
+      - name: Fetch live City of Ashes 2D assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p games/ppa-native/assets
-          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev/assets"
+          curl -L --fail --retry 4 --retry-delay 2 \
+            -o /tmp/ppa-live-index.html \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/"
 
-          fetch_webp() {
-            local hash="$1"
-            local out="$2"
-            curl -L --fail --retry 4 --retry-delay 2 -o "games/ppa-native/assets/$out" "$BASE/$hash.webp"
-            python3 - "$out" <<'PY'
-          import sys
+          python3 <<'PY'
+          import re
+          import urllib.parse
+          import urllib.request
           from pathlib import Path
-          p=Path('games/ppa-native/assets')/sys.argv[1]
-          data=p.read_bytes()
-          assert len(data)>1000, f'{p} is unexpectedly small'
-          assert data[:4]==b'RIFF' and data[8:12]==b'WEBP', f'{p} is not WebP'
-          print(p.name, p.stat().st_size)
+
+          root = 'https://ppa-phoenixpixarena.1988stella1988.workers.dev/'
+          html = Path('/tmp/ppa-live-index.html').read_text('utf-8', errors='replace')
+
+          def img_src(element_id):
+              tag = re.search(r'<img\\b[^>]*\\bid=["\\\']' + re.escape(element_id) + r'["\\\'][^>]*>', html, re.I)
+              if not tag:
+                  raise SystemExit(f'live PPA is missing #{element_id}')
+              src = re.search(r'\\bsrc=["\\\']([^"\\\']+)["\\\']', tag.group(0), re.I)
+              if not src:
+                  raise SystemExit(f'live PPA #{element_id} has no src')
+              return src.group(1)
+
+          map_urls = [img_src('mapTileLeft'), img_src('mapTileRight')]
+
+          block = re.search(r'(?:var|const)\\s+BUILDING_ASSETS\\s*=\\s*\\[([\\s\\S]*?)\\];', html)
+          if not block:
+              raise SystemExit('live PPA BUILDING_ASSETS not found')
+          building_urls = re.findall(r'["\\\']([^"\\\']+\\.(?:webp|png|jpg|jpeg)(?:\\?[^"\\\']*)?)["\\\']', block.group(1), re.I)
+          if len(building_urls) != 9:
+              raise SystemExit(f'expected 9 live City building assets, found {len(building_urls)}')
+
+          targets = [
+              (map_urls[0], 'city_map_left.webp'),
+              (map_urls[1], 'city_map_right.webp'),
+          ] + [(url, f'city_building_{i}.webp') for i, url in enumerate(building_urls)]
+
+          def fetch(url, out_name):
+              url = urllib.parse.urljoin(root, url)
+              req = urllib.request.Request(url, headers={'User-Agent':'PhoenixPPA-NativeBuild/1.0'})
+              with urllib.request.urlopen(req, timeout=45) as resp:
+                  data = resp.read()
+              if len(data) < 1000:
+                  raise SystemExit(f'{out_name}: live asset too small ({len(data)} bytes) from {url}')
+              if data[:4] != b'RIFF' or data[8:12] != b'WEBP':
+                  raise SystemExit(f'{out_name}: live asset is not WebP from {url}')
+              out = Path('games/ppa-native/assets') / out_name
+              out.write_bytes(data)
+              print(out_name, len(data), url)
+
+          for url, name in targets:
+              fetch(url, name)
           PY
-          }
-
-          # Exact externalized hashes from the latest approved City of Ashes source.
-          fetch_webp 3d81b1f0958c85a1 city_map_left.webp
-          fetch_webp ec6151e2e58f6d88 city_map_right.webp
-
-          fetch_webp 17ec528aea0f1531 city_building_0.webp
-          fetch_webp e2a43a86ccc091c5 city_building_1.webp
-          fetch_webp 2465fc146f6196e9 city_building_2.webp
-          fetch_webp 83aebcd153e5d81a city_building_3.webp
-          fetch_webp 1eec49dd3ef0d3ea city_building_4.webp
-          fetch_webp 0bf7cdf906bff16c city_building_5.webp
-          fetch_webp 511bfd5e792c6512 city_building_6.webp
-          fetch_webp 3db269751e591dc8 city_building_7.webp
-          fetch_webp 8964440e727c0a0e city_building_8.webp
 
       - name: Import native PPA project
         shell: bash
