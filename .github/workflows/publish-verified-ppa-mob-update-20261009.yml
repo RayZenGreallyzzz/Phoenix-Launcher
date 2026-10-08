@@ -1,0 +1,115 @@
+name: Publish verified single-tester PPA monsters to launcher
+on:
+  push:
+    branches: [ "fix/ppa-launcher-compatible-mob-update-20261009" ]
+    paths: [ ".github/workflows/publish-verified-ppa-mob-update-20261009.yml" ]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: ppa-native-release
+  cancel-in-progress: false
+
+jobs:
+  publish-verified-native-mobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download signed PPA APK from already successful QA
+        uses: actions/download-artifact@v4
+        with:
+          name: PhoenixPixArena-Launcher-Compatible-Mobs-QA-UNPUBLISHED
+          run-id: 37853976873
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: payload
+      - name: Verify CI source and unchanged official launcher channel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/37853976873" > /tmp/ppa-qa-run.json
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/ppa-native-stable" > /tmp/ppa-stable-before.json
+          python3 - <<'PY'
+          import json
+          q=json.load(open("/tmp/ppa-qa-run.json"))
+          assert q["head_sha"]=="86e076a8015a3cee9aa5bae936dbe3cce8440f65"
+          assert q["head_branch"]=="fix/ppa-launcher-compatible-mob-update-20261009"
+          assert q["status"]=="completed" and q["conclusion"]=="success"
+          j=json.load(open("/tmp/ppa-stable-before.json"))
+          m=json.loads(j["body"])
+          assert j["tag_name"]=="ppa-native-stable"
+          assert m["gameId"]=="phoenix-pix-arena"
+          assert m["packageName"]=="com.phoenixgames.ppa"
+          assert m["versionCode"]==100081, "Launcher already has a newer release: refusing overwrite"
+          assert m["sha256"]=="03d91a00efa4f7c405be89fee8f46e56faf551bf0403e2a150d8bcddc53934ea"
+          assert m["sizeBytes"]==168925353
+          assert any(a["name"]=="PhoenixPixArena-native.apk" and a["size"]==m["sizeBytes"] for a in j["assets"])
+          print("PPA_RELEASE_PRECHECK_OK only_previously_tested_sha=1 version_old=100081")
+          PY
+      - name: Verify Android ID, version, matching signature and prepare official manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s payload/PhoenixPixArena-native-debug.apk
+          cp payload/PhoenixPixArena-native-debug.apk payload/PhoenixPixArena-native.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          "$APKSIGNER" verify --verbose --print-certs payload/PhoenixPixArena-native.apk > /tmp/ppa-new-cert.txt
+          "$AAPT" dump badging payload/PhoenixPixArena-native.apk > /tmp/ppa-new-badging.txt
+          grep -q "package: name='com.phoenixgames.ppa'" /tmp/ppa-new-badging.txt
+          grep -q "versionCode='100082'" /tmp/ppa-new-badging.txt
+          grep -q "versionName='0.1.100082-mobs-qa'" /tmp/ppa-new-badging.txt
+          curl -fL --retry 4 --retry-delay 3 --max-time 240 "https://github.com/RayZenGreallyzzz/Phoenix-Launcher/releases/download/ppa-native-stable/PhoenixPixArena-native.apk" -o /tmp/ppa-old.apk
+          "$APKSIGNER" verify --verbose --print-certs /tmp/ppa-old.apk > /tmp/ppa-old-cert.txt
+          python3 - <<'PY'
+          import re,json,hashlib
+          from pathlib import Path
+          def cert(path):
+              s=Path(path).read_text()
+              m=re.search(r'certificate\s+SHA-256\s+digest\s*:\s*([0-9a-fA-F:]{64,95})',s,re.I)
+              assert m, "Cannot read signed APK certificate"
+              value=m.group(1).replace(":","").lower()
+              assert re.fullmatch(r'[a-f0-9]{64}',value)
+              return value
+          assert cert('/tmp/ppa-old-cert.txt')==cert('/tmp/ppa-new-cert.txt'), "APK signing mismatch"
+          prev=json.load(open('/tmp/ppa-stable-before.json'))
+          p=Path('payload/PhoenixPixArena-native.apk')
+          size=p.stat().st_size
+          assert 2000000<size<250000000, "APK exceeds launcher size restrictions"
+          digest=hashlib.file_digest(p.open('rb'),'sha256').hexdigest()
+          body=dict(schema=1,gameId='phoenix-pix-arena',packageName='com.phoenixgames.ppa',versionCode=100082,versionName='0.1.100082-mobs-qa',sha256=digest,sizeBytes=size)
+          Path('payload/ppa-native-release.json').write_text(json.dumps(body,separators=(',',':')))
+          print('PPA_PUBLISH_VERIFIED_SIGNING_AND_VERSION_OK',size,digest)
+          PY
+      - name: Publish via existing official release (not a separate APK channel)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Repeat the release revision guard immediately before upload.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/ppa-native-stable" > /tmp/ppa-pre-upload.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ppa-pre-upload.json'))
+          m=json.loads(j['body'])
+          assert m['versionCode']==100081 and m['sha256']=='03d91a00efa4f7c405be89fee8f46e56faf551bf0403e2a150d8bcddc53934ea', 'Release changed concurrently'
+          PY
+          gh release upload ppa-native-stable payload/PhoenixPixArena-native.apk --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit ppa-native-stable --repo "$GITHUB_REPOSITORY" --notes-file payload/ppa-native-release.json --title "PPA Native 0.1.100082-mobs-qa" --latest=false
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/ppa-native-stable" > /tmp/ppa-release-after.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ppa-release-after.json'))
+          m=json.loads(j['body'])
+          n=json.load(open('payload/ppa-native-release.json'))
+          assert m==n
+          assert j['tag_name']=='ppa-native-stable'
+          assert any(a['name']=='PhoenixPixArena-native.apk' and a['size']==n['sizeBytes'] for a in j['assets'])
+          print('PPA_LAUNCHER_STABLE_UPDATE_PUBLISHED_OK version=100082')
+          PY
