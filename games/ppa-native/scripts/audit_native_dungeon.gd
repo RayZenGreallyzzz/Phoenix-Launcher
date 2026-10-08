@@ -108,7 +108,7 @@ func _check() -> void:
         _fail("dungeon must contain aligned floor, hidden mask and diagnostic ground-footprint marker")
         return
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
-    if footprint == null or footprint.visible or scene.WALL_RADIUS != 9.0:
+    if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
         return
     toggle.pressed.emit()
@@ -116,8 +116,8 @@ func _check() -> void:
         _fail("mask toggle didn't show the exact ground collider and aligned overlay")
         return
     var circle := footprint.find_child("DungeonFootprintRadius", true, false) as Line2D
-    if circle == null or circle.points.size() != 25 or absf(circle.points[0].length() - 9.0) > 0.1:
-        _fail("the visible yellow circle does not match the 9px collider footprint")
+    if circle == null or circle.points.size() != 25 or absf(circle.points[0].length() - 2.0) > 0.1:
+        _fail("the yellow marker must show the actual 2px footprint")
         return
     if not overlay.visible:
         _fail("mask alignment overlay toggle doesn't show geometry")
@@ -137,14 +137,39 @@ func _check() -> void:
             var last_safe_y := float(step - 1)
             while last_safe_y > 0 and not scene._can_walk(entrance + Vector2(0, last_safe_y)):
                 last_safe_y -= 1.0
-            if last_safe_y < 1.0 or float(step) - last_safe_y > scene.WALL_RADIUS + 9.0:
+            if last_safe_y < 1.0 or float(step) - last_safe_y > scene.WALL_RADIUS + 6.0:
                 _fail("ground collider prevents approaching lower green edge: boundary=" +
                     str(step) + " last_safe=" + str(last_safe_y))
                 return
+            # A longer, laggy frame must STOP at this wall, not skip across
+            # to another walkable room beyond the blocked region.
+            var safe_start := entrance + Vector2(0.0, last_safe_y - 9.0)
+            if not scene._can_walk(safe_start):
+                _fail("near-wall safe start is not walkable")
+                return
+            scene.world_pos_px = safe_start
+            var swept := scene._resolve_city_collision(safe_start + Vector2(0.0, 38.0))
+            if not scene._can_walk(swept) or swept.y >= entrance.y + float(step):
+                _fail("substep resolver tunneled through the lower wall")
+                return
+            scene.world_pos_px = entrance
             break
     if not reached_edge:
         _fail("no lower mask edge found from dungeon entrance")
         return
+    # The player's shadow mesh is deliberately REMOVED, rather than merely
+    # hidden, in BOTH native City and Dungeon.
+    if scene.player_3d == null or scene.player_3d.get_child_count() != 1:
+        _fail("separate 3D ground-shadow mesh is still attached to player")
+        return
+    var model := scene.player_visual.get_child(0) as Node3D if scene.player_visual.get_child_count() > 0 else null
+    if model != null and model.find_children("*", "Skeleton3D", true, false).size() > 0:
+        var fitter = load("res://scripts/dwarf_model_fit.gd")
+        var skeletal_bounds: AABB = fitter.rest_bone_bounds(model)
+        var foot_floor: float = fitter.rest_foot_floor(model, skeletal_bounds)
+        if absf(model.position.y + foot_floor * model.scale.y) > 0.035:
+            _fail("3D foot bones are not resting on the y=0 ground plane")
+            return
     # Numeric checks across map: a world-space point maps to the exact
     # matching floor and mask normalized coordinates, without any Y drift.
     for uv in [Vector2(0.10, 0.15), Vector2(0.50, 0.50),
@@ -166,6 +191,6 @@ func _check() -> void:
     print("PPA_DUNGEON_WALK_TEST_OK world=", world_size,
         " mask=", scene._mask_image.get_size(), " entrance=", scene._entrance,
         " collisions=8points+slide original_art=1 world_scale=", scene._render_to_world_scale,
-        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=9 lower_edge=1 mobs=0 server_writes=0")
+        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=2 shadows=0 foot_grounded=1 wall_sweep=1 mobs=0 server_writes=0")
     scene.queue_free()
     quit(0)
