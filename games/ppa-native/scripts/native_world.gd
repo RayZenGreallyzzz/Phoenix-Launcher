@@ -18,6 +18,7 @@ const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
 const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
+const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -81,6 +82,8 @@ var joystick_visual: Control
 var fps_label: Label
 var coords_label: Label
 var input_label: Label
+var _server_snapshot_loader: Node
+var _server_snapshot_status: Label
 
 var _joy_touch_id := -1
 var _joy_mouse_active := false
@@ -106,6 +109,7 @@ func _ready() -> void:
     _build_3d_overlay()
     _build_hud()
     _build_test_menu()
+    _build_server_readonly_bridge()
     world_pos_px = CITY_ENTRY
     _sync_world_visuals()
 
@@ -360,6 +364,52 @@ func _build_hud() -> void:
     exit_button.z_index = 20
     exit_button.pressed.connect(_exit_game)
     add_child(exit_button)
+
+
+func _build_server_readonly_bridge() -> void:
+    # Can be used by City and Dungeon. No save/write request is possible.
+    _server_snapshot_status = Label.new()
+    _server_snapshot_status.name = "PPAReadOnlyServerSnapshotStatus"
+    _server_snapshot_status.text = "СЕРВЕР: получаем данные персонажа…"
+    _server_snapshot_status.position = Vector2(28.0, 81.0)
+    _server_snapshot_status.size = Vector2(490.0, 24.0)
+    _server_snapshot_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _server_snapshot_status.z_index = 20
+    _server_snapshot_status.add_theme_font_size_override("font_size", 11)
+    _server_snapshot_status.add_theme_color_override("font_color", Color("#B6C0CD"))
+    add_child(_server_snapshot_status)
+    _server_snapshot_loader = PPA_READONLY.new()
+    _server_snapshot_loader.name = "PPAServerReadOnly"
+    add_child(_server_snapshot_loader)
+    _server_snapshot_loader.snapshot_ready.connect(_on_readonly_snapshot_ready)
+    _server_snapshot_loader.snapshot_failed.connect(_on_readonly_snapshot_failed)
+    _server_snapshot_loader.call("fetch_once")
+
+func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
+    var save = payload.get("state", {})
+    if not (save is Dictionary):
+        return
+    # Display real values exactly as received; never replace with fabricated
+    # class stats or mutate a save from this visual 3D testing client.
+    var level_text := str(save.get("lvl", save.get("level", "—")))
+    var hp_text := str(save.get("hp", "—"))
+    var mp_text := str(save.get("mp", "—"))
+    var name_text := str(save.get("playerName", save.get("nickname", "PPA")))
+    if _server_snapshot_status != null:
+        _server_snapshot_status.text = "PPA СЕРВЕР · %s · ур.%s · HP %s · MP %s · чтение" % [
+            name_text, level_text, hp_text, mp_text
+        ]
+        _server_snapshot_status.add_theme_color_override("font_color", Color("#76D4A0"))
+    print("PPA_NATIVE_SAVE_READONLY_OK version=", payload.get("version", null),
+        " linked=1 server_writes=0")
+
+func _on_readonly_snapshot_failed(code: String) -> void:
+    # An unavailable backend must never silently switch to fake stats, create
+    # another character, override inventory or block local map/asset QA.
+    if _server_snapshot_status != null:
+        _server_snapshot_status.text = "PPA СЕРВЕР · нет снимка (" + code.left(50) + ")"
+        _server_snapshot_status.add_theme_color_override("font_color", Color("#ECB477"))
+    print("PPA_NATIVE_SAVE_READONLY_WAIT code=", code.left(56), " server_writes=0")
 
 func _input(event: InputEvent) -> void:
     # No virtual joystick or 3D click handlers may steal touches from
