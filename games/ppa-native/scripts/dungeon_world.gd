@@ -14,6 +14,13 @@ const MASK_A := 48.0 / 255.0
 const WALL_RADIUS := 2.0
 const COLLISION_SUBSTEP := 2.0
 
+# Requested tablet calibration: shift the WALK MASK downward by 6 native
+# world/screen pixels. The decorative floor remains at its original position.
+# Both collision sampling and its translucent debug overlay use this offset.
+# Test branch only: revert this single value to 0 if upper walls look wrong.
+const MASK_Y_OFFSET_PX := 6.0
+const MASK_WORLD_OFFSET := Vector2(0.0, MASK_Y_OFFSET_PX)
+
 # Same logical dungeon units as original PPA build.mjs:
 # DG_ART_W=2048; DG_SCALE=(1852*5.1435)/2048;
 # DG_W=round(DG_ART_W*DG_SCALE) ~= 9526, NOT 4096 render pixels.
@@ -46,7 +53,7 @@ func _ready() -> void:
     world_pos_px = _entrance
     _sync_world_visuals()
     _add_dungeon_hud()
-    print("PPA_NATIVE_DUNGEON_MAP_OK map=", _dungeon_bounds, " mask=", _mask_image.get_size(), " entry=", _entrance)
+    print("PPA_NATIVE_DUNGEON_MAP_OK map=", _dungeon_bounds, " mask=", _mask_image.get_size(), " entry=", _entrance, " mask_offset_y=", MASK_Y_OFFSET_PX)
 
 func _build_city_2d() -> void:
     var background := ColorRect.new()
@@ -101,7 +108,7 @@ func _build_city_2d() -> void:
     _walk_overlay = TextureRect.new()
     _walk_overlay.name = "DungeonWalkMaskAlignmentOverlay"
     _walk_overlay.texture = mask_texture
-    _walk_overlay.position = Vector2.ZERO
+    _walk_overlay.position = MASK_WORLD_OFFSET
     _walk_overlay.size = _dungeon_bounds
     _walk_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     _walk_overlay.stretch_mode = TextureRect.STRETCH_SCALE
@@ -161,9 +168,11 @@ func _movement_speed_px() -> float:
 func _world_to_mask_uv(world: Vector2) -> Vector2:
     if _dungeon_bounds.x <= 0.0 or _dungeon_bounds.y <= 0.0:
         return Vector2.ZERO
-    # A SINGLE coordinate transform for every collision check and overlay.
-    # No guessed independent Y-offset: both input images share source origin.
-    return Vector2(world.x / _dungeon_bounds.x, world.y / _dungeon_bounds.y)
+    # Sample at the SAME source pixel seen in the down-shifted overlay.
+    # World Y=offset corresponds to mask texture Y=0, so never move the
+    # decorative floor, camera, rig or hero's ground anchor.
+    return Vector2(world.x / _dungeon_bounds.x,
+        (world.y - MASK_Y_OFFSET_PX) / _dungeon_bounds.y)
 
 func _walk_sample(pos: Vector2) -> bool:
     if _mask_image == null:
@@ -171,6 +180,8 @@ func _walk_sample(pos: Vector2) -> bool:
     if pos.x <= 0.0 or pos.y <= 0.0 or pos.x >= _dungeon_bounds.x or pos.y >= _dungeon_bounds.y:
         return false
     var uv := _world_to_mask_uv(pos)
+    if uv.x < 0.0 or uv.y < 0.0 or uv.x >= 1.0 or uv.y >= 1.0:
+        return false
     var cell_x := clampi(int(uv.x * float(_mask_image.get_width())), 0, _mask_image.get_width() - 1)
     var cell_y := clampi(int(uv.y * float(_mask_image.get_height())), 0, _mask_image.get_height() - 1)
     var pixel := _mask_image.get_pixel(cell_x, cell_y)
@@ -197,7 +208,7 @@ func _find_safe_entrance() -> Vector2:
     if _mask_image == null or _mask_image.get_size() != SAFE_ENTRY.MASK_DIMS:
         return Vector2.ZERO
     var entry := Vector2(SAFE_ENTRY.UV.x * _dungeon_bounds.x,
-        SAFE_ENTRY.UV.y * _dungeon_bounds.y)
+        SAFE_ENTRY.UV.y * _dungeon_bounds.y) + MASK_WORLD_OFFSET
     return entry if _can_walk(entry) else Vector2.ZERO
 
 func _resolve_city_collision(target: Vector2) -> Vector2:
