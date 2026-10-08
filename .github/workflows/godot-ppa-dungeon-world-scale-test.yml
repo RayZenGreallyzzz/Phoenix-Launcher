@@ -1,19 +1,19 @@
-name: Test Launcher-Compatible PPA Dungeon Mob Update (no publish)
+name: Build install-over Godot PPA test APK (direct download)
 
 on:
   push:
-    branches: [ "fix/ppa-launcher-compatible-mob-update-20261009" ]
+    branches: [ "test/godot-direct-apk-mobs-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-launcher-compatible-mobs-qa-${{ github.ref }}
+  group: ppa-native-direct-godot-personal-test
   cancel-in-progress: true
 
 jobs:
@@ -117,34 +117,20 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Match exact PPA launcher package, next update version
+      - name: Stamp direct test APK with original Android package and higher version
         shell: bash
         run: |
           set -euo pipefail
-          # This PRIVATE QA uses the official Android ID, not .mobsqa.
-          # A release to the public launcher channel is NOT performed.
-          curl -fsSL --retry 4 --retry-delay 2 \
-            "https://api.github.com/repos/RayZenGreallyzzz/Phoenix-Launcher/releases/tags/ppa-native-stable" \
-            -o /tmp/ppa-stable-release.json
-          VERSION_CODE="$(python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/ppa-stable-release.json'))
-          info=json.loads(j["body"])
-          assert info["gameId"]=="phoenix-pix-arena"
-          assert info["packageName"]=="com.phoenixgames.ppa"
-          assert info["versionCode"]>=100081
-          print(info["versionCode"]+1)
-          PY
-          )"
-          VERSION_NAME="0.1.${VERSION_CODE}-mobs-qa"
-          test "${VERSION_CODE}" -gt 100081
+          VERSION_CODE=$((500000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.2.${GITHUB_RUN_NUMBER}-godot-mobs-test"
+          test "$VERSION_CODE" -gt 410000
           grep -q '^package/unique_name="com.phoenixgames.ppa"$' games/ppa-native/export_presets.cfg
           grep -q '^package/name="Phoenix Pix Arena"$' games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
           echo "PPA_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
-          echo "PPA_LAUNCHER_PACKAGE_OK package=com.phoenixgames.ppa version=${VERSION_CODE}"
+          echo "PPA_DIRECT_TEST_PACKAGE_OK package=com.phoenixgames.ppa code=${VERSION_CODE}"
 
       - name: Fetch and verify exact deployed PPA Peace City map
         shell: bash
@@ -413,14 +399,54 @@ jobs:
           if previous != candidate:
               raise SystemExit("PPA_SIGNER_MISMATCH: refusing an incompatible update")
           PY
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -1)"
+          test -x "$ZIPALIGN"
+          "$ZIPALIGN" -c -v 4 build/PhoenixPixArena-native-debug.apk
+          unzip -tqq build/PhoenixPixArena-native-debug.apk
+          "$APKSIGNER" verify --verbose --min-sdk-version 26 build/PhoenixPixArena-native-debug.apk
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -E "^(package:|sdkVersion:|targetSdkVersion:|native-code:)"
+          sha256sum build/PhoenixPixArena-native-debug.apk
+          echo "PPA_ANDROID_PACKAGE_ARCHIVE_VALIDATION_OK"
           echo "PPA_LAUNCHER_UPDATE_COMPAT_OK package=com.phoenixgames.ppa signer_match=1 version=${PPA_VERSION_CODE}"
           echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
 
 
-      - name: Upload signed TEST APK only; never replace launcher release
+      - name: Upload signed test APK as backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Launcher-Compatible-Mobs-QA-UNPUBLISHED
+          name: PhoenixPixArena-Godot-Direct-Test-APK-ZIP
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish direct personal test APK under separate tag, NOT launcher update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG='ppa-godot-direct-test'
+          APP='PhoenixPixArena-Godot-test.apk'
+          cp build/PhoenixPixArena-native-debug.apk "build/$APP"
+          sha256sum "build/$APP" > build/godot-test.sha256
+          SIZE="$(stat -c %s "build/$APP")"
+          DIGEST="$(sha256sum "build/$APP" | cut -d" " -f1)"
+          test "$SIZE" -gt 100000000
+          echo "Build ${PPA_VERSION_NAME} | code ${PPA_VERSION_CODE} | SHA256 $DIGEST | bytes $SIZE" > build/direct-test-notes.txt
+          echo "Separate test APK installed over PPA (com.phoenixgames.ppa); server integration not yet active." >> build/direct-test-notes.txt
+          echo "NOT an update for Phoenix Launcher, and NOT on ppa-native-stable." >> build/direct-test-notes.txt
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PPA Godot Direct Test" --notes-file build/direct-test-notes.txt --latest=false
+          fi
+          gh release upload "$TAG" "build/$APP" build/godot-test.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file build/direct-test-notes.txt --title "PPA Godot ${PPA_VERSION_NAME}" --latest=false
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > build/test-published.json
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          j=json.loads(Path('build/test-published.json').read_text())
+          p=Path('build/PhoenixPixArena-Godot-test.apk')
+          assert j['tag_name']=='ppa-godot-direct-test'
+          assert any(a['name']==p.name and a['size']==p.stat().st_size and a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest() for a in j['assets'])
+          print('PPA_DIRECT_INSTALL_TEST_RELEASE_OK package=com.phoenixgames.ppa bytes='+str(p.stat().st_size))
+          PY
