@@ -7,9 +7,9 @@ const FLOOR := "res://assets/dungeon_layout.webp"
 const MASK := "res://assets/dungeon_walk_mask.png"
 const SAFE_ENTRY = preload("res://scripts/ppa_dungeon_spawn_generated.gd")
 const ENEMY_CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
-# DO NOT silently substitute 2026-09 legacy published PPA mob sprites.
-# User's replacement set is pre-deploy. Until those exact approved assets are
-# selected, preserve authentic spawn data but keep old enemy art OFF.
+# Exactly 22 sprite images come from current live PPA. Its 20 base monster
+# visuals are reused at 21-40 (+20) and 41-60 (+40) WITH THE SAME ANIMATION.
+# Only the level/archetype name differs; stats remain test-only/not simulated.
 var APPROVED_DUNGEON_ENEMY_ART_READY := false
 const APPROVED_DUNGEON_BOSS_ART_READY := false
 const ENEMY_VISUAL = preload("res://scripts/ppa_new_dungeon_mob_visual.gd")
@@ -54,6 +54,7 @@ var _entrance := Vector2.ZERO
 var _enemy_layer: Node2D
 var _enemy_spawns: Array[Vector2] = []
 var _enemy_branch: Array[int] = []
+var _enemy_room_ordinal: Array[int] = []
 var _enemy_active: Dictionary = {}
 var _boss_visual: Node2D
 var _boss_home := Vector2.ZERO
@@ -76,8 +77,8 @@ func _ready() -> void:
         return
     world_pos_px = _entrance
     _load_original_enemy_spawns()
-    # Enabled only when all 22 verified sprites (20 levels + 2 extra slime colors) are packed
-    # into Godot; a missing image yields an intentionally empty dungeon.
+    # Enable all three 20-level tiers with the same verified 22 original PNGs.
+    # A missing file keeps every tier disabled instead of showing old art.
     APPROVED_DUNGEON_ENEMY_ART_READY = ENEMY_VISUAL.artwork_complete()
     print("PPA_NEW_DUNGEON_ART_GATE sprites=", ENEMY_VISUAL.available_count(),
         " enabled=", APPROVED_DUNGEON_ENEMY_ART_READY, " legacy=0")
@@ -210,6 +211,8 @@ func _physics_process(delta: float) -> void:
 func _load_original_enemy_spawns() -> void:
     _enemy_spawns.clear()
     _enemy_branch.clear()
+    _enemy_room_ordinal.clear()
+    var room_counts := {}
     var source = JSON.parse_string(ENEMY_CATALOG.SPAWNS_JSON)
     if not (source is Array) or ENEMY_CATALOG.ROOM_LEVELS.size() != 20:
         push_error("PPA_DUNGEON_MOB_SOURCE_INVALID: published spawn catalog not loaded")
@@ -219,6 +222,7 @@ func _load_original_enemy_spawns() -> void:
             push_error("PPA_DUNGEON_MOB_SOURCE_INVALID: malformed entry")
             _enemy_spawns.clear()
             _enemy_branch.clear()
+            _enemy_room_ordinal.clear()
             return
         var branch := int(row[2])
         if branch < 0 or branch >= ENEMY_CATALOG.ROOM_LEVELS.size():
@@ -228,6 +232,9 @@ func _load_original_enemy_spawns() -> void:
             return
         _enemy_spawns.append(Vector2(float(row[0]), float(row[1])) * ORIGINAL_PPA_SCALE + MASK_WORLD_OFFSET)
         _enemy_branch.append(branch)
+        var ordinal := int(room_counts.get(branch, 0))
+        _enemy_room_ordinal.append(ordinal)
+        room_counts[branch] = ordinal + 1
     _boss_home = Vector2(ENEMY_CATALOG.BOSS_IMG) * ORIGINAL_PPA_SCALE + MASK_WORLD_OFFSET
     _boss_world = _boss_home
     print("PPA_DUNGEON_TEST_ENEMY_CATALOG_OK spawns=", _enemy_spawns.size(),
@@ -248,7 +255,10 @@ func _spawn_preview_enemy(index: int) -> void:
     if not _can_walk(home):
         return
     var visual := ENEMY_VISUAL.new() as Node2D
-    visual.call("setup", index, _mob_preview_level(index), false)
+    var displayed_level := _mob_preview_level(index)
+    visual.call("setup", index, displayed_level, false)
+    visual.set_meta("ppa_dungeon_preview_level", displayed_level)
+    visual.set_meta("ppa_dungeon_preview_archetype", ENEMY_VISUAL.archetype_for(displayed_level, _enemy_room_ordinal[index]))
     visual.position = home
     visual.name = "LocalMobVisual_%d" % index
     _enemy_layer.add_child(visual)
@@ -256,13 +266,15 @@ func _spawn_preview_enemy(index: int) -> void:
         "node":visual,"home":home,"pos":home,
         "wander_clock":float(index % 10) * 0.21,
         "dir":Vector2(cos(float(index) * 2.17), sin(float(index) * 2.17)),
-        "pulse":0.0
+        "pulse":0.0,
+        "preview_level":displayed_level,
+        "archetype":ENEMY_VISUAL.archetype_for(displayed_level, _enemy_room_ordinal[index])
     }
 
 func _refresh_preview_enemies() -> void:
-    # Absolute safety gate: neither regular mobs nor bosses may render with
-    # the old 20-species roster while the new illustrated roster is pending.
-    if not APPROVED_DUNGEON_ENEMY_ART_READY or _preview_mode != 0:
+    # All 3 tiers share 20 PPA species and their original sprite sheets.
+    # No per-tier placeholder art, and no new texture allocation per mob.
+    if not APPROVED_DUNGEON_ENEMY_ART_READY:
         return
     if _enemy_layer == null or _enemy_spawns.is_empty():
         return
@@ -367,7 +379,7 @@ func _cycle_preview_depth() -> void:
     _boss_world = _boss_home
     if _preview_mode_button != null:
         _preview_mode_button.text = [
-            "НОВЫЕ МОБЫ 1–20", "21–40 · АРТ ОЖИДАЕТСЯ", "41–60 · АРТ ОЖИДАЕТСЯ"
+            "МОБЫ 1–20", "МОБЫ 21–40", "МОБЫ 41–60"
         ][_preview_mode]
     _refresh_preview_enemies()
     print("PPA_DUNGEON_TEST_DEPTH_OK bracket=", _preview_mode,
@@ -538,7 +550,7 @@ func _add_dungeon_hud() -> void:
     # Test-only level branch switch, never changes the server character.
     _preview_mode_button = Button.new()
     _preview_mode_button.name = "DungeonPreviewDepthSelector"
-    _preview_mode_button.text = "НОВЫЕ МОБЫ 1–20"
+    _preview_mode_button.text = "МОБЫ 1–20"
     _preview_mode_button.anchor_left = 1.0
     _preview_mode_button.anchor_right = 1.0
     _preview_mode_button.offset_left = -156.0
