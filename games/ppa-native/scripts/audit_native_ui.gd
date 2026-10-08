@@ -18,6 +18,23 @@ func _run() -> void:
         return
     var test_account := {"accountId":"ppa-native-ui-ci", "ppaNickname":"TestHero", "classKey":"gnome"}
     menu.configure(test_account, "gnome")
+    # Regression: a new local TEST account must have no seeded loot.
+    if not menu.stash.bag.is_empty() or not menu.stash.warehouse.is_empty():
+        push_error("PPA_EMPTY_TEST_BAG: new profile contains prefabricated inventory")
+        quit(1)
+        return
+    # Regression: an APK upgrade must purge only the FOUR known seeded IDs,
+    # including examples previously moved to local storage/equipment.
+    menu.stash.bag.append({"id":"test_hp","name":"Old demo HP","qty":20})
+    menu.stash.warehouse.append({"id":"test_rune","name":"Old demo rune","qty":3})
+    menu.stash.equipment["weapon"] = {"id":"test_gear","name":"Old demo weapon"}
+    menu.stash._save()
+    menu.stash.load_test_data()
+    if not menu.stash.bag.is_empty() or not menu.stash.warehouse.is_empty() or menu.stash.equipment.has("weapon"):
+        push_error("PPA_EMPTY_TEST_BAG: old persisted demo items were not cleared")
+        quit(1)
+        return
+    print("PPA_EMPTY_TEST_BAG_OK seeded=0 migrated_demo=3")
     root.add_child(menu)
     menu.size = Vector2(1280, 720)
     menu.open_page("character")
@@ -145,6 +162,18 @@ func _run() -> void:
         return
     print("PPA_SOURCE_SKILLS_SNAPSHOT_OK confirmed=1 locked=3 reverted=4")
     original_char.open_index(0)
+    await process_frame
+    var cosmetic_row = original_char._page_container.find_child("OriginalPPACosmeticSlots", true, false)
+    if cosmetic_row == null or cosmetic_row.get_child_count() != 4:
+        push_error("PPA_SQUARE_COSMETICS: four character accessory slots are missing")
+        quit(1)
+        return
+    for cosmetic in cosmetic_row.get_children():
+        if cosmetic is not Button or absf(cosmetic.size.x - cosmetic.size.y) > 0.5:
+            push_error("PPA_SQUARE_COSMETICS: cosmetic slot is stretched " + str(cosmetic.size))
+            quit(1)
+            return
+    print("PPA_SQUARE_COSMETICS_OK count=4")
     var bag_grid = original_char._page_container.find_child("OriginalPPABagGrid", true, false)
     if bag_grid == null or bag_grid.get_child_count() != 100:
         push_error("PPA_UI_SMOKE: original 100 inventory slots missing")

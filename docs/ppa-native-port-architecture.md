@@ -1,5 +1,10 @@
 # Phoenix Pix Arena — Native Godot Port Contract
 
+## Native UI selection (2026-10-08)
+The current **Android default** is the native five-page Godot character screen, reusing the same source-based layout as the desktop UI audit. In `games/ppa-native/project.godot`, `ppa/ui/use_original_webview=false`. This lets the user test all five character pages before installing or approving the experimental WebView variant. No native UI mock data may be mistaken for live PPA saves.
+
+The WebView design notes below describe the **optional comparison pilot**, not the enabled Android character UI. A test build can explicitly enable it, in which case it replaces (never overlays) the native character screen. Neither path is allowed to perform unverified game transactions; both need a future authenticated server character snapshot.
+
 ## Goal and scope
 Preserve **Godot 4.6 GL Compatibility** as the sole rendering/gameplay
 engine (scene tree, 3D GLB heroes, animations, movement, collisions and

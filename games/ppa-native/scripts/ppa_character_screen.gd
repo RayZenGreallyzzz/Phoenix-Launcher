@@ -489,10 +489,18 @@ func _draw_inventory() -> void:
         right.add_child(_slot(str(e[1]), str(e[0])))
 
     var cosmetics := HBoxContainer.new()
+    cosmetics.name = "OriginalPPACosmeticSlots"
+    cosmetics.alignment = BoxContainer.ALIGNMENT_CENTER
     cosmetics.add_theme_constant_override("separation", 4)
     _page_container.add_child(cosmetics)
+    # Four truly SQUARE cosmetic slots. Do not let HBox expand the width
+    # without also increasing height, which made them stretched rectangles.
+    var cosmetic_width := _frame.offset_right - _frame.offset_left - 36.0
+    var cosmetic_side := clampf(floorf((cosmetic_width - 12.0) / 4.0), 44.0, 72.0)
     for e in COSMETICS:
-        cosmetics.add_child(_slot(str(e[1]), str(e[0]), 72, 48))
+        var cosmetic_slot := _slot(str(e[1]), str(e[0]), cosmetic_side, cosmetic_side)
+        cosmetic_slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+        cosmetics.add_child(cosmetic_slot)
 
     # Original profession ribbon max-width:260px, centered, not full width.
     var ribbon_holder := CenterContainer.new()

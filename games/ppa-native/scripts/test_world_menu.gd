@@ -21,6 +21,7 @@ var _panel: PanelContainer
 var _character_screen
 var _native_web_ui
 var _web_open := false
+var _use_original_web_ui := false
 var _title: Label
 var _list: VBoxContainer
 var _interact_button: Button
@@ -48,10 +49,11 @@ func _ready() -> void:
         stash = SHARED_STASH.new(account)
     _build_buttons()
     _build_window()
-    # Only the desktop editor can instantiate the old preview character UI.
-    # Android must not allocate TWO complete character menus or duplicate
-    # listeners/containers underneath the original WebView.
-    if OS.get_name() != "Android":
+    # The native five-page PPA character UI is the default on Android and
+    # desktop. The original HTML/WebView experiment remains opt-in, never
+    # layered over a second Godot menu.
+    _use_original_web_ui = OS.get_name() == "Android" and bool(ProjectSettings.get_setting("ppa/ui/use_original_webview", false))
+    if not _use_original_web_ui:
         _character_screen = CANONICAL_CHARACTER.new()
         _character_screen.configure(account, class_key, stash)
         add_child(_character_screen)
@@ -63,9 +65,9 @@ func _ready() -> void:
         _character_screen.visible = false
     _panel.visible = false
     _background.visible = false
-    # Godot remains the 3D world. One Android WebView replaces its hand-built
-    # character UI, using the untouched current Telegram charFrame srcdoc.
-    if OS.get_name() == "Android" and Engine.has_singleton("PPAOriginalWebUI"):
+    # Optional A/B comparison of the untouched Telegram character iframe.
+    # Keep it disabled for normal Android builds; never render both menus.
+    if _use_original_web_ui and Engine.has_singleton("PPAOriginalWebUI"):
         _native_web_ui = Engine.get_singleton("PPAOriginalWebUI")
         _native_web_ui.connect("ppa_ui_event", _on_original_web_ui_event)
 
@@ -275,22 +277,22 @@ func open_page(page: String) -> void:
         if _character_screen != null:
             _character_screen.visible = false
         var source_page := 4 if page == "runes" else (2 if page == "skills" else 0)
-        if _native_web_ui != null:
-            # Only the Android WebView is visible. It renders the exact original
-            # Telegram iframe with browser-native touch scrolling, not a Godot
-            # Button/Control recreation. No auth token or fake inventory injected.
+        if _use_original_web_ui:
+            if _native_web_ui == null:
+                _background.visible = false
+                push_error("PPA_ORIGINAL_WEBVIEW_REQUIRED: opt-in Android plugin missing")
+                OS.alert("Тестовый WebView не загрузился. Отключи ppa/ui/use_original_webview.", "PPA · WebView")
+                return
+            # Optional original PPA HTML; not a second game engine.
             _background.visible = false
             _web_open = true
             _native_web_ui.showCharacter(class_key, source_page)
             return
-        if OS.get_name() == "Android":
-            # Never silently fall back to a hand-painted approximation
-            # when the required original iframe plugin failed to load.
+        if _character_screen == null:
             _background.visible = false
-            push_error("PPA_ORIGINAL_WEBVIEW_REQUIRED: Android plugin missing")
-            OS.alert("Оригинальное меню PPA не загрузилось. Проверь сборку Android WebView.", "PPA · WebView")
+            push_error("PPA_NATIVE_CHARACTER_MISSING: five-page Godot screen unavailable")
             return
-        # Editor-only fallback for headless desktop audit and development.
+        # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
         return

@@ -4,6 +4,9 @@ extends RefCounted
 # Never access PPA /api/save or its player profile, inventory and warehouse.
 # Data lives under the PhoenixPixArena Android private user:// directory.
 const MAX_ITEMS := 64
+# Old example items are no longer shown in the character inventory.
+# This never deletes real server items or unrelated local test items.
+const LEGACY_DEMO_IDS := ["test_hp", "test_mp", "test_rune", "test_gear"]
 const EQUIPMENT_SLOTS := ["weapon", "helmet", "armor", "gloves", "legs", "boots", "ring", "necklace", "wings", "cloak", "pet", "artifact"]
 var account_key: String = ""
 var bag: Array = []
@@ -41,16 +44,35 @@ func load_test_data() -> void:
                         var item = raw_equipment.get(key, {})
                         if typeof(item) == TYPE_DICTIONARY and not str(item.get("id", "")).is_empty():
                             equipment[key] = item
+                # Prior installed APKs already saved demo HP/MP/rune/gear
+                # in user://. Remove these exact example IDs once on load,
+                # including examples moved to local storage/equipment.
+                if _discard_legacy_demo_items():
+                    _save()
                 return
-    # Clearly labelled TEST samples, not real PPA equipment or rewards.
-    bag = [
-        {"id":"test_hp","name":"Учебное зелье HP","qty":20,"kind":"consumable","short":"HP"},
-        {"id":"test_mp","name":"Учебное зелье MP","qty":20,"kind":"consumable","short":"MP"},
-        {"id":"test_rune","name":"Учебная руна","qty":3,"kind":"rune","short":"ᚱ"},
-        {"id":"test_gear","name":"Учебное оружие","qty":1,"kind":"weapon","short":"⚔"}
-    ]
-    warehouse = []
+    # An uninitialized native test character starts with empty slots.
+    # Only an authenticated server snapshot may populate real PPA items.
     _save()
+
+func _discard_legacy_demo_items() -> bool:
+    var old_bag_count := bag.size()
+    var old_warehouse_count := warehouse.size()
+    var cleaned_bag: Array = []
+    var cleaned_warehouse: Array = []
+    for item in bag:
+        if not LEGACY_DEMO_IDS.has(str(item.get("id", ""))):
+            cleaned_bag.append(item)
+    for item in warehouse:
+        if not LEGACY_DEMO_IDS.has(str(item.get("id", ""))):
+            cleaned_warehouse.append(item)
+    bag = cleaned_bag
+    warehouse = cleaned_warehouse
+    var changed := bag.size() != old_bag_count or warehouse.size() != old_warehouse_count
+    for slot in equipment.keys():
+        if LEGACY_DEMO_IDS.has(str(equipment[slot].get("id", ""))):
+            equipment.erase(slot)
+            changed = true
+    return changed
 
 func _filter(items: Array) -> Array:
     var result: Array = []
