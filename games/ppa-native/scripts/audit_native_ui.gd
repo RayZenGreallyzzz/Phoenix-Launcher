@@ -665,7 +665,7 @@ func _run() -> void:
             push_error("PPA_GLOBAL_NAV: missing native global page " + section)
             quit(1)
             return
-        var all_locks := hub.find_children("GlobalServerActionLocked", "Button", true, false)
+        var all_locks: Array[Node] = hub.find_children("GlobalServerActionLocked", "Button", true, false)
         if all_locks.is_empty():
             push_error("PPA_GLOBAL_AUTHORITY: no locked server operations in " + section)
             quit(1)
