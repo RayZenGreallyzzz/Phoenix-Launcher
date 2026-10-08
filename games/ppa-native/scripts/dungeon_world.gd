@@ -8,10 +8,11 @@ const MASK := "res://assets/dungeon_walk_mask.png"
 const SAFE_ENTRY = preload("res://scripts/ppa_dungeon_spawn_generated.gd")
 const MASK_R := 112.0 / 255.0
 const MASK_A := 48.0 / 255.0
-# A 14px circle made the gnome stop too early at corridor boundaries.
-# Keep the nine-direction wall probe, but use a compact ground footprint.
-# This is test-only world physics, not server combat hitboxes or shadows.
-const WALL_RADIUS := 9.0
+# Align the movement point almost flush with the walk-mask wall boundary.
+# Two world pixels of clearance handle the 2048px source mask sampling;
+# the 3D model/shadow are NOT part of dungeon collision detection.
+const WALL_RADIUS := 2.0
+const COLLISION_SUBSTEP := 2.0
 
 # Same logical dungeon units as original PPA build.mjs:
 # DG_ART_W=2048; DG_SCALE=(1852*5.1435)/2048;
@@ -111,8 +112,8 @@ func _build_city_2d() -> void:
     _walk_overlay.visible = false
     city_world.add_child(_walk_overlay)
 
-    # Only visible in mask debug mode: shows the ACTUAL physics center
-    # and 9px radius, not the decorative 3D ellipse/shadow or mesh boots.
+    # Only visible in mask debug mode: shows the ACTUAL movement center
+    # and tiny 2px clearance, not the 3D character mesh/boots.
     # It shares the same parent/transform as art and walk-mask overlay.
     _ground_collision_marker = Node2D.new()
     _ground_collision_marker.name = "DungeonActualGroundCollider"
@@ -202,19 +203,31 @@ func _find_safe_entrance() -> Vector2:
 func _resolve_city_collision(target: Vector2) -> Vector2:
     if _mask_image == null:
         return world_pos_px
-    # Axis-separated collision sliding; no polygon outline, white edging,
-    # arbitrary roof rectangles or placeholder physics blocking entrances.
-    var clamped := Vector2(clampf(target.x, WALL_RADIUS, _dungeon_bounds.x - WALL_RADIUS),
-        clampf(target.y, WALL_RADIUS, _dungeon_bounds.y - WALL_RADIUS))
-    if _can_walk(clamped):
-        return clamped
-    var slide_x := Vector2(clamped.x, world_pos_px.y)
-    var slide_y := Vector2(world_pos_px.x, clamped.y)
-    if _can_walk(slide_x):
-        return slide_x
-    if _can_walk(slide_y):
-        return slide_y
-    return world_pos_px
+    # Reject obviously invalid coordinates without walking thousands of
+    # samples during an unintended teleport or an out-of-map input.
+    if target.x < WALL_RADIUS or target.y < WALL_RADIUS:
+        return world_pos_px
+    if target.x >= _dungeon_bounds.x - WALL_RADIUS or target.y >= _dungeon_bounds.y - WALL_RADIUS:
+        return world_pos_px
+    # The original one-shot endpoint check could stop a whole frame early,
+    # while a large frame delta could jump over a thin wall. Move in 2px
+    # substeps instead, with axis-separated sliding at each wall.
+    var motion := target - world_pos_px
+    var count := maxi(1, ceili(motion.length() / COLLISION_SUBSTEP))
+    var movement_step := motion / float(count)
+    var current := world_pos_px
+    for n in range(count):
+        var destination := current + movement_step
+        if _can_walk(destination):
+            current = destination
+            continue
+        var x_only := Vector2(destination.x, current.y)
+        if _can_walk(x_only):
+            current = x_only
+        var y_only := Vector2(current.x, destination.y)
+        if _can_walk(y_only):
+            current = y_only
+    return current
 
 # NativeWorld listens in _input(), which is dispatched BEFORE GUI buttons.
 # Without this exclusion the smart joystick claims all left-screen touches
