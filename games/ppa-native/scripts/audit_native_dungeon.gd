@@ -4,6 +4,7 @@ extends SceneTree
 # Never simulates server state, drops, mob kills, entry tickets or account saves.
 const DUNGEON = preload("res://scripts/dungeon_world.gd")
 const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
+const ENEMY_ART = preload("res://scripts/ppa_dungeon_art_generated.gd")
 
 func _initialize() -> void:
     call_deferred("_check")
@@ -119,6 +120,27 @@ func _check() -> void:
     if scene.city_world.get_child_count() != 4:
         _fail("dungeon should contain floor, mask, ground marker and local enemy preview layer")
         return
+    # Real PPA art MUST be present, not temporary green polygon drawings.
+    if ENEMY_ART.MOB_RESOURCES.size() != 20:
+        _fail("expected exactly twenty original PPA monster images")
+        return
+    for original_path in ENEMY_ART.MOB_RESOURCES:
+        var sprite_path := str(original_path)
+        if not ResourceLoader.exists(sprite_path):
+            _fail("original PPA monster art missing " + sprite_path)
+            return
+        var source_texture := load(sprite_path) as Texture2D
+        if source_texture == null or source_texture.get_width() < 24 or source_texture.get_height() < 24:
+            _fail("original PPA sprite import invalid " + sprite_path)
+            return
+    for boss_name in ["phoenix", "lord", "dragon"]:
+        if not ENEMY_ART.BOSS_RESOURCES.has(boss_name):
+            _fail("original PPA boss art not found: " + boss_name)
+            return
+        if not ResourceLoader.exists(str(ENEMY_ART.BOSS_RESOURCES[boss_name])):
+            _fail("published original PPA boss texture missing: " + boss_name)
+            return
+    print("PPA_DUNGEON_ORIGINAL_ENEMY_ART_OK mobs=20 bosses=3 placeholders=0 mob_nameplates=0")
     var enemies := scene.city_world.find_child("PPAOriginalDungeonEnemyTestLayer", true, false) as Node2D
     if enemies == null or scene._enemy_spawns.size() < 250 or scene._enemy_spawns.size() > 2500:
         _fail("missing authentic published mob spawn list")
