@@ -13,12 +13,13 @@ config/use_custom_user_dir=true
 config/custom_user_dir_name="PhoenixPixArena"
 
 [display]
-window/size/viewport_width=1280
+window/size/viewport_width=720
 window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
-window/handheld/orientation=0
+window/stretch/aspect="expand"
+window/handheld/orientation=6
 
 [physics]
 common/physics_ticks_per_second=60
