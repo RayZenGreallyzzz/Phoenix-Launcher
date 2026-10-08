@@ -39,13 +39,13 @@ SLIME_FILES = [
 EXTRAS = SLIME_FILES[1:]
 
 def verify_png(data: bytes, name: str) -> None:
-    if not data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("Invalid monster PNG: " + name)
     w, h = struct.unpack(">II", data[16:24])
     if (w, h) != (112, 112):
         raise ValueError("Unexpected source sprite size for " + name)
 
-def verify_image(data, filepath: str, filename: str, expected_sha: str,
+def verify_image(data, filename: str, expected_sha: str,
                  pins: dict[str, str], output: list[tuple[str, bytes]]) -> None:
     actual_sha = hashlib.sha256(data).hexdigest()
     if actual_sha != expected_sha:
@@ -96,7 +96,7 @@ def main() -> None:
             if int(row.get("level", 0)) != i + 1 or row.get("filename") != name:
                 raise ValueError("Monster order does not match recovered atlas")
             payload = data.read(f"1-20/{name}")
-            verify_image(payload, f"1-20/{name}", name, row.get("sha256"), pins, output)
+            verify_image(payload, name, row.get("sha256"), pins, output)
         variants = manifest.get("slime_variants")
         if not isinstance(variants, list) or len(variants) != 2:
             raise ValueError("Three-color slime manifest must list red and blue variants")
@@ -104,8 +104,7 @@ def main() -> None:
             row = variants[i]
             if row.get("level") != 4 or row.get("filename") != name:
                 raise ValueError("Slime color/order mismatch in manifest")
-            verify_image(data.read(f"1-20/{name}"), f"1-20/{name}",
-                         name, row.get("sha256"), pins, output)
+            verify_image(data.read(f"1-20/{name}"), name, row.get("sha256"), pins, output)
         DEST.mkdir(parents=True, exist_ok=True)
         for name, payload in output:
             (DEST / name).write_bytes(payload)
