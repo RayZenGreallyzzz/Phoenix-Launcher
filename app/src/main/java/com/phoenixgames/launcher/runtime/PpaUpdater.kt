@@ -122,7 +122,7 @@ object PpaUpdater {
         }
 
         val finalFile = apkFile(context)
-        val tempFile = File(finalFile.parentFile, "ppa-native.part")
+        val tempFile = File(finalFile.parentFile, "ppa-native-download.apk")
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
         finalFile.delete()
         tempFile.delete()
