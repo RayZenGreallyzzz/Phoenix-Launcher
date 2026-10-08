@@ -11,6 +11,7 @@ signal select_item_requested(source_name: String, index: int)
 signal unequip_requested(slot: String)
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
+const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
 
 const CAPTIONS := [
     "1. ИНВЕНТАРЬ",
@@ -523,7 +524,7 @@ func _draw_inventory() -> void:
     bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
-    var count := _text(str(stash.bag.size()) + " предм.", 7, MUTED)
+    var count := _text(str(stash.bag.size()) + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
     count.name = "OriginalPPABagCount"
     count.autowrap_mode = TextServer.AUTOWRAP_OFF
     count.custom_minimum_size.x = 66.0
@@ -542,7 +543,7 @@ func _draw_inventory() -> void:
     var page_width := _frame.offset_right - _frame.offset_left - 36.0
     var cell_side := floorf((page_width - 16.0) / 5.0)
     cell_side = maxf(34.0, cell_side)
-    for i in range(100):
+    for i in range(CAPACITY.INVENTORY):
         var slot := _button("", 8)
         slot.custom_minimum_size = Vector2(cell_side, cell_side)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL

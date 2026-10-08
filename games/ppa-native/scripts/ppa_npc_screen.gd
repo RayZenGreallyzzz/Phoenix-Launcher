@@ -8,6 +8,7 @@ signal close_requested
 signal authoritative_state_requested(service: String)
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
+const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 const GOLD := Color("#F6C66F")
 const TEXT := Color("#E5E4DE")
@@ -23,6 +24,8 @@ var selected_id := ""
 var quantity := 1
 var _auction_category := "all"
 var _quest_tier := "21-30"
+var _storage_pages: Dictionary = {"inventory":0, "personal":0, "clan":0, "premium":0}
+var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
 var _shade: ColorRect
@@ -30,7 +33,7 @@ var _frame: PanelContainer
 var _heading: Label
 var _subheading: Label
 var _portrait: TextureRect
-var _tabs: HBoxContainer
+var _tabs: GridContainer
 var _tab_scroller: ScrollContainer
 var _body: VBoxContainer
 var _scroll: ScrollContainer
@@ -142,9 +145,11 @@ func _create_shell() -> void:
     _tab_scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     _tab_scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     layout.add_child(_tab_scroller)
-    _tabs = HBoxContainer.new()
+    _tabs = GridContainer.new()
     _tabs.name = "NpcOnlyCategoryTabs"
-    _tabs.add_theme_constant_override("separation", 6)
+    _tabs.columns = 3
+    _tabs.add_theme_constant_override("h_separation", 5)
+    _tabs.add_theme_constant_override("v_separation", 5)
     _tab_scroller.add_child(_tabs)
 
     var rule := ColorRect.new()
@@ -189,6 +194,21 @@ func _fit() -> void:
     _frame.offset_right = w / 2.0
     _frame.offset_top = -h / 2.0
     _frame.offset_bottom = h / 2.0
+    _layout_tabs()
+
+
+func _layout_tabs() -> void:
+    if _tabs == null or _tab_scroller == null:
+        return
+    # The nine clan destinations are never hidden behind side swipes.
+    # Three rows in portrait, two in landscape. Other NPCs keep one
+    # horizontally scrollable category strip like the live Telegram UI.
+    var clan_grid := service == "clan"
+    var columns := (5 if size.x > size.y else 3) if clan_grid else maxi(1, _tab_specs().size())
+    _tabs.columns = columns
+    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if clan_grid else ScrollContainer.SCROLL_MODE_AUTO
+    _tab_scroller.custom_minimum_size.y = 123.0 if (clan_grid and columns == 3) else (84.0 if clan_grid else 45.0)
+    _last_clan_layout = clan_grid
 
 func _outside(event: InputEvent) -> void:
     if event is InputEventScreenTouch and event.pressed:
@@ -213,6 +233,7 @@ func open_npc(source: Dictionary) -> void:
     quantity = 1
     _auction_category = "all"
     _quest_tier = "21-30"
+    _storage_pages = {"inventory":0, "personal":0, "clan":0, "premium":0}
     authoritative.clear()
     has_verified_state = false
     visible = true
@@ -303,6 +324,7 @@ func _render() -> void:
         return
     _clear(_tabs)
     _clear(_body)
+    _layout_tabs()
     _heading.text = str(npc.get("name", "NPC"))
     _subheading.text = "МИРНЫЙ ГОРОД · " + _service_name()
     _portrait.texture = null
@@ -313,7 +335,17 @@ func _render() -> void:
         var id := str(entry.get("key", ""))
         var b := _button(str(entry.get("label", "")))
         b.name = "NpcTab_" + id
-        b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
+        if service == "clan":
+            var available := _frame.offset_right - _frame.offset_left - 43.0
+            var slot_width := floorf(available / float(_tabs.columns)) - 5.0
+            b.custom_minimum_size.x = maxf(68.0, slot_width)
+            b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            b.add_theme_font_size_override("font_size", 9 if _tabs.columns == 3 else 10)
+            # Compact only the longest category on narrow portrait screens.
+            if _tabs.columns == 3 and id == "clans":
+                b.text = "КЛАНЫ"
+        else:
+            b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
         b.add_theme_color_override("font_color", GOLD if id == tab else SUB)
         b.add_theme_stylebox_override("normal", _style(Color("#44301D") if id == tab else Color("#191B1E"),
             GOLD if id == tab else Color("#66513B"), 6))
@@ -558,44 +590,94 @@ func _show_forge() -> void:
         _locked_action("СОЗДАТЬ")
     _body.add_child(_label("Ни заточка, ни слияние, ни крафт не изменяют реальный аккаунт в этом тесте.", 11, SUB))
 
+
+func _storage_page(scope: String, offset: int) -> void:
+    var limit := STORAGE.pages(scope)
+    if limit <= 0:
+        return
+    _storage_pages[scope] = clampi(int(_storage_pages.get(scope, 0)) + offset, 0, limit - 1)
+    _render()
+
+func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
+    var cap: int = STORAGE.capacity(scope)
+    var count_pages: int = STORAGE.pages(scope)
+    var current: int = clampi(int(_storage_pages.get(scope, 0)), 0, count_pages - 1)
+    var first: int = STORAGE.first_slot(scope, current)
+    var visible_count: int = STORAGE.visible_slots(scope, current)
+    var area := VBoxContainer.new()
+    area.name = "NpcStoragePanel_" + scope
+    area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    area.add_theme_constant_override("separation", 5)
+    parent.add_child(area)
+    var heading := "ИНВЕНТАРЬ" if scope == "inventory" else (
+        "ЛИЧНЫЙ СКЛАД" if scope == "personal" else (
+        "КЛАНОВЫЙ СКЛАД" if scope == "clan" else "ПРЕМИУМ СКЛАД"))
+    area.add_child(_label(heading, 12, GOLD))
+    area.add_child(_label("— / " + str(cap) + " · содержимое с сервера", 10, SUB))
+    var grid := GridContainer.new()
+    grid.name = "NpcStorageGrid_" + scope
+    grid.columns = 4
+    grid.add_theme_constant_override("h_separation", 4)
+    grid.add_theme_constant_override("v_separation", 4)
+    area.add_child(grid)
+    var wide_screen := size.x >= 570.0
+    var side := clampf(((_frame.offset_right - _frame.offset_left) * (0.50 if wide_screen else 1.0) - 36.0) / 4.0 - 5.0, 29.0, 57.0)
+    for i in range(visible_count):
+        var cell := PanelContainer.new()
+        cell.name = "NpcStorageCell_" + scope + "_" + str(first + i)
+        cell.custom_minimum_size = Vector2(side, side)
+        cell.add_theme_stylebox_override("panel", _style(Color("#0E1418"), Color("#594735"), 4))
+        grid.add_child(cell)
+    var pager := HBoxContainer.new()
+    pager.add_theme_constant_override("separation", 5)
+    area.add_child(pager)
+    var prev := _button("‹")
+    prev.name = "NpcStoragePrev_" + scope
+    prev.custom_minimum_size.x = 40
+    prev.disabled = current <= 0
+    prev.pressed.connect(_storage_page.bind(scope, -1))
+    pager.add_child(prev)
+    var page_label := _label(str(first + 1) + "–" + str(first + visible_count) + " / " + str(cap) +
+        "  ·  " + str(current + 1) + "/" + str(count_pages), 10, TEXT)
+    page_label.name = "NpcStoragePage_" + scope
+    page_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    pager.add_child(page_label)
+    var next := _button("›")
+    next.name = "NpcStorageNext_" + scope
+    next.custom_minimum_size.x = 40
+    next.disabled = current >= count_pages - 1
+    next.pressed.connect(_storage_page.bind(scope, 1))
+    pager.add_child(next)
+
+func _storage_pair(scope: String) -> void:
+    # Only 20 cells per panel exist in the node tree at any moment.
+    # Displaying 500 cells at once made the tablet scroll expensive.
+    var narrow := size.x < 570.0
+    var split: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
+    split.name = "NpcStoragePair_" + scope
+    split.add_theme_constant_override("separation", 10)
+    _body.add_child(split)
+    _storage_slot_panel(split, "inventory")
+    _storage_slot_panel(split, scope)
+
 func _show_storage() -> void:
     var captions := {"personal":"ЛИЧНОЕ ХРАНИЛИЩЕ", "clan":"КЛАНОВОЕ ХРАНИЛИЩЕ",
         "premium":"ПРЕМИУМ ХРАНИЛИЩЕ", "sort":"СОРТИРОВКА"}
-    _section(str(captions.get(tab, "ХРАНИЛИЩЕ")), "Инвентарь Telegram и Native будет общим после серверного подключения")
+    _section(str(captions.get(tab, "ХРАНИЛИЩЕ")), "Все ёмкости берутся из единого контракта; предметы получим с сервера")
     if tab == "sort":
-        _message("СОРТИРОВКА ПРЕДМЕТОВ", "Выбор способа упорядочивания не должен менять серверный порядок без подтверждения.")
+        _message("СОРТИРОВКА ПРЕДМЕТОВ", "Сортировка сохранится только после подтверждения игрового сервера.")
         _choice_tiles([
             {"key":"rarity","label":"ПО РЕДКОСТИ"},
             {"key":"type","label":"ПО ТИПУ"},
             {"key":"name","label":"ПО НАЗВАНИЮ"}], selected_id, _select_item)
         _locked_action("СОХРАНИТЬ ПОРЯДОК")
         return
-    var horizontal := HBoxContainer.new()
-    horizontal.add_theme_constant_override("separation", 8)
-    _body.add_child(horizontal)
-    for side in ["ИНВЕНТАРЬ", "СКЛАД"]:
-        var area := VBoxContainer.new()
-        area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        area.add_theme_constant_override("separation", 6)
-        horizontal.add_child(area)
-        area.add_child(_label(side, 13, GOLD))
-        var grid := GridContainer.new()
-        grid.columns = 4
-        grid.name = "NpcWarehouseSlots_" + side
-        grid.add_theme_constant_override("h_separation", 4)
-        grid.add_theme_constant_override("v_separation", 4)
-        area.add_child(grid)
-        var cell_px := clampf((_frame.size.x - 90.0) / 9.0, 25.0, 60.0)
-        for i in range(20):
-            var blank := PanelContainer.new()
-            blank.custom_minimum_size = Vector2(cell_px, cell_px)
-            blank.add_theme_stylebox_override("panel", _style(Color("#10161A"), Color("#514532"), 4))
-            grid.add_child(blank)
+    _storage_pair(tab)
     if tab == "clan":
-        _message("ДОСТУП ПО ПРАВАМ КЛАНА", "Разрешения и вместимость кланового склада проверяются сервером.")
+        _message("КЛАНОВЫЕ ПРАВА", "Переносить вещи смогут только участники с подтверждёнными правами.")
     elif tab == "premium":
-        _message("ПРЕМИУМ СКЛАД", "Премиум-предметы и свободные ячейки придут из настоящего хранилища.")
-    _mini_row("Gold / Gram / PPA", "— · данные сервера")
+        _message("ПРЕМИУМ ДОСТУП", "Содержимое премиум-хранилища читается только с сервера PPA.")
     _locked_action("ПОЛОЖИТЬ")
     _locked_action("ЗАБРАТЬ")
 
@@ -642,11 +724,13 @@ func _show_clan() -> void:
             _message("УЧАСТНИКИ И ЗАЯВКИ", "Роли, онлайн, урон, управление, исключение и приглашения — по полномочиям.")
             _locked_action("УПРАВЛЕНИЕ СОСТАВОМ")
         "storage":
-            _message("ОБЩИЙ КЛАНОВЫЙ СКЛАД", "До 500 ячеек по правилам PPA; содержимое и права загрузятся с сервера.")
-            _slot_grid(_body, 20, "clan")
+            _message("ОБЩИЙ КЛАНОВЫЙ СКЛАД", "500 слотов, отдельные страницы и права; инвентарь 100 слотов.")
+            _storage_pair("clan")
             _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
         "exchange":
-            _message("КЛАНОВЫЙ ОБМЕН", "Никаких переводов или списаний без подтверждённого серверного запроса.")
+            _message("КЛАНОВЫЙ ОБМЕН", "Раздел доступен напрямую в сетке вкладок. Состав предложений и ограничения проверит сервер.")
+            _mini_row("Мои доступные ресурсы", "— · ожидаем сервер")
+            _mini_row("Клановые предложения", "— · ожидаем сервер")
             _locked_action("ОБМЕНЯТЬ")
         "bosses":
             _message("КЛАН-БОССЫ", "Возрождение, HP, личный вклад, сундук, распределение и ролл наград — серверные.")

@@ -3,7 +3,9 @@ extends RefCounted
 # All eight temporary preview classes use one PRIVATE LOCAL TEST STASH.
 # Never access PPA /api/save or its player profile, inventory and warehouse.
 # Data lives under the PhoenixPixArena Android private user:// directory.
-const MAX_ITEMS := 64
+const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
+const MAX_BAG := CAPACITY.INVENTORY
+const MAX_WAREHOUSE := CAPACITY.PERSONAL
 # Old example items are no longer shown in the character inventory.
 # This never deletes real server items or unrelated local test items.
 const LEGACY_DEMO_IDS := ["test_hp", "test_mp", "test_rune", "test_gear"]
@@ -35,9 +37,9 @@ func load_test_data() -> void:
             var loaded = JSON.parse_string(f.get_as_text())
             if typeof(loaded) == TYPE_DICTIONARY:
                 if typeof(loaded.get("bag")) == TYPE_ARRAY:
-                    bag = _filter(loaded.get("bag", []))
+                    bag = _filter(loaded.get("bag", []), MAX_BAG)
                 if typeof(loaded.get("warehouse")) == TYPE_ARRAY:
-                    warehouse = _filter(loaded.get("warehouse", []))
+                    warehouse = _filter(loaded.get("warehouse", []), MAX_WAREHOUSE)
                 var raw_equipment = loaded.get("equipment", {})
                 if typeof(raw_equipment) == TYPE_DICTIONARY:
                     for key in EQUIPMENT_SLOTS:
@@ -74,10 +76,10 @@ func _discard_legacy_demo_items() -> bool:
             changed = true
     return changed
 
-func _filter(items: Array) -> Array:
+func _filter(items: Array, capacity: int) -> Array:
     var result: Array = []
     for raw in items:
-        if result.size() >= MAX_ITEMS:
+        if result.size() >= capacity:
             break
         if typeof(raw) != TYPE_DICTIONARY:
             continue
@@ -99,7 +101,8 @@ func _filter(items: Array) -> Array:
 func move(source_name: String, index: int) -> bool:
     var from: Array = bag if source_name == "bag" else warehouse
     var into: Array = warehouse if source_name == "bag" else bag
-    if index < 0 or index >= from.size() or into.size() >= MAX_ITEMS:
+    var target_capacity := MAX_WAREHOUSE if source_name == "bag" else MAX_BAG
+    if index < 0 or index >= from.size() or into.size() >= target_capacity:
         return false
     into.append(from[index])
     from.remove_at(index)
@@ -116,7 +119,7 @@ func equip_test_item(index: int) -> String:
     if not EQUIPMENT_SLOTS.has(slot):
         return "Это не экипировка."
     var previous: Dictionary = equipment.get(slot, {})
-    if not previous.is_empty() and bag.size() >= MAX_ITEMS:
+    if not previous.is_empty() and bag.size() >= MAX_BAG:
         return "Освободи слот в сумке."
     bag.remove_at(index)
     if not previous.is_empty():
@@ -130,7 +133,7 @@ func unequip_test_item(slot: String) -> String:
     var item: Dictionary = equipment.get(slot, {})
     if item.is_empty():
         return "Слот пуст."
-    if bag.size() >= MAX_ITEMS:
+    if bag.size() >= MAX_BAG:
         return "Сумка заполнена."
     bag.append(item)
     equipment.erase(slot)
