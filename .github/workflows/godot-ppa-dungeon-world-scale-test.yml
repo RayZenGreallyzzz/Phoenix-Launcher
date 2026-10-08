@@ -1,8 +1,8 @@
-name: Test Godot Dungeon New Rats Spiders Beetles Import Gate
+name: Test Launcher-Compatible PPA Dungeon Mob Update (no publish)
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-new-mob-assets-1-20", "fix/godot-qa-slime-not-bird-20261009" ]
+    branches: [ "fix/ppa-launcher-compatible-mob-update-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-new-dungeon-creatures-test-${{ github.ref }}
+  group: ppa-launcher-compatible-mobs-qa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -117,23 +117,34 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Stamp isolated test APK version
+      - name: Match exact PPA launcher package, next update version
         shell: bash
         run: |
           set -euo pipefail
-          # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((410000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="2.0.${GITHUB_RUN_NUMBER}-live-mobs-qa"
-          # Install side-by-side, never replace installed PPA!
-          sed -i 's|^package/unique_name="com.phoenixgames.ppa"$|package/unique_name="com.phoenixgames.ppa.mobsqa"|' games/ppa-native/export_presets.cfg
-          sed -i 's|^package/name="Phoenix Pix Arena"$|package/name="PPA Dungeon Mobs QA"|' games/ppa-native/export_presets.cfg
-          grep -q '^package/unique_name="com.phoenixgames.ppa.mobsqa"$' games/ppa-native/export_presets.cfg
-          grep -q '^package/name="PPA Dungeon Mobs QA"$' games/ppa-native/export_presets.cfg
+          # This PRIVATE QA uses the official Android ID, not .mobsqa.
+          # A release to the public launcher channel is NOT performed.
+          curl -fsSL --retry 4 --retry-delay 2 \
+            "https://api.github.com/repos/RayZenGreallyzzz/Phoenix-Launcher/releases/tags/ppa-native-stable" \
+            -o /tmp/ppa-stable-release.json
+          VERSION_CODE="$(python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ppa-stable-release.json'))
+          info=json.loads(j["body"])
+          assert info["gameId"]=="phoenix-pix-arena"
+          assert info["packageName"]=="com.phoenixgames.ppa"
+          assert info["versionCode"]>=100081
+          print(info["versionCode"]+1)
+          PY
+          )"
+          VERSION_NAME="0.1.${VERSION_CODE}-mobs-qa"
+          test "${VERSION_CODE}" -gt 100081
+          grep -q '^package/unique_name="com.phoenixgames.ppa"$' games/ppa-native/export_presets.cfg
+          grep -q '^package/name="Phoenix Pix Arena"$' games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
           echo "PPA_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
-          echo "Building PPA APK version ${VERSION_NAME} / code ${VERSION_CODE}"
+          echo "PPA_LAUNCHER_PACKAGE_OK package=com.phoenixgames.ppa version=${VERSION_CODE}"
 
       - name: Fetch and verify exact deployed PPA Peace City map
         shell: bash
@@ -376,16 +387,24 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
           test -x "$AAPT"
           "$AAPT" dump xmltree build/PhoenixPixArena-native-debug.apk AndroidManifest.xml | grep -q "org.godotengine.plugin.v2.PPAOriginalWebUI"
-          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "package: name='com.phoenixgames.ppa.mobsqa'"
-          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "PPA Dungeon Mobs QA"
-          echo "PPA_STANDALONE_TEST_PACKAGE_OK id=com.phoenixgames.ppa.mobsqa"
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "package: name='com.phoenixgames.ppa'"
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "versionCode='${PPA_VERSION_CODE}'"
+          echo "Verifying update signing identity against the existing launcher release."
+          curl -fL --retry 4 --retry-delay 3 --max-time 240 \
+            "https://github.com/RayZenGreallyzzz/Phoenix-Launcher/releases/download/ppa-native-stable/PhoenixPixArena-native.apk" \
+            -o /tmp/ppa-current-live.apk
+          BASELINE_CERT="$("$APKSIGNER" verify --print-certs /tmp/ppa-current-live.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          CANDIDATE_CERT="$("$APKSIGNER" verify --print-certs build/PhoenixPixArena-native-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          test -n "$BASELINE_CERT"
+          test "$BASELINE_CERT" = "$CANDIDATE_CERT" || { echo "::error::PPA_SIGNER_MISMATCH - in-place update forbidden"; exit 1; }
+          echo "PPA_LAUNCHER_UPDATE_COMPAT_OK package=com.phoenixgames.ppa signer_match=1 version=${PPA_VERSION_CODE}"
           echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
 
 
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Live-22-Mobs-SideBySide-QA-TEST
+          name: PhoenixPixArena-Launcher-Compatible-Mobs-QA-UNPUBLISHED
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
