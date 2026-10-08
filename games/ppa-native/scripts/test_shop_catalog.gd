@@ -51,7 +51,8 @@ const SMITH_TABS = [
     {"key":"equipment","label":"СНАРЯЖЕНИЕ"},
     {"key":"legendary","label":"ЛЕГЕНДАРНОЕ"},
     {"key":"accessories","label":"АКСЕССУАРЫ"},
-    {"key":"pets","label":"ПЕТЫ"}
+    {"key":"pets","label":"ПЕТЫ"},
+    {"key":"rune_fusion","label":"СЛИЯНИЕ РУН"}
 ]
 const EQUIPMENT = [
     {"key":"weapon","label":"ОРУЖИЕ"},
