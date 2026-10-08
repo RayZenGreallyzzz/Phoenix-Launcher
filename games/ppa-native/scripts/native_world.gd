@@ -555,6 +555,11 @@ func _probe_nearest_npc() -> void:
             best = distance
     test_menu.set_near_npc(closest)
 
+# Overridden in DungeonWorld because PPA dungeon logical coordinates are
+# larger than its exported 4096px visual texture.
+func _movement_speed_px() -> float:
+    return MOVE_SPEED_PX
+
 func _physics_process(delta: float) -> void:
     # Do not run the local test hero's movement, collision resolver, NPC
     # proximity checks or repeated 3D transforms behind a modal WebView.
@@ -597,7 +602,7 @@ func _physics_process(delta: float) -> void:
 
     if input_vec.length_squared() > 0.0001:
         facing_input = input_vec.normalized()
-        world_pos_px = _resolve_city_collision(world_pos_px + input_vec * MOVE_SPEED_PX * delta)
+        world_pos_px = _resolve_city_collision(world_pos_px + input_vec * _movement_speed_px() * delta)
         _set_animation("run")
     else:
         _set_animation("idle")
