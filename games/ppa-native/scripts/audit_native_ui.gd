@@ -10,7 +10,7 @@ func _initialize() -> void:
     call_deferred("_run")
 
 func _run() -> void:
-    var menu := WORLD_MENU.new() as Control
+    var menu = WORLD_MENU.new()
     if menu == null:
         push_error("PPA_UI_SMOKE: cannot instantiate native menu")
         quit(1)
@@ -39,7 +39,7 @@ func _run() -> void:
 
     menu.open_npc(NPCS.NPCS[5])
     var before_gold := int(menu.stash.coins)
-    var before_size := (menu.stash.bag as Array).size()
+    var before_size: int = (menu.stash.bag as Array).size()
     var product: Dictionary = CATALOG.MERCHANT[0]
     menu._buy_demo_item(product)
     if int(menu.stash.coins) != before_gold - int(product.get("price", 0)):
