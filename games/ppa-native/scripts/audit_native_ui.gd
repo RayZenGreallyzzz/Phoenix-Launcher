@@ -337,6 +337,48 @@ func _run() -> void:
             return
         checked += 1
     print("PPA_NPC_ISOLATION_OK npc_services=", checked, " windows=1 hero_overlap=0 disabled_transactions=1")
+    # The Telegram reference screenshots have more pages than the first
+    # native NPC prototype. Guard every real service menu contract.
+    var expected_tabs := {
+        "clan": 9, "forge": 6, "storage": 4, "auction": 3,
+        "arena": 5, "dungeon": 4, "blackmarket": 9, "merchant": 4, "fartzone": 3
+    }
+    for npc in NPCS.NPCS:
+        menu.open_npc(npc)
+        var npc_ui = menu._npc_screen
+        var kind := str(npc.get("service", ""))
+        var specs: Array = npc_ui._tab_specs()
+        if specs.size() != int(expected_tabs.get(kind, 0)):
+            push_error("PPA_TABS_PARITY: missing Telegram tabs for " + kind + " got " + str(specs.size()))
+            quit(1)
+            return
+        for spec in specs:
+            npc_ui._select_tab(str(spec.get("key", "")))
+            if npc_ui._body.get_child_count() < 1 or npc_ui._heading.text != str(npc.get("name", "")):
+                push_error("PPA_TABS_PARITY: dead tab " + kind + " / " + str(spec.get("key", "")))
+                quit(1)
+                return
+    # Simulate a real portrait canvas resize without claiming a hardware
+    # sensor test. NPC window must stay inside the viewport; clan tab strip
+    # scrolls horizontally instead of covering portrait content.
+    menu.open_npc(NPCS.NPCS[4])
+    var npc_ui = menu._npc_screen
+    npc_ui.size = Vector2(720.0, 1280.0)
+    npc_ui._fit()
+    var frame_width: float = npc_ui._frame.offset_right - npc_ui._frame.offset_left
+    var frame_height: float = npc_ui._frame.offset_bottom - npc_ui._frame.offset_top
+    if frame_width >= 720.0 or frame_height >= 1280.0 or npc_ui._tab_scroller == null:
+        push_error("PPA_PORTRAIT_UI: NPC frame is clipped or tab strip missing: " + str(Vector2(frame_width, frame_height)))
+        quit(1)
+        return
+    if npc_ui._tabs is HFlowContainer or npc_ui._tabs.get_child_count() != 9:
+        push_error("PPA_PORTRAIT_UI: clan categories are not horizontally scrollable")
+        quit(1)
+        return
+    npc_ui.size = Vector2(1280.0, 720.0)
+    npc_ui._fit()
+    print("PPA_TELEGRAM_NPC_PARITY_OK clan=9 forge=6 storage=4 arena=5 portrait=1")
+
 
     # Canonical original PPA merchant has 12 products. These must NEVER
     # spend fabricated coins or mutate local storage via a pretend shop.
