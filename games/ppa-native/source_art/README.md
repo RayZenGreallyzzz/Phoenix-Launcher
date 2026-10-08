@@ -37,16 +37,28 @@ Phoenix is the **separate boss after level 20**. Boss artwork and floors 21–60
 
 The same level-4 monster type cycles through the three colors by stable spawn index. It does **not** change HP, damage, drops, level, or spawn coordinates. Do not use a bird, rename a bird, or fake new colors with other species.
 
-## Import contract (22 approved images)
+## Authoritative source: the LIVE Telegram PPA
 
-The importer `tools/install_new_mobs_from_zip.py` requires:
+The approved runtime is the game itself, not September's Library poster or an older 20-file ZIP.
 
-1. `PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64` containing a ZIP with **22** separate 112×112 PNGs (the 20 level representatives, including green slime at level 4, plus red and blue slime);
-2. `PPA_New_Dungeon_Mobs_1-20_TEST.zip.sha256` containing the SHA-256 of that ZIP;
-3. `approved_mob04_variants_sha256.json`: a JSON object keyed by the three `mob_04_slime_*.png` filenames with **independently approved** SHA-256 values.
+The client HTML with SHA-256 `3323076a3adb46677e8bf56036a93f6935817efd2b019a8c01d52368ce75bfce` supplies exact public image URLs. The isolated Godot CI fetches them with `tools/export_live_runtime_monsters.py` and verifies each content-addressed PNG.
 
-ZIP entries: `1-20/<PNG>` for each image, `manifest.json`, and `preview.jpg`. The manifest `enemies` list contains 20 rows, each with `level`, `filename`, and `sha256`; `slime_variants` contains two extra rows for **red**, then **blue**, both at level 4. A complete correct ZIP manifest does not replace independent human approval of the actual art.
+The exact **22 original runtime images** are:
 
-The older `PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64` had `mob_04_carrion_bird.png` and is **removed from this test branch**. It remains available in Git history if needed for forensic comparison; do not ship it.
+- 18 approved 4×4 animation sheets from `MOB_ANIM_PACKS`: levels 1, 3, and 5–20. Each atlas is 768×640 (192×160 frames); original per-level animation timing is recorded.
+- The separately updated level-2 cave spider atlas `CAVE_SPIDER_ATLAS`: 768×448 (192×112 frames).
+- Three live level-4 `SLIME_SCAVENGER_SPRITES`: green, red, blue, each 165×160. Three appearances combined with mirrored direction and width multipliers (0.88, 0.96, 1.04, 1.12).
 
-When approved art is missing, Godot safely shows the genuine map without monster/boss visuals. This is deliberate until all 22 files are verified. Test-only visuals do not touch Telegram PPA production accounts, combat server, loot, bosses, spawns, collision mask or performance constants.
+The old `DUNGEON_MOB_SPRITES` array is not the current visual source for several mobs and MUST NOT be imported by itself. Nor should `mob_04_carrion_bird.png` ever be used.
+
+### Steps for isolated QA
+
+```bash
+python3 games/ppa-native/tools/export_live_runtime_monsters.py \
+  --expect-source-sha256 3323076a3adb46677e8bf56036a93f6935817efd2b019a8c01d52368ce75bfce \
+  --output games/ppa-native/assets/dungeon_new_mobs
+```
+
+This saves exactly 22 unmodified PNGs plus `manifest.json`; normal native Godot import then uses 4×4 frames and real 1–20 level assignment. If the deployed client changes, the exporter refuses to re-import silently. It never modifies server data, character saves, drops, bosses or the accepted map/mask.
+
+**Status:** Godot integration is isolated on a draft branch until the Android CI smoke test and device visual check pass. No changes to Telegram PPA production.
