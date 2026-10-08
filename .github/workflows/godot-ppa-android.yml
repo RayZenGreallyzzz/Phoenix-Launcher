@@ -186,6 +186,15 @@ jobs:
           set -euo pipefail
           python3 games/ppa-native/tools/fetch_native_test_assets.py
 
+      - name: Fetch actual Telegram PPA grimoire definitions and all 72 illustrated book cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/fetch_ppa_grimoire_catalog.py 2>&1 | tee /tmp/ppa-grimoires.log
+          grep -q "PPA_GRIMOIRE_PARITY_OK classes=8 skills=72 original_cards=72" /tmp/ppa-grimoires.log
+          test -s games/ppa-native/scripts/ppa_grimoire_catalog_generated.gd
+          test "$(find games/ppa-native/assets -maxdepth 1 -name 'ppa_grimoire_*.webp' | wc -l)" -eq 72
+
       - name: Prepare branded PNG engine splash
         shell: bash
         run: |
