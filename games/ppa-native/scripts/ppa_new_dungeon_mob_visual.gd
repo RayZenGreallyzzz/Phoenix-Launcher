@@ -41,6 +41,24 @@ static func available_count() -> int:
 static func artwork_complete() -> bool:
     return available_count() == NEW_MOBS.size()
 
+# The atlas has 20 CREATURE TYPES, not "one unique species per
+# experience level". The separate Phoenix Ashes bestiary establishes tiers.
+static func art_index_for_spawn(level: int, spawn_id: int) -> int:
+    var species: Array[int] = []
+    if level >= 1 and level <= 3:
+        species = [0, 1] # rat, cave spider
+    elif level <= 5:
+        species = [2, 3, 4] # beetle, scavenger, bone rodent
+    elif level <= 10:
+        species = [5, 6, 7, 8, 9]
+    elif level <= 15:
+        species = [10, 11, 12, 13, 14]
+    elif level <= 20:
+        species = [15, 16, 17, 18, 19]
+    else:
+        return -1
+    return species[posmod(spawn_id, species.size())]
+
 func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void:
     if boss:
         # The three newly approved boss art packs are a separate import.
@@ -53,7 +71,11 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
         push_error("PPA_NEW_DUNGEON_LEVEL_ART_PENDING: " + str(level))
         visible = false
         return
-    var resource_path := ART_DIR + NEW_MOBS[level - 1]
+    var kind := art_index_for_spawn(level, _index)
+    if kind < 0:
+        visible = false
+        return
+    var resource_path := ART_DIR + NEW_MOBS[kind]
     if not ResourceLoader.exists(resource_path):
         push_error("PPA_NEW_DUNGEON_MOB_PNG_MISSING: " + resource_path)
         visible = false
