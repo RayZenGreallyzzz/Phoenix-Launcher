@@ -59,8 +59,16 @@ def approved_asset(path: str, local_name: str) -> str:
     valid=(ext=="png" and data.startswith(b"\x89PNG\r\n\x1a\n")) or (
         ext=="webp" and data[:4]==b"RIFF" and data[8:12]==b"WEBP") or (
         ext=="jpg" and data[:3]==b"\xff\xd8\xff")
-    if not valid or len(data) < 300:
+    # Tiny indexed/palette PNGs can compress below 300 bytes. Trust the
+    # verified SHA256 name plus decoded PNG IHDR dimensions, NOT file size.
+    if not valid or len(data) < 50:
         raise ValueError("Invalid original PPA mob art file: " + path)
+    if ext=="png":
+        import struct
+        w,h=struct.unpack(">II",data[16:24])
+        if w < 16 or h < 16 or w > 4096 or h > 4096:
+            raise ValueError("Unexpected published PPA sprite geometry: " + str((path,w,h,len(data))))
+        print("PPA_ORIGINAL_SPRITE_SIZE", local_name, w, h, "bytes",len(data),flush=True)
     dest.write_bytes(data)
     return "res://assets/" + local_name
 
