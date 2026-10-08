@@ -86,9 +86,9 @@ def main():
     # Canonical PPA Dragon60 renderer explicitly uses CLAN_BOSS_ART[4].
     # This is the SAME approved fourth-index clan event dragon image.
     # No phoenix/monster fallback is allowed for the level-60 dragon.
-    clan_art = re.search(r"\\b(?:const|let|var)\\s+CLAN_BOSS_ART\\s*=\\s*(\\[[^;]{40,12000}\\])\\s*;",text,re.DOTALL)
+    clan_art = re.search(r"\b(?:const|let|var)\s+CLAN_BOSS_ART\s*=\s*(\[[^;]{40,12000}\])\s*;",text,re.DOTALL)
     if clan_art:
-        clan_files = re.findall(r"""['"]((?:\\./|/)?assets/[0-9a-f]{16}\\.(?:png|webp|jpg))['"]""",clan_art.group(1))
+        clan_files = re.findall(r"""['"]((?:\./|/)?assets/[0-9a-f]{16}\.(?:png|webp|jpg))['"]""",clan_art.group(1))
         if len(clan_files) >= 5:
             p=clan_files[4]
             bosses["dragon"]=approved_asset(p,"original_dungeon_boss_dragon."+p.rsplit(".",1)[-1])
