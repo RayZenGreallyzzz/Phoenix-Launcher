@@ -363,6 +363,7 @@ func _draw_inventory() -> void:
     bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
     var count := _text(str(stash.bag.size()) + " предм.", 7, MUTED)
+    count.name = "OriginalPPABagCount"
     count.autowrap_mode = TextServer.AUTOWRAP_OFF
     count.custom_minimum_size.x = 66.0
     count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -370,6 +371,7 @@ func _draw_inventory() -> void:
     bag_line.add_child(count)
 
     var grid := GridContainer.new()
+    grid.name = "OriginalPPABagGrid"
     grid.columns = 5
     grid.add_theme_constant_override("h_separation", 4)
     grid.add_theme_constant_override("v_separation", 4)
@@ -462,13 +464,55 @@ func _draw_stats() -> void:
     ))
 
 func _draw_skills(passive: bool) -> void:
+    # From actual PPA charFrame.makeSkillPlaceholder()/renderSkills:
+    # Four active + five passive cards, 58×76 icons and their exact empty texts.
+    # A single explanation line is NOT equivalent to the real menu.
     _section("ПАССИВНЫЕ НАВЫКИ" if passive else "АКТИВНЫЕ НАВЫКИ")
-    var info := _text(
-        "Ожидаем навыки и ранги из оригинального сохранения PPA. "
-        + "Тестовый выбор 3D-класса не изменяет серверные книги.",
-        9, MUTED
-    )
-    _page_container.add_child(info)
+    var count := 5 if passive else 4
+    for index in range(count):
+        var card := PanelContainer.new()
+        card.custom_minimum_size.y = 82
+        card.add_theme_stylebox_override("panel", _style_box(Color("#17191B"), Color("#685235"), 7))
+        _page_container.add_child(card)
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation", 8)
+        card.add_child(row)
+
+        var icon := PanelContainer.new()
+        icon.custom_minimum_size = Vector2(58, 76)
+        icon.add_theme_stylebox_override("panel", _style_box(Color("#121416"), Color("#715936"), 6))
+        row.add_child(icon)
+        var lock := _text("🔒", 17, Color("#918476"))
+        lock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        lock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        icon.add_child(lock)
+
+        var content := VBoxContainer.new()
+        content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        content.add_theme_constant_override("separation", 4)
+        row.add_child(content)
+        content.add_child(_text("ПАССИВНЫЙ НАВЫК" if passive else "АКТИВНЫЙ НАВЫК", 9, Color("#8D8377")))
+        content.add_child(_text("Ожидание данных выбранного класса", 8, Color("#686D72")))
+        var meta := HBoxContainer.new()
+        meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        content.add_child(meta)
+        var pips := HBoxContainer.new()
+        pips.add_theme_constant_override("separation", 3)
+        meta.add_child(pips)
+        for rank in range(5):
+            var pip := PanelContainer.new()
+            pip.custom_minimum_size = Vector2(9, 9)
+            pip.add_theme_stylebox_override("panel", _style_box(Color("#151515"), Color("#655135"), 0))
+            pips.add_child(pip)
+        var flex := Control.new()
+        flex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        meta.add_child(flex)
+        meta.add_child(_text("закрыто", 7, Color("#777777")))
+        var upgrade := _button("НУЖЕН ГРИМУАР", 8)
+        upgrade.disabled = true
+        upgrade.custom_minimum_size.y = 24
+        upgrade.add_theme_stylebox_override("disabled", _style_box(Color("#111315"), Color("#3C4145"), 4))
+        content.add_child(upgrade)
 
 func _draw_runes() -> void:
     _section("РУНЫ")
