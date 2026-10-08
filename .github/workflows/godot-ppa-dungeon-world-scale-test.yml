@@ -393,10 +393,26 @@ jobs:
           curl -fL --retry 4 --retry-delay 3 --max-time 240 \
             "https://github.com/RayZenGreallyzzz/Phoenix-Launcher/releases/download/ppa-native-stable/PhoenixPixArena-native.apk" \
             -o /tmp/ppa-current-live.apk
-          BASELINE_CERT="$("$APKSIGNER" verify --print-certs /tmp/ppa-current-live.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          CANDIDATE_CERT="$("$APKSIGNER" verify --print-certs build/PhoenixPixArena-native-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          test -n "$BASELINE_CERT"
-          test "$BASELINE_CERT" = "$CANDIDATE_CERT" || { echo "::error::PPA_SIGNER_MISMATCH - in-place update forbidden"; exit 1; }
+          "$APKSIGNER" verify --verbose --print-certs /tmp/ppa-current-live.apk > /tmp/ppa-old-signing.txt
+          "$APKSIGNER" verify --verbose --print-certs build/PhoenixPixArena-native-debug.apk > /tmp/ppa-new-signing.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def cert(path):
+              text = Path(path).read_text()
+              found = re.search(r"certificate\s+SHA-256\s+digest\s*:\s*([0-9a-fA-F:]{64,95})", text, flags=re.I)
+              if not found:
+                  raise ValueError("Could not identify APK certificate SHA256 in " + path)
+              result = found.group(1).replace(":", "").lower()
+              if not re.fullmatch(r"[a-f0-9]{64}", result):
+                  raise ValueError("Malformed APK signer fingerprint")
+              return result
+          previous=cert("/tmp/ppa-old-signing.txt")
+          candidate=cert("/tmp/ppa-new-signing.txt")
+          print("PPA_SIGNING_CERT_VERIFIED", "matches" if previous == candidate else "MISMATCH")
+          if previous != candidate:
+              raise SystemExit("PPA_SIGNER_MISMATCH: refusing an incompatible update")
+          PY
           echo "PPA_LAUNCHER_UPDATE_COMPAT_OK package=com.phoenixgames.ppa signer_match=1 version=${PPA_VERSION_CODE}"
           echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
 
