@@ -33,7 +33,6 @@ var _use_original_web_ui := false
 var _title: Label
 var _list: VBoxContainer
 var _interact_button: Button
-var _menu_button: Button
 var _notice: Label
 var _tab_bar: HBoxContainer
 var _merchant_tab := "potions"
@@ -131,19 +130,9 @@ func _button_style(color: Color) -> StyleBoxFlat:
     return style
 
 func _build_buttons() -> void:
-    _menu_button = Button.new()
-    _menu_button.text = "ГЕРОЙ"
-    _menu_button.anchor_left = 1.0
-    _menu_button.anchor_right = 1.0
-    _menu_button.offset_left = -150.0
-    _menu_button.offset_right = -20.0
-    _menu_button.offset_top = 142.0
-    _menu_button.offset_bottom = 185.0
-    _menu_button.z_index = 65
-    _menu_button.add_theme_stylebox_override("normal", _button_style(Color("#35291E")))
-    _menu_button.add_theme_color_override("font_color", Color("#F6E2CC"))
-    _menu_button.pressed.connect(func(): open_page("character"))
-    add_child(_menu_button)
+    # The player model already opens the canonical five-page character UI.
+    # A second top-right "ГЕРОЙ" button duplicated that action and covered
+    # valuable mobile screen space. Keep only global "РАЗДЕЛЫ" navigation.
 
     # Permanent top-level navigation, NOT a child of character or NPC UI.
     var hub_button := Button.new()
