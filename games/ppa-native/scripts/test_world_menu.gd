@@ -18,7 +18,7 @@ var nearby_npc: Dictionary = {}
 var current_page := "character"
 var _background: ColorRect
 var _panel: PanelContainer
-var _character_screen: Control
+var _character_screen
 var _title: Label
 var _list: VBoxContainer
 var _interact_button: Button
