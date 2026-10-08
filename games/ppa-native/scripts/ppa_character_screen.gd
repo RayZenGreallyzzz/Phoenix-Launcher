@@ -56,6 +56,30 @@ var _book_container: VBoxContainer
 var _book_scroll: ScrollContainer
 var _gesture_scroll: ScrollContainer
 var _original_skill_card_count := 0
+# Mirrors the original iframe's renderSkills(sk): the absence of verified
+# server skill data yields locked placeholders, never a fabricated learned
+# skill selected from the global grimoire illustration catalog.
+var _server_skills_received := false
+var _server_skills: Dictionary = {}
+
+func apply_authoritative_skill_snapshot(snapshot: Dictionary) -> void:
+    # Called ONLY by a future authenticated PPA player-state bridge.
+    # Do not invoke this with catalog entries or native test stash values.
+    if not snapshot.has("active") or not snapshot.has("passive"):
+        return
+    if not (snapshot["active"] is Array and snapshot["passive"] is Array):
+        return
+    _server_skills = snapshot.duplicate(true)
+    _server_skills_received = true
+    if is_node_ready() and visible and (_page == 2 or _page == 3):
+        _draw_page()
+
+func clear_authoritative_skill_snapshot() -> void:
+    _server_skills_received = false
+    _server_skills.clear()
+    if is_node_ready() and visible and (_page == 2 or _page == 3):
+        _draw_page()
+
 
 func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> void:
     account = profile.duplicate(true)
@@ -602,88 +626,183 @@ func _draw_stats() -> void:
 # and GRIMOIRE_ART extracted from the live PPA on every build.
 # The selected hero class is only a visual native test, not a real server
 # class change. Never invent book counts, ranks, or upgrades.
+# The original PPA uses renderSkills(server_skills), not GRIMOIRE_CATALOG
+# for the player's acquired skills. If the authentic save is unavailable,
+# show the exact 4+5 empty cards: lock icon, 5x 9px rank pips, grey 24px
+# "НУЖЕН ГРИМУАР" button. The catalog remains the source for book art
+# only after the server confirms a matching skill ID.
 func _draw_skills(passive: bool) -> void:
     _section("ПАССИВНЫЕ НАВЫКИ" if passive else "АКТИВНЫЕ НАВЫКИ")
-    var definition: Dictionary = ORIGINAL_GRIMOIRES.class_info(class_key)
     var category := "passive" if passive else "active"
-    var items: Array = definition.get(category, [])
-    var target_count := 5 if passive else 4
-    if items.size() != target_count:
-        _page_container.add_child(_text("Каталог гримуаров PPA не загружен.", 10, Color("#F68C75")))
-        return
-    for raw in items:
-        var skill: Dictionary = raw
-        _draw_real_skill_card(skill, passive, str(definition.get("name", class_key)))
+    var slot_count := 5 if passive else 4
+    var verified: Array = _server_skills.get(category, []) if _server_skills_received else []
+    for slot_idx in range(slot_count):
+        var skill: Dictionary = {}
+        if slot_idx < verified.size() and verified[slot_idx] is Dictionary:
+            skill = (verified[slot_idx] as Dictionary).duplicate(true)
+        _draw_source_skill_card(skill, passive)
 
-func _draw_real_skill_card(skill: Dictionary, passive: bool, class_title: String) -> void:
+func _source_skill_label(value: String, y: float, h: float, font_size: int, tint: Color) -> Label:
+    var label := _text(value, font_size, tint)
+    label.anchor_right = 1.0
+    label.offset_top = y
+    label.offset_bottom = y + h
+    label.offset_left = 0.0
+    label.offset_right = 0.0
+    label.clip_text = true
+    label.autowrap_mode = TextServer.AUTOWRAP_OFF
+    label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    return label
+
+func _source_skill_pip(parent: Control, rank_index: int, current_rank: int) -> void:
+    # The PPA .rankPips span is exactly 9x9. A VBox/HBox child with
+    # SIZE_FILL was stretching to 250px in Native 0.1.69; explicit
+    # geometry avoids that completely.
+    var pip := PanelContainer.new()
+    pip.name = "OriginalPPARankPip"
+    pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    pip.position = Vector2(rank_index * 12.0, 0.0)
+    pip.size = Vector2(9.0, 9.0)
+    pip.custom_minimum_size = Vector2(9.0, 9.0)
+    pip.add_theme_stylebox_override("panel", _style_box(
+        Color("#F0A933") if rank_index < current_rank else Color("#151515"),
+        Color("#F7CC6B") if rank_index < current_rank else Color("#655135"), 0, 1
+    ))
+    parent.add_child(pip)
+
+func _find_canonical_skill(skill_id: String, passive: bool) -> Dictionary:
+    var category := "passive" if passive else "active"
+    var definition: Dictionary = ORIGINAL_GRIMOIRES.class_info(class_key)
+    for raw in definition.get(category, []):
+        if raw is Dictionary and str(raw.get("id", "")) == skill_id:
+            return raw
+    return {}
+
+func _draw_source_skill_card(skill: Dictionary, passive: bool) -> void:
+    var has_skill := not skill.is_empty() and not str(skill.get("id", "")).is_empty()
+    var skill_def: Dictionary = _find_canonical_skill(str(skill.get("id", "")), passive) if has_skill else {}
+    # Never show a generic catalog item as acquired. The ID must be
+    # present in authenticated server data AND in the canonical class.
+    has_skill = has_skill and not skill_def.is_empty()
+    var rank := clampi(int(skill.get("rank", 0)), 0, 5) if has_skill else 0
     var card := PanelContainer.new()
-    card.name = "OriginalPPARealSkillCard"
-    card.custom_minimum_size.y = 100.0
-    card.add_theme_stylebox_override("panel", _style_box(Color("#17191B"), Color("#685235"), 7))
+    card.name = "OriginalPPARealSkillCard" if has_skill else "OriginalPPASkillPlaceholder"
+    card.custom_minimum_size.y = 90.0
+    card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    var bg := _style_box(Color("#17191B"), Color("#685235"), 7, 1)
+    bg.set_content_margin_all(7.0)
+    card.add_theme_stylebox_override("panel", bg)
     _page_container.add_child(card)
+
     var row := HBoxContainer.new()
+    row.name = "OriginalPPASkillRow"
+    row.custom_minimum_size.y = 76.0
+    row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     row.add_theme_constant_override("separation", 8)
     card.add_child(row)
 
-    var art_button := _button("", 8)
-    art_button.name = "OriginalPPARealGrimoireArt"
-    art_button.custom_minimum_size = Vector2(58, 76)
-    art_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-    art_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-    art_button.clip_contents = true
-    art_button.add_theme_stylebox_override("normal", _style_box(Color("#090B0D"), Color("#715936"), 6))
-    art_button.pressed.connect(_open_grimoire_popup.bind(skill, passive, class_title))
-    row.add_child(art_button)
-    var art := _book_picture(str(skill.get("cardArt", "")), Vector2(58, 76))
-    art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    art.modulate = Color(0.75, 0.72, 0.77, 0.88)
-    art_button.add_child(art)
-    art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    var icon := PanelContainer.new()
+    icon.name = "OriginalPPASkillIcon"
+    icon.custom_minimum_size = Vector2(58.0, 76.0)
+    icon.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+    icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    icon.add_theme_stylebox_override("panel", _style_box(Color("#090B0D"), Color("#715936"), 6, 1))
+    row.add_child(icon)
+    if has_skill:
+        var image := _book_picture(str(skill_def.get("cardArt", "")), Vector2(58.0, 76.0))
+        image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        icon.add_child(image)
+        image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        image.modulate = Color(0.74, 0.73, 0.75, 0.83) if rank == 0 else Color.WHITE
+    else:
+        var padlock := _text("🔒", 26, Color("#918476"))
+        padlock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        padlock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        icon.add_child(padlock)
 
-    var info := VBoxContainer.new()
-    info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    info.add_theme_constant_override("separation", 4)
-    row.add_child(info)
-    var title := _text(str(skill.get("n", "")), 9, Color("#E4B650"))
-    title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    info.add_child(title)
-    var descrip := _text(
-        ("Пассивный навык" if passive else "Активный навык")
-        + " · Ранг: — · " + str((skill.get("preview", []) as Array)[0])
-        + " · книги I×— II×— III×—",
-        8, Color("#9CA1A5")
-    )
-    info.add_child(descrip)
-    var meta := HBoxContainer.new()
-    meta.add_theme_constant_override("separation", 5)
-    info.add_child(meta)
-    var pips := HBoxContainer.new()
-    pips.add_theme_constant_override("separation", 3)
-    meta.add_child(pips)
-    for rank in range(5):
-        var pip := PanelContainer.new()
-        pip.custom_minimum_size = Vector2(9, 9)
-        pip.add_theme_stylebox_override("panel", _style_box(Color("#151515"), Color("#655135"), 0))
-        pips.add_child(pip)
-    var spacer := Control.new()
-    spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    meta.add_child(spacer)
-    meta.add_child(_text("Ранг и книги: данные PPA", 7, Color("#777777")))
+    # The original .skillMain is a 76px-height grid on the right.
+    # Absolute offsets prevent Godot Containers from vertically expanding
+    # rank pips, text and action buttons beyond their source CSS sizes.
+    var main := Control.new()
+    main.name = "OriginalPPASkillMain"
+    main.custom_minimum_size = Vector2(100.0, 76.0)
+    main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    main.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    row.add_child(main)
+    var title_text := "ПАССИВНЫЙ НАВЫК" if passive else "АКТИВНЫЙ НАВЫК"
+    var subtitle := "Ожидание данных выбранного класса"
+    if has_skill:
+        title_text = str(skill.get("n", skill_def.get("n", title_text)))
+        var preview: Array = skill.get("preview", skill_def.get("preview", []))
+        var fallback_desc := str(skill_def.get("d", ""))
+        var description := str(preview[mini(2, maxi(0, rank - 1))]) if not preview.is_empty() else fallback_desc
+        subtitle = ("Пассивный" if passive else "Активный") + " навык"
+        subtitle += (" · ранг " + ["", "I", "II", "III", "IV", "V"][rank]) if rank > 0 else " не изучен"
+        subtitle += " · " + description
+        subtitle += " · книги I×" + str(skill.get("book1", 0)) + " II×" + str(skill.get("book2", 0)) + " III×" + str(skill.get("book3", 0))
+    main.add_child(_source_skill_label(title_text, 0.0, 13.0, 9, Color("#E4B650") if has_skill else Color("#8D8377")))
+    var desc := _source_skill_label(subtitle, 14.0, 14.0, 8, Color("#9CA1A5") if has_skill else Color("#686D72"))
+    main.add_child(desc)
+    var rank_row := Control.new()
+    rank_row.name = "OriginalPPARankPips"
+    rank_row.position = Vector2(0.0, 31.0)
+    rank_row.size = Vector2(57.0, 9.0)
+    rank_row.custom_minimum_size = Vector2(57.0, 9.0)
+    main.add_child(rank_row)
+    for pip_index in range(5):
+        _source_skill_pip(rank_row, pip_index, rank)
 
-    var ranks := HBoxContainer.new()
-    ranks.add_theme_constant_override("separation", 3)
-    info.add_child(ranks)
-    # Same three upgrade choices I/II/III and 30px height as live PPA.
-    # Disabled until we get true authoritative skillRanks/grimoires.
-    for br in ["I", "II", "III"]:
-        var b := _button(br + " ×—\n—%", 8)
-        b.name = "OriginalPPABookRankChoice"
-        b.disabled = true
-        b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        b.custom_minimum_size.y = 30
-        b.add_theme_stylebox_override("disabled", _style_box(Color("#211A13"), Color("#89551C"), 4))
-        b.add_theme_color_override("font_disabled_color", Color("#A68D69"))
-        ranks.add_child(b)
+    var status := _text("закрыто", 7, Color("#777777"))
+    if has_skill:
+        status.text = "MAX" if rank >= 5 else ("до " + ["I","II","III","IV","V"][maxi(0, rank - 1)] + " → " + ["I","II","III","IV","V"][mini(4,rank)] + " · выбери книгу")
+    status.anchor_left = 1.0
+    status.anchor_right = 1.0
+    status.offset_left = -132.0
+    status.offset_right = 0.0
+    status.offset_top = 29.0
+    status.offset_bottom = 42.0
+    status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    status.autowrap_mode = TextServer.AUTOWRAP_OFF
+    status.clip_text = true
+    main.add_child(status)
+    if has_skill:
+        var rank_actions := HBoxContainer.new()
+        rank_actions.name = "OriginalPPASkillRankChoices"
+        rank_actions.anchor_right = 1.0
+        rank_actions.offset_top = 44.0
+        rank_actions.offset_bottom = 76.0
+        rank_actions.add_theme_constant_override("separation", 3)
+        main.add_child(rank_actions)
+        for book_rank in range(1,4):
+            var book_count := int(skill.get("book" + str(book_rank),0))
+            var book := _button(["I","II","III"][book_rank-1] + " ×" + str(book_count) + "\n—%", 8)
+            book.name = "OriginalPPABookRankChoice"
+            book.custom_minimum_size.y = 30.0
+            book.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            # Display only; real upgrades must go through authoritative PPA.
+            book.disabled = true
+            book.add_theme_stylebox_override("disabled", _style_box(Color("#211A13"), Color("#89551C"), 4))
+            book.add_theme_color_override("font_disabled_color", Color("#A68D69"))
+            rank_actions.add_child(book)
+        var click_area := Button.new()
+        click_area.name = "OriginalPPASkillInspect"
+        click_area.flat = true
+        click_area.anchor_right = 1.0
+        click_area.offset_bottom = 42.0
+        click_area.mouse_filter = Control.MOUSE_FILTER_PASS
+        click_area.pressed.connect(_open_grimoire_popup.bind(skill_def, passive, str(ORIGINAL_GRIMOIRES.class_info(class_key).get("name", class_key))))
+        main.add_child(click_area)
+    else:
+        var need_book := _button("НУЖЕН ГРИМУАР", 8)
+        need_book.name = "OriginalPPAEmptySkillUpgrade"
+        need_book.anchor_right = 1.0
+        need_book.offset_top = 44.0
+        need_book.offset_bottom = 68.0
+        need_book.disabled = true
+        need_book.add_theme_color_override("font_disabled_color", Color("#62676B"))
+        need_book.add_theme_stylebox_override("disabled", _style_box(Color("#111315"), Color("#3C4145"), 4))
+        main.add_child(need_book)
     _original_skill_card_count += 1
 
 func _book_picture(path: String, dimensions: Vector2) -> TextureRect:
