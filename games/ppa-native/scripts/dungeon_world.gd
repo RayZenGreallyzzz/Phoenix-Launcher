@@ -5,6 +5,7 @@ extends "res://scripts/native_world.gd"
 # server mobs, quest progression, dungeon rewards and live entry are NOT enabled.
 const FLOOR := "res://assets/dungeon_layout.webp"
 const MASK := "res://assets/dungeon_walk_mask.png"
+const SAFE_ENTRY = preload("res://scripts/ppa_dungeon_spawn_generated.gd")
 const MASK_R := 112.0 / 255.0
 const MASK_A := 48.0 / 255.0
 const WALL_RADIUS := 14.0
@@ -100,22 +101,13 @@ func _can_walk(pos: Vector2) -> bool:
     return true
 
 func _find_safe_entrance() -> Vector2:
-    # TEST entrance, discovered from the ACTUAL published mask rather than a
-    # guessed coordinate. Seek broad walkable ground near the left corridor.
-    var w := _mask_image.get_width()
-    var h := _mask_image.get_height()
-    var origin_y := int(h * 0.5)
-    for x in range(maxi(20, int(w * 0.035)), maxi(24, int(w * 0.38)), 6):
-        for off in range(0, maxi(6, int(h * 0.33)), 6):
-            for direction in [1, -1]:
-                var y := origin_y + off * direction
-                if y < 0 or y >= h:
-                    continue
-                var world := Vector2((float(x) + 0.5) * _dungeon_bounds.x / float(w),
-                    (float(y) + 0.5) * _dungeon_bounds.y / float(h))
-                if _can_walk(world):
-                    return world
-    return Vector2.ZERO
+    # Generated from the exact publicly deployed PPA collision bits at BUILD
+    # time. No per-launch 100k get_pixel scan, avoiding tablet stalls.
+    if _mask_image == null or _mask_image.get_size() != SAFE_ENTRY.MASK_DIMS:
+        return Vector2.ZERO
+    var entry := Vector2(SAFE_ENTRY.UV.x * _dungeon_bounds.x,
+        SAFE_ENTRY.UV.y * _dungeon_bounds.y)
+    return entry if _can_walk(entry) else Vector2.ZERO
 
 func _resolve_city_collision(target: Vector2) -> Vector2:
     if _mask_image == null:
