@@ -103,28 +103,25 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
-      - name: Inspect live PPA world source
+      - name: Fetch and verify exact deployed PPA Peace City map
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p games/ppa-native/assets
           curl -L --fail --retry 4 --retry-delay 2 \
-            -o /tmp/ppa-live-index.html \
-            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/"
-
-          python3 <<'PY'
-          import re
+            -o games/ppa-native/assets/peace_city.png \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/assets/c73ef6814017bda6.png"
+          python3 - <<'PY'
           from pathlib import Path
-          s=Path('/tmp/ppa-live-index.html').read_text('utf-8',errors='replace')
-          print('LIVE_INDEX_BYTES', len(s.encode('utf-8')))
-          for term in ['BG_SAFE','imgSafe','const TOWN','const WORLD','SCENES={','safe:{','МИРНЫЙ ГОРОД','CITY_WORLD_W','mapTileLeft','painted-city']:
-              hits=[m.start() for m in re.finditer(re.escape(term),s)]
-              print('\nTERM',repr(term),'COUNT',len(hits))
-              for p in hits[:4]:
-                  print(s[max(0,p-700):p+2200].replace('\n',' ')[:2900])
-          urls=sorted(set(re.findall(r'(?:\\./|/)?assets/[A-Za-z0-9_.-]+',s)))
-          print('\nASSET_URL_COUNT',len(urls))
-          print('\n'.join(urls[:120]))
-          raise SystemExit('diagnostic stop after live world inspection')
+          import hashlib,struct
+          p=Path('games/ppa-native/assets/peace_city.png')
+          data=p.read_bytes()
+          assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), 'PPA city payload is not a PNG'
+          assert struct.unpack('>II', data[16:24])==(1254,1254), 'Unexpected city artwork dimensions'
+          expected='c73ef6814017bda644fe86e01222eacf54b2aa7e68760ed3f7b17edfbff05105'
+          actual=hashlib.sha256(data).hexdigest()
+          assert actual==expected, 'City art changed; refusing to ship a mismatched town'
+          print('Verified live PPA Peace City',len(data),'bytes', '1254x1254',actual)
           PY
 
       - name: Import native PPA project
@@ -136,15 +133,14 @@ jobs:
             echo "Godot parse/load failure; refusing to publish."
             exit 1
           fi
-          for src in games/ppa-native/assets/city_map_left.webp games/ppa-native/assets/city_map_right.webp games/ppa-native/assets/city_building_*.webp; do
-            meta="$src.import"
-            test -s "$meta"
-            if grep -q 'valid=false' "$meta"; then
-              echo "Invalid Godot texture import: $src"
-              cat "$meta"
-              exit 1
-            fi
-          done
+          MAP_IMPORT="games/ppa-native/assets/peace_city.png.import"
+          test -s "$MAP_IMPORT"
+          if grep -q 'valid=false' "$MAP_IMPORT"; then
+            echo "Imported current PPA Peace City map is invalid."
+            cat "$MAP_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$MAP_IMPORT"
 
       - name: Build native PPA APK
         shell: bash

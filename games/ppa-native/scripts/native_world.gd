@@ -1,117 +1,59 @@
 extends Control
 
-# Native 2.5D port of the CURRENT City of Ashes world.
-# World/map/NPC objects stay 2D. Only the local player is rendered in 3D.
-const CITY_W := 4347.0
-const CITY_H := 3333.0
-const CITY_ENTRY := Vector2(2174.0, 1666.0)
-
-# Exact current compositor projection from the approved City of Ashes build:
-# ZOOM=4.00 and vertical projection = ZOOM*cos(0.75).
-const MAP_SCALE := Vector2(4.0, 2.9267554755)
+# The deployed Phoenix Pix Arena Peace City: exact PPA map, world size, spawn,
+# Plaza polygon and source collision rectangles. 2D world, ONLY player in 3D.
+# Source: live v668 PPA BG_SAFE /assets/c73ef6814017bda6.png (PNG 1254x1254).
+const CITY_ART := 1254.0
+const CITY_W := 2822.0
+const CITY_H := 2822.0
+const SCN_SCALE := CITY_W / CITY_ART
+const CITY_ENTRY := Vector2(1395.0, 1463.0) # round(620,650) * SCN_SCALE
+const MAP_SCALE := Vector2.ONE
 const PLAYER_RADIUS := 13.0
 const MOVE_SPEED_PX := 165.0
-const CITY_LEFT := 290.0
-const CITY_RIGHT := 335.0
-const CITY_TOP := 225.0
-const CITY_BOTTOM := 290.0
-const BUILDING_STRETCH_Y := 1.3660254
 const PX_PER_3D_UNIT := 34.0
 
 const JOYSTICK_SCRIPT = preload("res://scripts/virtual_joystick.gd")
-
-const BUILDING_TEXTURES := [
-    "res://assets/city_building_0.webp",
-    "res://assets/city_building_1.webp",
-    "res://assets/city_building_2.webp",
-    "res://assets/city_building_3.webp",
-    "res://assets/city_building_4.webp",
-    "res://assets/city_building_5.webp",
-    "res://assets/city_building_6.webp",
-    "res://assets/city_building_7.webp",
-    "res://assets/city_building_8.webp"
+const PLAZA_POINTS := [
+    Vector2(191.0, 293.0),
+    Vector2(977.0, 293.0),
+    Vector2(983.0, 331.0),
+    Vector2(983.0, 608.0),
+    Vector2(977.0, 713.0),
+    Vector2(977.0, 923.0),
+    Vector2(959.0, 947.0),
+    Vector2(887.0, 951.0),
+    Vector2(792.0, 951.0),
+    Vector2(742.0, 943.0),
+    Vector2(697.0, 943.0),
+    Vector2(657.0, 941.0),
+    Vector2(612.0, 941.0),
+    Vector2(567.0, 941.0),
+    Vector2(522.0, 943.0),
+    Vector2(472.0, 948.0),
+    Vector2(397.0, 951.0),
+    Vector2(317.0, 951.0),
+    Vector2(268.0, 950.0),
+    Vector2(259.0, 918.0),
+    Vector2(254.0, 879.0),
+    Vector2(243.0, 838.0),
+    Vector2(231.0, 798.0),
+    Vector2(221.0, 748.0),
+    Vector2(210.0, 693.0),
+    Vector2(202.0, 638.0),
+    Vector2(195.0, 583.0),
+    Vector2(191.0, 518.0),
+    Vector2(188.0, 448.0),
+    Vector2(188.0, 378.0),
+    Vector2(189.0, 328.0)
 ]
-
-const BUILDINGS := [
-    {"x":702, "y":414.5, "type":0, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":1006.5, "y":415.5, "type":1, "sprite_w":165.0, "hw":72.0, "hh":72.0},
-    {"x":1311, "y":416, "type":4, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":2219.5, "y":417.5, "type":2, "sprite_w":155.0, "hw":72.0, "hh":72.0},
-    {"x":398.5, "y":715.5, "type":6, "sprite_w":162.0, "hw":72.0, "hh":72.0},
-    {"x":1006, "y":716.5, "type":7, "sprite_w":168.0, "hw":72.0, "hh":72.0},
-    {"x":1611.5, "y":717.5, "type":5, "sprite_w":152.0, "hw":72.0, "hh":72.0},
-    {"x":2219, "y":719, "type":0, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":2523, "y":719.5, "type":3, "sprite_w":160.0, "hw":72.0, "hh":72.0},
-    {"x":398.5, "y":1016.5, "type":4, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":701.5, "y":1017.5, "type":1, "sprite_w":165.0, "hw":72.0, "hh":72.0},
-    {"x":1004.5, "y":1017.5, "type":8, "sprite_w":162.0, "hw":72.0, "hh":72.0},
-    {"x":1308, "y":1018, "type":2, "sprite_w":155.0, "hw":72.0, "hh":72.0},
-    {"x":1914.5, "y":1019.5, "type":5, "sprite_w":152.0, "hw":72.0, "hh":72.0},
-    {"x":700.5, "y":1316.5, "type":0, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":1913.5, "y":1319, "type":7, "sprite_w":168.0, "hw":72.0, "hh":72.0},
-    {"x":2217, "y":1319, "type":4, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":2521.5, "y":1320, "type":6, "sprite_w":162.0, "hw":72.0, "hh":72.0},
-    {"x":398, "y":1616.5, "type":1, "sprite_w":165.0, "hw":72.0, "hh":72.0},
-    {"x":701.5, "y":1617.5, "type":0, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":1004, "y":1617.5, "type":5, "sprite_w":152.0, "hw":72.0, "hh":72.0},
-    {"x":1004.5, "y":1918.5, "type":3, "sprite_w":160.0, "hw":72.0, "hh":72.0},
-    {"x":397, "y":2218.5, "type":2, "sprite_w":155.0, "hw":72.0, "hh":72.0},
-    {"x":701, "y":2219.5, "type":7, "sprite_w":168.0, "hw":72.0, "hh":72.0},
-    {"x":1307, "y":2220, "type":4, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":1003.5, "y":2520.5, "type":8, "sprite_w":162.0, "hw":72.0, "hh":72.0},
-    {"x":2518.5, "y":2524, "type":0, "sprite_w":150.0, "hw":72.0, "hh":72.0},
-    {"x":699.5, "y":2819.5, "type":6, "sprite_w":162.0, "hw":72.0, "hh":72.0},
-    {"x":1002.5, "y":2820.5, "type":1, "sprite_w":165.0, "hw":72.0, "hh":72.0},
-    {"x":1305, "y":2821, "type":5, "sprite_w":152.0, "hw":72.0, "hh":72.0},
-    {"x":2518, "y":2823, "type":2, "sprite_w":155.0, "hw":72.0, "hh":72.0}
-]
-
-const TREE_COLLIDERS := [
-    {"x":3792.5, "y":312.9, "r":6.0},
-    {"x":398.8, "y":426.7, "r":13.0},
-    {"x":2515.7, "y":428.8, "r":15.0},
-    {"x":3475, "y":435, "r":14.0},
-    {"x":1608.3, "y":439.4, "r":14.0},
-    {"x":2819.1, "y":446.2, "r":12.0},
-    {"x":3162.8, "y":615.4, "r":7.0},
-    {"x":3715, "y":625, "r":12.0},
-    {"x":3373.1, "y":720.2, "r":6.0},
-    {"x":1913.8, "y":726.1, "r":14.0},
-    {"x":1309.1, "y":733.7, "r":14.0},
-    {"x":713.5, "y":734.3, "r":13.0},
-    {"x":3676.2, "y":925.5, "r":15.0},
-    {"x":3127.8, "y":996, "r":6.0},
-    {"x":1608.5, "y":1038.3, "r":12.0},
-    {"x":2521.2, "y":1038.4, "r":12.0},
-    {"x":3143, "y":1242.5, "r":6.0},
-    {"x":3417.6, "y":1271.3, "r":9.0},
-    {"x":1008.6, "y":1333.3, "r":12.0},
-    {"x":3203.4, "y":1334.1, "r":7.0},
-    {"x":402.5, "y":1336.3, "r":12.0},
-    {"x":3725.3, "y":1339.6, "r":13.0},
-    {"x":1298.8, "y":1640, "r":13.0},
-    {"x":2205, "y":1925, "r":12.0},
-    {"x":400, "y":1930, "r":12.0},
-    {"x":1303.7, "y":1932.2, "r":12.0},
-    {"x":2825, "y":1935, "r":12.0},
-    {"x":3696.2, "y":2111.6, "r":14.0},
-    {"x":1900, "y":2220, "r":11.0},
-    {"x":996, "y":2238.7, "r":12.0},
-    {"x":3164.5, "y":2240.7, "r":13.0},
-    {"x":2809.2, "y":2517.3, "r":14.0},
-    {"x":400.4, "y":2529.6, "r":12.0},
-    {"x":700, "y":2530, "r":12.0},
-    {"x":1605, "y":2535, "r":13.0},
-    {"x":1910, "y":2535, "r":12.0},
-    {"x":2212.7, "y":2542.5, "r":13.0},
-    {"x":1302.8, "y":2545.7, "r":12.0},
-    {"x":3415.9, "y":2574.2, "r":6.0},
-    {"x":3735.7, "y":2815.6, "r":11.0},
-    {"x":393.4, "y":2835.7, "r":12.0},
-    {"x":1605, "y":2840, "r":12.0},
-    {"x":1905, "y":2842.6, "r":12.0},
-    {"x":2219.9, "y":2849.7, "r":12.0},
-    {"x":839.2, "y":2973.8, "r":10.0}
+# Rectangles are stored in the original 1254px image coordinate system,
+# exactly as in the live web PPA source (the polygon already excludes roofs).
+const BUILDING_RECTS := [
+    Rect2(10.0, 8.0, 222.0, 255.0),
+    Rect2(268.0, 12.0, 238.0, 250.0),
+    Rect2(528.0, 12.0, 228.0, 225.0),
+    Rect2(800.0, 12.0, 224.0, 205.0)
 ]
 
 var profile: Dictionary = {}
@@ -120,7 +62,7 @@ var move_input := Vector2.ZERO
 var facing_input := Vector2(0.0, 1.0)
 
 var city_world: Control
-var building_nodes: Array = []
+var _plaza_poly: PackedVector2Array = PackedVector2Array()
 
 var viewport_3d: SubViewport
 var viewport_3d_rect: TextureRect
@@ -148,6 +90,7 @@ func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     set_process_input(true)
 
+    _plaza_poly = PackedVector2Array(PLAZA_POINTS)
     _build_city_2d()
     _build_3d_overlay()
     _build_hud()
@@ -157,70 +100,27 @@ func _ready() -> void:
 func _build_city_2d() -> void:
     var background := ColorRect.new()
     background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    background.color = Color("#332D27")
+    background.color = Color("#191514")
     background.mouse_filter = Control.MOUSE_FILTER_IGNORE
     background.z_index = -10
     add_child(background)
 
     city_world = Control.new()
-    city_world.name = "CityOfAshes2D"
+    city_world.name = "PPAPeaceCity2D"
     city_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.clip_contents = false
-    city_world.scale = MAP_SCALE
     add_child(city_world)
 
-    _add_map_tile("res://assets/city_map_left.webp", Vector2.ZERO, Vector2(2174.0, CITY_H))
-    _add_map_tile("res://assets/city_map_right.webp", Vector2(2174.0, 0.0), Vector2(2173.0, CITY_H))
-
-    for building_data in BUILDINGS:
-        _add_building(building_data)
-
-func _add_map_tile(path: String, pos: Vector2, tile_size: Vector2) -> void:
-    if not ResourceLoader.exists(path):
-        return
-    var tile := TextureRect.new()
-    tile.texture = load(path)
-    tile.position = pos
-    tile.size = tile_size
-    tile.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-    tile.stretch_mode = TextureRect.STRETCH_SCALE
-    tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    tile.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-    tile.z_index = 0
-    city_world.add_child(tile)
-
-func _add_building(data: Dictionary) -> void:
-    var type_index: int = int(data.get("type", 0))
-    if type_index < 0 or type_index >= BUILDING_TEXTURES.size():
-        return
-
-    var path: String = BUILDING_TEXTURES[type_index]
-    if not ResourceLoader.exists(path):
-        return
-
-    var texture: Texture2D = load(path)
-    if texture == null or texture.get_width() <= 0:
-        return
-
-    var width_px: float = float(data.get("sprite_w", 150.0))
-    var image_ratio: float = float(texture.get_height()) / float(texture.get_width())
-    var height_px: float = width_px * image_ratio * BUILDING_STRETCH_Y
-    var x: float = float(data.get("x", 0.0))
-    var y: float = float(data.get("y", 0.0))
-    var hh: float = float(data.get("hh", 72.0))
-
-    var sprite := TextureRect.new()
-    sprite.texture = texture
-    sprite.size = Vector2(width_px, height_px)
-    sprite.position = Vector2(x - width_px * 0.5, y + hh - height_px)
-    sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-    sprite.stretch_mode = TextureRect.STRETCH_SCALE
-    sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-    sprite.z_index = 1
-    city_world.add_child(sprite)
-
-    building_nodes.append({"data": data, "node": sprite})
+    # One intact original map, no city reassembly or duplicated building sprites.
+    var map_texture := TextureRect.new()
+    map_texture.name = "CurrentPPACityMap"
+    map_texture.texture = load("res://assets/peace_city.png")
+    map_texture.size = Vector2(CITY_W, CITY_H)
+    map_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    map_texture.stretch_mode = TextureRect.STRETCH_SCALE
+    map_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+    map_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    city_world.add_child(map_texture)
 
 func _build_3d_overlay() -> void:
     viewport_3d = SubViewport.new()
@@ -337,7 +237,7 @@ func _build_hud() -> void:
     add_child(name_label)
 
     var class_label := Label.new()
-    class_label.text = "ГОРОД ПЕПЛА · %s" % (class_key if not class_key.is_empty() else "PLAYER3D")
+    class_label.text = "МИРНЫЙ ГОРОД · %s" % (class_key if not class_key.is_empty() else "PLAYER3D")
     class_label.position = Vector2(30.0, 51.0)
     class_label.add_theme_font_size_override("font_size", 12)
     class_label.add_theme_color_override("font_color", Color("#FE6D1C"))
@@ -506,59 +406,61 @@ func _process(delta: float) -> void:
         if fps_label:
             fps_label.text = "%d FPS" % Engine.get_frames_per_second()
         if coords_label:
-            coords_label.text = "CITY X %.0f   Y %.0f" % [world_pos_px.x, world_pos_px.y]
+            coords_label.text = "PPA X %.0f   Y %.0f" % [world_pos_px.x, world_pos_px.y]
+
+func _plaza_circle_walk(point: Vector2) -> bool:
+    # Exact circle probe geometry from the live PPA plazaCircleWalk().
+    var art_point: Vector2 = point / SCN_SCALE
+    var d: float = (PLAYER_RADIUS / SCN_SCALE) * 0.82
+    var diag: float = d * 0.7
+    return Geometry2D.is_point_in_polygon(art_point, _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(d, 0.0), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(-d, 0.0), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(0.0, d), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(0.0, -d), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(diag, diag), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(-diag, diag), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(diag, -diag), _plaza_poly) \
+        and Geometry2D.is_point_in_polygon(art_point + Vector2(-diag, -diag), _plaza_poly)
 
 func _resolve_city_collision(target: Vector2) -> Vector2:
-    var x: float = clampf(target.x, CITY_LEFT + PLAYER_RADIUS, CITY_W - CITY_RIGHT - PLAYER_RADIUS)
-    var y: float = clampf(target.y, CITY_TOP + PLAYER_RADIUS, CITY_H - CITY_BOTTOM - PLAYER_RADIUS)
+    var margin := 40.0 * SCN_SCALE
+    var nx: float = clampf(target.x, margin, CITY_W - margin)
+    var ny: float = clampf(target.y, margin, CITY_H - margin)
+    var resolved := Vector2(nx, ny)
 
-    for building_data in BUILDINGS:
-        var bx: float = float(building_data.get("x", 0.0))
-        var by: float = float(building_data.get("y", 0.0))
-        var hw: float = float(building_data.get("hw", 72.0))
-        var hh: float = float(building_data.get("hh", 72.0))
-        var left: float = bx - hw
-        var right: float = bx + hw
-        var top: float = by - hh
-        var bottom: float = by + hh
+    # Same X/Y sliding order as the live PPA: stay on paved plaza area.
+    if not _plaza_circle_walk(resolved):
+        if _plaza_circle_walk(Vector2(nx, world_pos_px.y)):
+            resolved = Vector2(nx, world_pos_px.y)
+        elif _plaza_circle_walk(Vector2(world_pos_px.x, ny)):
+            resolved = Vector2(world_pos_px.x, ny)
+        else:
+            resolved = world_pos_px
 
-        if x + PLAYER_RADIUS > left and x - PLAYER_RADIUS < right and y + PLAYER_RADIUS > top and y - PLAYER_RADIUS < bottom:
-            var dl: float = (x + PLAYER_RADIUS) - left
-            var dr: float = right - (x - PLAYER_RADIUS)
-            var dt: float = (y + PLAYER_RADIUS) - top
-            var db: float = bottom - (y - PLAYER_RADIUS)
-            var shortest: float = minf(minf(dl, dr), minf(dt, db))
+    # Keep the web game's solid four roof/building rectangles.
+    for rect in BUILDING_RECTS:
+        var left: float = roundf(rect.position.x * SCN_SCALE) - PLAYER_RADIUS
+        var top: float = roundf(rect.position.y * SCN_SCALE) - PLAYER_RADIUS
+        var right: float = roundf((rect.position.x + rect.size.x) * SCN_SCALE) + PLAYER_RADIUS
+        var bottom: float = roundf((rect.position.y + rect.size.y) * SCN_SCALE) + PLAYER_RADIUS
 
-            if is_equal_approx(shortest, dl):
-                x = left - PLAYER_RADIUS
-            elif is_equal_approx(shortest, dr):
-                x = right + PLAYER_RADIUS
-            elif is_equal_approx(shortest, dt):
-                y = top - PLAYER_RADIUS
+        if resolved.x > left and resolved.x < right and resolved.y > top and resolved.y < bottom:
+            var dl: float = resolved.x - left
+            var dr: float = right - resolved.x
+            var dt: float = resolved.y - top
+            var db: float = bottom - resolved.y
+            var nearest: float = minf(minf(dl, dr), minf(dt, db))
+            if is_equal_approx(nearest, dl):
+                resolved.x = left
+            elif is_equal_approx(nearest, dr):
+                resolved.x = right
+            elif is_equal_approx(nearest, dt):
+                resolved.y = top
             else:
-                y = bottom + PLAYER_RADIUS
+                resolved.y = bottom
 
-    for tree_data in TREE_COLLIDERS:
-        var tx: float = float(tree_data.get("x", 0.0))
-        var ty: float = float(tree_data.get("y", 0.0))
-        var tr: float = float(tree_data.get("r", 0.0))
-        var dx: float = x - tx
-        var dy: float = y - ty
-        var rr: float = PLAYER_RADIUS + tr
-        var d2: float = dx * dx + dy * dy
-
-        if d2 < rr * rr:
-            if d2 < 0.0001:
-                y = ty + rr
-            else:
-                var distance: float = sqrt(d2)
-                var push: float = rr - distance
-                x += dx / distance * push
-                y += dy / distance * push
-
-    x = clampf(x, CITY_LEFT + PLAYER_RADIUS, CITY_W - CITY_RIGHT - PLAYER_RADIUS)
-    y = clampf(y, CITY_TOP + PLAYER_RADIUS, CITY_H - CITY_BOTTOM - PLAYER_RADIUS)
-    return Vector2(x, y)
+    return resolved
 
 func _sync_world_visuals() -> void:
     if size.x < 2.0 or size.y < 2.0:
@@ -566,12 +468,14 @@ func _sync_world_visuals() -> void:
 
     if city_world:
         city_world.scale = MAP_SCALE
+        # Match the web camera: clamp to the town edges, rather than exposing
+        # an empty border. The 3D player is placed at the actual 2D screen pos.
+        var offset_x := size.x * 0.5 - world_pos_px.x
+        var offset_y := size.y * 0.5 - world_pos_px.y
         city_world.position = Vector2(
-            size.x * 0.5 - world_pos_px.x * MAP_SCALE.x,
-            size.y * 0.5 - world_pos_px.y * MAP_SCALE.y
+            clampf(offset_x, size.x - CITY_W, 0.0) if CITY_W > size.x else (size.x - CITY_W) * 0.5,
+            clampf(offset_y, size.y - CITY_H, 0.0) if CITY_H > size.y else (size.y - CITY_H) * 0.5
         )
-
-    _update_building_depth()
 
     if viewport_3d:
         var desired_size := _viewport_size_i()
@@ -582,7 +486,9 @@ func _sync_world_visuals() -> void:
         camera_3d.size = size.y / PX_PER_3D_UNIT
 
     if player_3d and camera_3d:
-        var player_screen := size * 0.5
+        var player_screen: Vector2 = size * 0.5
+        if city_world:
+            player_screen = world_pos_px * MAP_SCALE + city_world.position
         var ground := _screen_to_ground(player_screen)
         player_3d.position = ground
 
@@ -593,22 +499,6 @@ func _sync_world_visuals() -> void:
         if ground_dir.length_squared() > 0.0001 and player_visual:
             var target_yaw: float = atan2(ground_dir.x, ground_dir.z)
             player_visual.rotation.y = lerp_angle(player_visual.rotation.y, target_yaw, 0.24)
-
-func _update_building_depth() -> void:
-    for rec in building_nodes:
-        var data: Dictionary = rec.get("data", {})
-        var node: TextureRect = rec.get("node")
-        if node == null:
-            continue
-
-        var bx: float = float(data.get("x", 0.0))
-        var by: float = float(data.get("y", 0.0))
-        var dx: float = absf(world_pos_px.x - bx)
-        var dy: float = world_pos_px.y - by
-        var should_front: bool = dx < 125.0 and dy < 20.0 and dy > -185.0
-
-        node.z_index = 3 if should_front else 1
-        node.modulate.a = 0.66 if should_front and dx < 95.0 and dy > -145.0 else 1.0
 
 func _screen_to_ground(screen_position: Vector2) -> Vector3:
     if camera_3d == null:
