@@ -1,8 +1,8 @@
-name: Test Godot Dungeon Remove Legacy Monster Art
+name: Test Godot Dungeon New Rats Spiders Beetles Import Gate
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-clean-new-art-gate" ]
+    branches: [ "feature/godot-dungeon-new-mob-assets-1-20" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-no-legacy-enemy-test-${{ github.ref }}
+  group: ppa-native-new-dungeon-creatures-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((400000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="1.9.${GITHUB_RUN_NUMBER}-new-art-only"
+          VERSION_CODE=$((410000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="2.0.${GITHUB_RUN_NUMBER}-new-mob-contract"
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -331,6 +331,7 @@ jobs:
           grep -q "PPA_DUNGEON_WALK_TEST_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_ENEMIES_TEST_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_LEGACY_ART_DISABLED_OK" /tmp/ppa-dungeon-test.log
+          grep -q "PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
 
       - name: Build native PPA APK
@@ -361,7 +362,7 @@ jobs:
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-NoLegacyMobs-TEST
+          name: PhoenixPixArena-New-Dungeon-Mobs-Contract-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
