@@ -77,7 +77,7 @@ def main() -> None:
     for lv in range(1, 21):
         filename = FILES[lv-1]
         if lv == 2:
-            sources.append((lv,filename,spider.group(2),192,112,4,4,90))
+            sources.append((lv,filename,spider.group(2),192,112,4,4,0))
         elif lv == 4:
             sources.append((lv,filename,slimes[0],165,160,1,1,0))
         else:
