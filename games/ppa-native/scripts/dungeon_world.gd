@@ -8,7 +8,10 @@ const MASK := "res://assets/dungeon_walk_mask.png"
 const SAFE_ENTRY = preload("res://scripts/ppa_dungeon_spawn_generated.gd")
 const MASK_R := 112.0 / 255.0
 const MASK_A := 48.0 / 255.0
-const WALL_RADIUS := 14.0
+# A 14px circle made the gnome stop too early at corridor boundaries.
+# Keep the nine-direction wall probe, but use a compact ground footprint.
+# This is test-only world physics, not server combat hitboxes or shadows.
+const WALL_RADIUS := 9.0
 
 # Same logical dungeon units as original PPA build.mjs:
 # DG_ART_W=2048; DG_SCALE=(1852*5.1435)/2048;
@@ -20,6 +23,7 @@ const ORIGINAL_PPA_SCALE := (1852.0 * 5.1435) / ORIGINAL_PPA_ART_W
 
 var _render_to_world_scale := 1.0
 var _walk_overlay: TextureRect
+var _ground_collision_marker: Node2D
 var _alignment_button: Button
 
 var _floor_texture: Texture2D
@@ -107,10 +111,43 @@ func _build_city_2d() -> void:
     _walk_overlay.visible = false
     city_world.add_child(_walk_overlay)
 
+    # Only visible in mask debug mode: shows the ACTUAL physics center
+    # and 9px radius, not the decorative 3D ellipse/shadow or mesh boots.
+    # It shares the same parent/transform as art and walk-mask overlay.
+    _ground_collision_marker = Node2D.new()
+    _ground_collision_marker.name = "DungeonActualGroundCollider"
+    _ground_collision_marker.z_index = 8
+    _ground_collision_marker.visible = false
+    city_world.add_child(_ground_collision_marker)
+    var boundary := Line2D.new()
+    boundary.name = "DungeonFootprintRadius"
+    boundary.width = 1.6
+    boundary.default_color = Color("#FFD35B")
+    var ring_points := PackedVector2Array()
+    for step in range(25):
+        var phi := TAU * float(step) / 24.0
+        ring_points.append(Vector2(cos(phi), sin(phi)) * WALL_RADIUS)
+    boundary.points = ring_points
+    _ground_collision_marker.add_child(boundary)
+    for axis in ["horizontal", "vertical"]:
+        var cross := Line2D.new()
+        cross.width = 2.0
+        cross.default_color = Color("#FFDB5D")
+        cross.points = PackedVector2Array([
+            Vector2(-5, 0) if axis == "horizontal" else Vector2(0, -5),
+            Vector2(5, 0) if axis == "horizontal" else Vector2(0, 5)
+        ])
+        _ground_collision_marker.add_child(cross)
+
 func _build_city_npcs() -> void:
     # Dungeon mobs are server-authoritative. Do NOT copy city NPCs or invent
     # spawns, level stats, HP or rewards just to fill the scene.
     pass
+
+func _physics_process(delta: float) -> void:
+    super._physics_process(delta)
+    if _ground_collision_marker != null:
+        _ground_collision_marker.position = world_pos_px
 
 func _map_world_size() -> Vector2:
     return _dungeon_bounds
@@ -248,6 +285,9 @@ func _add_dungeon_hud() -> void:
         if _walk_overlay == null:
             return
         _walk_overlay.visible = not _walk_overlay.visible
+        if _ground_collision_marker != null:
+            _ground_collision_marker.position = world_pos_px
+            _ground_collision_marker.visible = _walk_overlay.visible
         alignment.text = "СКРЫТЬ МАСКУ" if _walk_overlay.visible else "ПОКАЗАТЬ МАСКУ"
         print("PPA_DUNGEON_MASK_TOGGLE_OK visible=", _walk_overlay.visible)
     )
