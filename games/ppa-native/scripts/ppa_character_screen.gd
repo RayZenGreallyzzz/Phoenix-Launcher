@@ -140,37 +140,39 @@ func _create_frame() -> void:
     close.pressed.connect(func(): close_requested.emit())
     header.add_child(close)
 
+    # Original PPA navRow: 31×27 arrows, 11px gaps, 7×7 dots with 7px
+    # separation. The old port drew oversized 17×27 bullet buttons.
     var nav := HBoxContainer.new()
     nav.anchor_left = 0.5
     nav.anchor_right = 0.5
-    nav.offset_left = -103
-    nav.offset_right = 103
+    nav.offset_left = -80
+    nav.offset_right = 80
     nav.offset_top = 30
     nav.offset_bottom = 57
-    nav.add_theme_constant_override("separation", 7)
+    nav.alignment = BoxContainer.ALIGNMENT_CENTER
+    nav.add_theme_constant_override("separation", 11)
     header.add_child(nav)
     var left := _button("‹", 20)
     left.custom_minimum_size = Vector2(31, 27)
+    left.add_theme_stylebox_override("normal", _style_box(Color("#171410"), Color("#815020"), 14))
     left.pressed.connect(func(): open_index(_page - 1))
     nav.add_child(left)
-    var aligner := Control.new()
-    aligner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    nav.add_child(aligner)
+    var dot_row := HBoxContainer.new()
+    dot_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    dot_row.add_theme_constant_override("separation", 7)
+    nav.add_child(dot_row)
     for i in range(5):
-        var dot := _button("●", 8)
-        dot.custom_minimum_size = Vector2(17, 27)
-        dot.flat = true
-        dot.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-        dot.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-        dot.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+        var dot := _button("", 6)
+        dot.custom_minimum_size = Vector2(7, 7)
+        dot.add_theme_stylebox_override("normal", _style_box(Color("#5A5B5C"), Color("#252525"), 4))
+        dot.add_theme_stylebox_override("hover", _style_box(Color("#DFA648"), Color("#A86B26"), 4))
+        dot.add_theme_stylebox_override("pressed", _style_box(Color("#FFB843"), Color("#E9AD3D"), 4))
         dot.pressed.connect(open_index.bind(i))
-        nav.add_child(dot)
+        dot_row.add_child(dot)
         _dots.append(dot)
-    var flex := Control.new()
-    flex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    nav.add_child(flex)
     var right := _button("›", 20)
     right.custom_minimum_size = Vector2(31, 27)
+    right.add_theme_stylebox_override("normal", _style_box(Color("#171410"), Color("#815020"), 14))
     right.pressed.connect(func(): open_index(_page + 1))
     nav.add_child(right)
 
@@ -206,12 +208,15 @@ func _create_frame() -> void:
 func _fit_to_viewport() -> void:
     if _frame == null or size.x < 1 or size.y < 1:
         return
+    # PPA production index: charFrame width:min(46vw,430px) and
+    # height:min(91vh,680px) on landscape; portrait min(88vw,400px)
+    # and min(88vh,760px). Short landscape <=620px goes full viewport.
     var portrait := size.y > size.x
-    var width := minf(size.x * (0.94 if portrait else 0.48), (430.0 if portrait else 520.0))
-    var height := minf(size.y * (0.90 if portrait else 0.90), 760.0)
-    if not portrait and size.y < 500.0:
-        width = minf(size.x * 0.52, 430.0)
-        height = size.y * 0.94
+    var width := minf(size.x * (0.88 if portrait else 0.46), (400.0 if portrait else 430.0))
+    var height := minf(size.y * (0.88 if portrait else 0.91), (760.0 if portrait else 680.0))
+    if not portrait and size.y <= 620.0:
+        width = size.x
+        height = size.y
     width = maxf(255.0, minf(width, size.x - 8.0))
     height = maxf(260.0, minf(height, size.y - 8.0))
     _frame.offset_left = -width * 0.5
@@ -266,7 +271,11 @@ func _draw_page() -> void:
     _clear_page()
     _caption.text = CAPTIONS[_page]
     for i in range(_dots.size()):
-        _dots[i].add_theme_color_override("font_color", Color("#FFB843") if i == _page else Color("#5A5B5C"))
+        var active := i == _page
+        _dots[i].add_theme_stylebox_override("normal", _style_box(
+            Color("#FFB843") if active else Color("#5A5B5C"),
+            Color("#FFCF63") if active else Color("#252525"), 4
+        ))
     match _page:
         0: _draw_inventory()
         1: _draw_stats()
@@ -332,10 +341,14 @@ func _draw_inventory() -> void:
     for e in COSMETICS:
         cosmetics.add_child(_slot(str(e[1]), str(e[0]), 72, 48))
 
+    # Original profession ribbon max-width:260px, centered, not full width.
+    var ribbon_holder := CenterContainer.new()
+    ribbon_holder.custom_minimum_size.y = 30
+    _page_container.add_child(ribbon_holder)
     var profession := PanelContainer.new()
-    profession.custom_minimum_size.y = 30
-    profession.add_theme_stylebox_override("panel", _style_box(Color("#25190F"), Color("#8C5925"), 6))
-    _page_container.add_child(profession)
+    profession.custom_minimum_size = Vector2(260, 30)
+    profession.add_theme_stylebox_override("panel", _style_box(Color("#25190F"), Color("#8C5925"), 5))
+    ribbon_holder.add_child(profession)
     var cls := _text("ПРОФЕССИЯ · " + class_key.to_upper(), 9, Color("#EFBD55"))
     cls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     cls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -343,21 +356,32 @@ func _draw_inventory() -> void:
 
     _section("ИНВЕНТАРЬ")
     var bag_line := HBoxContainer.new()
+    bag_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _page_container.add_child(bag_line)
     var bag_label := _text("СУМКА", 9, Color("#DCAE4C"))
     bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
-    bag_line.add_child(_text(str(stash.bag.size()) + " предм.", 7, MUTED))
+    var count := _text(str(stash.bag.size()) + " предм.", 7, MUTED)
+    count.autowrap_mode = TextServer.AUTOWRAP_OFF
+    count.custom_minimum_size.x = 66.0
+    count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    count.size_flags_horizontal = Control.SIZE_SHRINK_END
+    bag_line.add_child(count)
 
     var grid := GridContainer.new()
     grid.columns = 5
     grid.add_theme_constant_override("h_separation", 4)
     grid.add_theme_constant_override("v_separation", 4)
     _page_container.add_child(grid)
-    # Source charFrame initializes 100 cells, first 50 unlocked.
+    # Production CSS: 5 equal SQUARE columns, gap 4px, not 93×41
+    # rectangles. Effective page interior = iframe width - 36px margins.
+    var page_width := _frame.offset_right - _frame.offset_left - 36.0
+    var cell_side := floorf((page_width - 16.0) / 5.0)
+    cell_side = maxf(34.0, cell_side)
     for i in range(100):
         var slot := _button("", 8)
-        slot.custom_minimum_size = Vector2(34, 41)
+        slot.custom_minimum_size = Vector2(cell_side, cell_side)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var unlocked := i < 50
         var item: Dictionary = stash.bag[i] if i < stash.bag.size() else {}
