@@ -1,0 +1,335 @@
+name: Test Phoenix PPA Native NPC Menus
+
+on:
+  push:
+    branches: [ "feature/godot-native-npc-menus" ]
+    paths:
+      - "games/ppa-native/**"
+      - ".github/workflows/godot-ppa-npc-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publisher at a time: do not let a slow old build replace a new APK.
+concurrency:
+  group: ppa-native-npc-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-ppa-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: "4.6"
+      GODOT_STATUS: "stable"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Phoenix game-ticket backend is deployed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+          R1="$(curl --silent --show-error -X POST "$BASE/api/launcher/game-ticket" -H "content-type: application/json" --data '{"gameId":"phoenix-pix-arena"}')"
+          echo "$R1"
+          echo "$R1" | grep -q "PHOENIX_SESSION_MISSING"
+          R2="$(curl --silent --show-error -X POST "$BASE/api/game/session/exchange" -H "content-type: application/json" --data '{"gameId":"phoenix-pix-arena","ticket":"invalid"}')"
+          echo "$R2"
+          echo "$R2" | grep -q "GAME_TICKET_INVALID"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          # GitHub Ubuntu image already carries signed Android build-tools.
+          # Do not block APK releases on a redundant slow SDK network install.
+          if [ -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            echo "Using preinstalled Android build-tools 35.0.0"
+          else
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -1)"
+            test -x "$SDKMANAGER"
+            timeout 180 "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" "build-tools;35.0.0"
+          fi
+          find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -3
+
+      - name: Cache stable PPA debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/ppa-native-debug.keystore
+          key: ppa-native-debug-keystore-v1
+
+      - name: Ensure stable PPA debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/ppa-native-debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/ppa-native-debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Phoenix Pix Arena Debug,O=Phoenix,C=UA"
+          fi
+
+      - name: Download Godot 4.6 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-${GODOT_STATUS}"
+          curl -L --fail --retry 3 -o /tmp/godot.zip "$BASE/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          chmod +x "/tmp/godot/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64"
+          sudo ln -sf "/tmp/godot/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64" /usr/local/bin/godot
+          curl -L --fail --retry 3 -o /tmp/templates.tpz "$BASE/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_export_templates.tpz"
+          mkdir -p /tmp/godot-templates
+          unzip -q /tmp/templates.tpz -d /tmp/godot-templates
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/"
+          godot --version
+
+      - name: Configure Godot Android export
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_HOME}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/timestamping_authority_url = ""
+          export/android/shutdown_timestamping = true
+          EOF
+          cp "$HOME/.config/godot/editor_settings-4.tres" "$HOME/.config/godot/editor_settings-4.6.tres"
+          sed -i 's|keystore/debug=""|keystore/debug="'"$HOME"'/.android/ppa-native-debug.keystore"|' games/ppa-native/export_presets.cfg
+          sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
+          sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
+
+      - name: Stamp isolated test APK version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Higher than normal beta to allow signed upgrade without uninstall.
+          VERSION_CODE=$((210000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.2.${GITHUB_RUN_NUMBER}-npc-test"
+          sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
+          sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
+          echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "PPA_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "Building PPA APK version ${VERSION_NAME} / code ${VERSION_CODE}"
+
+      - name: Fetch and verify exact deployed PPA Peace City map
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p games/ppa-native/assets
+          curl -L --fail --retry 4 --retry-delay 2 \
+            -o games/ppa-native/assets/peace_city.png \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/assets/c73ef6814017bda6.png"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,struct
+          p=Path('games/ppa-native/assets/peace_city.png')
+          data=p.read_bytes()
+          assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), 'PPA city payload is not a PNG'
+          assert struct.unpack('>II', data[16:24])==(1254,1254), 'Unexpected city artwork dimensions'
+          expected='c73ef6814017bda644fe86e01222eacf54b2aa7e68760ed3f7b17edfbff05105'
+          actual=hashlib.sha256(data).hexdigest()
+          assert actual==expected, 'City art changed; refusing to ship a mismatched town'
+          print('Verified live PPA Peace City',len(data),'bytes', '1254x1254',actual)
+          PY
+
+      - name: Fetch approved live PPA dwarf and validate GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 2 --max-time 100 \
+            --silent --show-error \
+            --output games/ppa-native/assets/Dwarf.glb \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/game/Dwarf.glb?v=20261002u2"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,struct,json
+          b=Path('games/ppa-native/assets/Dwarf.glb').read_bytes()
+          expected='8b31dcbfd66f3c88fc5429da0adc35345d8c1a80412558c5a2567d5124f8ea81'
+          assert hashlib.sha256(b).hexdigest()==expected, 'Unexpected gnome GLB: live model changed'
+          assert b[:4]==b'glTF' and struct.unpack_from('<II',b,4)==(2,len(b)), 'Invalid GLB header'
+          chunk_len,chunk_type=struct.unpack_from('<II',b,12)
+          assert chunk_type==0x4e4f534a, 'Missing glTF JSON'
+          j=json.loads(b[20:20+chunk_len])
+          names={str(a.get('name','')).lower() for a in j.get('animations',[])}
+          assert {'idle','run','attack'}<=names, f'Approved clips missing: {names}'
+          assert len(j.get('skins',[]))>0 and len(j.get('meshes',[]))>=2, 'Approved dwarf rig/weapon missing'
+          print('VERIFIED: approved dwarf mesh, skeleton, cannon, Idle/Run/Attack')
+          PY
+
+      - name: Restore exact approved PPA cannon grip pose in native GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/normalize_native_dwarf.py games/ppa-native/assets/Dwarf.glb
+
+      - name: Download and verify seven other 3D heroes and original city NPC sprites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/fetch_native_test_assets.py
+
+      - name: Fetch actual Telegram PPA grimoire definitions and all 72 illustrated book cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/fetch_ppa_grimoire_catalog.py 2>&1 | tee /tmp/ppa-grimoires.log
+          grep -q "PPA_GRIMOIRE_PARITY_OK classes=8 skills=72 original_cards=72" /tmp/ppa-grimoires.log
+          test -s games/ppa-native/scripts/ppa_grimoire_catalog_generated.gd
+          test "$(find games/ppa-native/assets -maxdepth 1 -name 'ppa_grimoire_*.webp' | wc -l)" -eq 72
+
+      - name: Extract original PPA character iframe without reauthoring HTML or CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/extract_original_ppa_frame.py | tee /tmp/ppa-original-charframe.log
+          grep -q "PPA_ORIGINAL_CHARFRAME_EXTRACT_OK" /tmp/ppa-original-charframe.log
+          test -s games/ppa-native/webview-plugin/src/main/assets/ppa_original/charFrame.html
+
+      - name: Install Gradle 8.13 for Godot Android v2 WebView plugin
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Compile and package PPA original UI Android WebView plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p games/ppa-native/webview-plugin assembleDebug assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/ppa-android-webview-plugin-build.log
+          PLUGINS="games/ppa-native/webview-plugin/build/outputs/aar"
+          DEBUG="$(find "$PLUGINS" -maxdepth 1 -name '*-debug.aar' -type f | head -1)"
+          RELEASE="$(find "$PLUGINS" -maxdepth 1 -name '*-release.aar' -type f | head -1)"
+          test -s "$DEBUG"
+          test -s "$RELEASE"
+          mkdir -p games/ppa-native/addons/PPAOriginalWebUI/bin/debug
+          mkdir -p games/ppa-native/addons/PPAOriginalWebUI/bin/release
+          cp "$DEBUG" games/ppa-native/addons/PPAOriginalWebUI/bin/debug/PPAOriginalWebUI-debug.aar
+          cp "$RELEASE" games/ppa-native/addons/PPAOriginalWebUI/bin/release/PPAOriginalWebUI-release.aar
+          unzip -l "$DEBUG" | grep -q "assets/ppa_original/charFrame.html"
+          echo "PPA_ORIGINAL_WEBVIEW_AAR_OK debug=1 release=1 source_iframe=1"
+
+      - name: Prepare branded PNG engine splash
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Godot's engine boot splash accepts PNG only. Convert the approved
+          # Phoenix Launcher/PPA hero artwork without inventing new branding.
+          python3 -m pip install --disable-pip-version-check --quiet --user Pillow==11.3.0
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          source=Path('games/ppa-native/assets/ppa_hero.jpg')
+          output=Path('games/ppa-native/assets/ppa_boot.png')
+          with Image.open(source) as im:
+              im.convert('RGB').save(output,format='PNG',optimize=True)
+          with Image.open(output) as im:
+              assert im.format=='PNG'
+              assert min(im.size)>=256
+              print('PPA BOOT SPLASH:',im.size,output.stat().st_size)
+          PY
+
+      - name: Import native PPA project
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --editor --import --quit 2>&1 | tee /tmp/godot-import.log
+          if grep -Eq 'SCRIPT ERROR: Parse Error|Failed to load script' /tmp/godot-import.log; then
+            echo "Godot parse/load failure; refusing to publish."
+            exit 1
+          fi
+          MAP_IMPORT="games/ppa-native/assets/peace_city.png.import"
+          test -s "$MAP_IMPORT"
+          if grep -q 'valid=false' "$MAP_IMPORT"; then
+            echo "Imported current PPA Peace City map is invalid."
+            cat "$MAP_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$MAP_IMPORT"
+          MODEL_IMPORT="games/ppa-native/assets/Dwarf.glb.import"
+          test -s "$MODEL_IMPORT"
+          if grep -q 'valid=false' "$MODEL_IMPORT"; then
+            echo "Imported native Dwarf.glb is invalid."
+            cat "$MODEL_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$MODEL_IMPORT"
+          SPLASH_IMPORT="games/ppa-native/assets/ppa_boot.png.import"
+          test -s "$SPLASH_IMPORT"
+          if grep -q 'valid=false' "$SPLASH_IMPORT"; then
+            echo "Approved branded PPA splash could not be imported"
+            cat "$SPLASH_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$SPLASH_IMPORT"
+          godot --headless --path games/ppa-native --script res://scripts/audit_gnome_import.gd 2>&1 | tee /tmp/ppa-dwarf-import-audit.log
+          grep -q "PPA_DWARF_GEOMETRY_OK" /tmp/ppa-dwarf-import-audit.log
+          grep -q "PPA_DWARF_IMPORT_OK" /tmp/ppa-dwarf-import-audit.log
+          for key in tank barbarian paladin archer mage assassin priest; do
+            test -s "games/ppa-native/assets/hero_${key}.glb.import"
+            ! grep -q 'valid=false' "games/ppa-native/assets/hero_${key}.glb.import"
+          done
+          for key in blacksmith storage auction arena clan merchant blackmarket dungeon fartzone_guide; do
+            test -s "games/ppa-native/assets/npc_${key}.png.import"
+            ! grep -q 'valid=false' "games/ppa-native/assets/npc_${key}.png.import"
+          done
+          godot --headless --path games/ppa-native --script res://scripts/audit_heroes_import.gd 2>&1 | tee /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_ALL_TEST_ASSETS_OK" /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_PALADIN_SWORD_IMPORTED" /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_CANONICAL_MERCHANT_ICONS_OK" /tmp/ppa-test-hero-audit.log
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_ui.gd 2>&1 | tee /tmp/ppa-native-ui-smoke.log
+          grep -q "PPA_NATIVE_UI_SMOKE_OK" /tmp/ppa-native-ui-smoke.log
+          if grep -Eq "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-native-ui-smoke.log; then
+            echo "PPA native UI smoke test emitted runtime errors"
+            exit 1
+          fi
+
+      - name: Build native PPA APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          godot --headless --verbose --path games/ppa-native --install-android-build-template --export-debug "Android" "$GITHUB_WORKSPACE/build/PhoenixPixArena-native-debug.apk" 2>&1 | tee build/godot-export.log
+          if grep -E "SCRIPT ERROR: Parse Error|Failed to load script" build/godot-export.log; then
+            echo "Godot script parse error detected; refusing to publish broken APK."
+            exit 1
+          fi
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/PhoenixPixArena-native-debug.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$APKSIGNER" verify --verbose build/PhoenixPixArena-native-debug.apk
+          unzip -l build/PhoenixPixArena-native-debug.apk | grep -q 'assets/ppa_original/charFrame.html'
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          test -x "$AAPT"
+          "$AAPT" dump xmltree build/PhoenixPixArena-native-debug.apk AndroidManifest.xml | grep -q "org.godotengine.plugin.v2.PPAOriginalWebUI"
+          echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
+
+
+      - name: Upload signed TEST APK only; never replace launcher release
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixPixArena-NPC-Menus-TEST
+          path: build/PhoenixPixArena-native-debug.apk
+          if-no-files-found: error
+          retention-days: 30
