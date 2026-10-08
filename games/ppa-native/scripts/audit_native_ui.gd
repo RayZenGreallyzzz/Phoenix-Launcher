@@ -670,8 +670,9 @@ func _run() -> void:
             push_error("PPA_GLOBAL_AUTHORITY: no locked server operations in " + section)
             quit(1)
             return
-        for b in all_locks:
-            if not b.disabled:
+        for locked_node in all_locks:
+            var locked_button := locked_node as Button
+            if locked_button == null or not locked_button.disabled:
                 push_error("PPA_GLOBAL_AUTHORITY: server operation enabled in " + section)
                 quit(1)
                 return
