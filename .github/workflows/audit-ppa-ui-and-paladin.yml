@@ -1,0 +1,61 @@
+name: Audit canonical PPA UI and paladin attachment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/audit-ppa-ui-and-paladin.yml"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download current production PPA index and paladin GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ppa-ui-audit
+          python3 - <<'PY'
+          import json,urllib.request,struct,pathlib,hashlib,re
+          d=pathlib.Path('/tmp/ppa-ui-audit')
+          host='https://ppa-phoenixpixarena.1988stella1988.workers.dev'
+          req=urllib.request.Request(host+'/?ppa_native_audit=20261008',headers={'User-Agent':'PPA-Native-Port-Audit','Accept':'text/html'})
+          with urllib.request.urlopen(req,timeout=100) as res:
+              html=res.read(35_000_000)
+              print('html HTTP',res.status,'size',len(html),'content-type',res.headers.get('content-type'),flush=True)
+          assert b'<html' in html[:2000].lower()
+          (d/'production-index.html').write_bytes(html)
+          req=urllib.request.Request(host+'/game/Paladin_Final.glb?v=20261002u2')
+          with urllib.request.urlopen(req,timeout=100) as res:
+              glb=res.read()
+          assert glb[:4]==b'glTF'
+          length,typ=struct.unpack_from('<II',glb,12)
+          assert typ==0x4E4F534A
+          j=json.loads(glb[20:20+length])
+          nodes=j['nodes']
+          parents={}
+          for i,node in enumerate(nodes):
+              for ch in node.get('children',[]):parents[ch]=i
+          candidates=[]
+          for i,node in enumerate(nodes):
+              name=node.get('name','')
+              if any(k in name.lower() for k in ('hand','sword','blade','dawn','weapon','grip')):
+                  cur=i;path=[]
+                  while cur in parents and len(path)<8:
+                      path.append(nodes[cur].get('name'))
+                      cur=parents[cur]
+                  path.append(nodes[cur].get('name'))
+                  candidates.append({'idx':i,'name':name,'parent':nodes[parents[i]].get('name') if i in parents else None,'path':path,'translation':node.get('translation'),'rotation':node.get('rotation'),'scale':node.get('scale'),'mesh':node.get('mesh'),'skin':node.get('skin')})
+          all_nodes=[{'i':i,'name':node.get('name'),'parent':nodes[parents[i]].get('name') if i in parents else None,'children':node.get('children'),'translation':node.get('translation'),'rotation':node.get('rotation'),'scale':node.get('scale'),'mesh':node.get('mesh'),'skin':node.get('skin')} for i,node in enumerate(nodes)]
+          report={'glb_sha256':hashlib.sha256(glb).hexdigest(),'nodes':all_nodes,'candidates':candidates,'animations':[a.get('name') for a in j.get('animations',[])],'meshes':[m.get('name') for m in j.get('meshes',[])]}
+          (d/'paladin-rig.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          print('PALADIN_RIG_NODES='+json.dumps(candidates,separators=(',',':')),flush=True)
+          print('PPA_PRODUCTION_HTML_OK',len(html),hashlib.sha256(html).hexdigest(),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-ppa-ui-and-paladin-audit
+          path: /tmp/ppa-ui-audit/
+          retention-days: 2
