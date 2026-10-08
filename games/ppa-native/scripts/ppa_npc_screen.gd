@@ -21,6 +21,8 @@ var service := ""
 var tab := ""
 var selected_id := ""
 var quantity := 1
+var _auction_category := "all"
+var _quest_tier := "21-30"
 var authoritative: Dictionary = {}
 var has_verified_state := false
 var _shade: ColorRect
@@ -28,7 +30,8 @@ var _frame: PanelContainer
 var _heading: Label
 var _subheading: Label
 var _portrait: TextureRect
-var _tabs: HFlowContainer
+var _tabs: HBoxContainer
+var _tab_scroller: ScrollContainer
 var _body: VBoxContainer
 var _scroll: ScrollContainer
 var _status: Label
@@ -130,11 +133,19 @@ func _create_shell() -> void:
     close.pressed.connect(func(): close_requested.emit())
     title_row.add_child(close)
 
-    _tabs = HFlowContainer.new()
+    # Telegram PPA uses a horizontally browsable category strip. Prevent
+    # nine clan tabs from filling the entire portrait screen in multiple rows.
+    _tab_scroller = ScrollContainer.new()
+    _tab_scroller.name = "NpcScrollableTabs"
+    _tab_scroller.custom_minimum_size.y = 45
+    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    _tab_scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    _tab_scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    layout.add_child(_tab_scroller)
+    _tabs = HBoxContainer.new()
     _tabs.name = "NpcOnlyCategoryTabs"
-    _tabs.add_theme_constant_override("h_separation", 6)
-    _tabs.add_theme_constant_override("v_separation", 5)
-    layout.add_child(_tabs)
+    _tabs.add_theme_constant_override("separation", 6)
+    _tab_scroller.add_child(_tabs)
 
     var rule := ColorRect.new()
     rule.custom_minimum_size.y = 1
@@ -200,6 +211,8 @@ func open_npc(source: Dictionary) -> void:
     tab = _default_tab(service)
     selected_id = ""
     quantity = 1
+    _auction_category = "all"
+    _quest_tier = "21-30"
     authoritative.clear()
     has_verified_state = false
     visible = true
@@ -228,24 +241,41 @@ func _default_tab(which: String) -> String:
         "merchant": return "potions"
         "forge": return "enhance"
         "auction": return "all"
-        "clan": return "my"
+        "clan": return "overview"
         "arena": return "fights"
         "blackmarket": return "all"
         "dungeon": return "floors"
         "fartzone": return "about"
-        _: return "storage"
+        "storage": return "personal"
+        _: return "personal"
 
 func _tab_specs() -> Array:
     match service:
         "merchant": return SHOP.MERCHANT_TABS
         "forge": return SHOP.SMITH_TABS
-        "blackmarket": return SHOP.BM_CATEGORIES
-        "storage": return [{"key":"storage","label":"ХРАНИЛИЩЕ"}]
-        "auction": return [{"key":"all","label":"ТОРГИ"}, {"key":"mine","label":"МОИ ЛОТЫ"}, {"key":"sell","label":"ПРОДАЖА"}]
-        "clan": return [{"key":"my","label":"МОЙ КЛАН"}, {"key":"list","label":"КЛАНЫ"}, {"key":"rank","label":"РЕЙТИНГ"}, {"key":"boss","label":"КЛАН-БОСС"}]
-        "arena": return [{"key":"fights","label":"БОИ"}, {"key":"rating","label":"РЕЙТИНГ"}, {"key":"rewards","label":"НАГРАДЫ"}]
-        "dungeon": return [{"key":"floors","label":"ЭТАЖИ"}, {"key":"bosses","label":"БОССЫ"}, {"key":"rewards","label":"ДОБЫЧА"}]
-        "fartzone": return [{"key":"about","label":"О ЗОНЕ"}, {"key":"mining","label":"ДОБЫЧА"}, {"key":"guards","label":"СТРАЖИ"}]
+        "blackmarket": return SHOP.BM_CATEGORIES + [{"key":"buyback","label":"СКУПКА"}]
+        "storage": return [
+            {"key":"personal","label":"ЛИЧНОЕ"}, {"key":"clan","label":"КЛАНОВОЕ"},
+            {"key":"premium","label":"ПРЕМИУМ"}, {"key":"sort","label":"СОРТИРОВАТЬ"}]
+        "auction": return [
+            {"key":"all","label":"КУПИТЬ"}, {"key":"sell","label":"ПРОДАТЬ"},
+            {"key":"mine","label":"МОИ ЛОТЫ"}]
+        "clan": return [
+            {"key":"overview","label":"ОБЗОР"}, {"key":"clans","label":"КЛАНЫ / РЕЙТИНГ"},
+            {"key":"members","label":"УЧАСТНИКИ"}, {"key":"storage","label":"СКЛАД"},
+            {"key":"exchange","label":"ОБМЕН"}, {"key":"bosses","label":"БОССЫ"},
+            {"key":"bonuses","label":"БОНУСЫ"}, {"key":"wars","label":"ВОЙНЫ"},
+            {"key":"journal","label":"ЖУРНАЛ"}]
+        "arena": return [
+            {"key":"fights","label":"ИСПЫТАНИЯ"}, {"key":"attempts","label":"ПОПЫТКИ"},
+            {"key":"rating","label":"РЕЙТИНГ"}, {"key":"shop","label":"МАГАЗИН"},
+            {"key":"history","label":"ИСТОРИЯ"}]
+        "dungeon": return [
+            {"key":"floors","label":"ПОДЗЕМЕЛЬЯ"}, {"key":"quests","label":"ПОРУЧЕНИЯ"},
+            {"key":"bosses","label":"БОССЫ"}, {"key":"rewards","label":"ДОБЫЧА"}]
+        "fartzone": return [
+            {"key":"about","label":"ШАХТЁР"}, {"key":"mining","label":"КИРКИ"},
+            {"key":"guards","label":"СТРАЖИ"}]
         _: return []
 
 func _select_tab(key: String) -> void:
@@ -283,6 +313,7 @@ func _render() -> void:
         var id := str(entry.get("key", ""))
         var b := _button(str(entry.get("label", "")))
         b.name = "NpcTab_" + id
+        b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
         b.add_theme_color_override("font_color", GOLD if id == tab else SUB)
         b.add_theme_stylebox_override("normal", _style(Color("#44301D") if id == tab else Color("#191B1E"),
             GOLD if id == tab else Color("#66513B"), 6))
@@ -302,6 +333,36 @@ func _render() -> void:
     if has_verified_state:
         _status.text = "PPA · данные получены · операции пока недоступны"
     _scroll.set_deferred("scroll_vertical", 0)
+
+
+func _auction_filter(key: String) -> void:
+    _auction_category = key
+    _render()
+
+func _quest_filter(key: String) -> void:
+    _quest_tier = key
+    _render()
+
+func _mini_row(value: String, right: String = "") -> void:
+    var row := HBoxContainer.new()
+    _body.add_child(row)
+    var lhs := _label(value, 12, SUB)
+    lhs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.add_child(lhs)
+    if not right.is_empty():
+        row.add_child(_label(right, 12, GOLD))
+
+func _choice_tiles(options: Array, current: String, selected: Callable) -> void:
+    var tiles := HFlowContainer.new()
+    tiles.add_theme_constant_override("h_separation", 5)
+    tiles.add_theme_constant_override("v_separation", 5)
+    _body.add_child(tiles)
+    for opt in options:
+        var key := str(opt.get("key", ""))
+        var b := _button(str(opt.get("label", "")))
+        b.add_theme_color_override("font_color", GOLD if key == current else SUB)
+        b.pressed.connect(selected.bind(key))
+        tiles.add_child(b)
 
 func _service_name() -> String:
     match service:
@@ -442,13 +503,16 @@ func _show_merchant() -> void:
     _body.add_child(_label("Баланс Gold / PPA: — · будет получен с сервера", 11, SUB))
 
 func _show_blackmarket() -> void:
-    _section("ЧЁРНЫЙ РЫНОК", "Ассортимент PPA персональный и меняется на сервере")
+    _section("БЛЕК МАРКЕТ", "Telegram PPA · индивидуальные предложения и скупка")
+    if tab == "buyback":
+        _message("СКУПКА", "Список предметов и доступные дневные лимиты загружаются с сервера. Никаких локальных продаж.")
+        _locked_action("ПРОДАТЬ")
+        return
     var listed: Array = []
     if has_verified_state and authoritative.get("offers", null) is Array:
-        # The server data remains read-only; ID/price belong to that snapshot.
         listed = authoritative.get("offers", [])
     else:
-        _message("ПРИМЕРЫ ПОСТОЯННЫХ ТОВАРОВ", "Это справочные цены из PPA, не доступные сейчас лоты.")
+        _message("СПРАВОЧНЫЙ АССОРТИМЕНТ", "Ниже показаны известные постоянные позиции. Это не текущие лоты персонажа.")
         listed = SHOP.BLACK_MARKET_REFERENCE
     var filtered: Array = []
     for entry in listed:
@@ -456,103 +520,215 @@ func _show_blackmarket() -> void:
             continue
         if tab == "all" or str(entry.get("category", "")) == tab:
             filtered.append(entry)
-    _product_grid(filtered, false)
-    _selected_details(filtered, false)
-    _locked_action("ПОКУПКА / СКУПКА")
+    if not filtered.is_empty():
+        _product_grid(filtered, false)
+        _selected_details(filtered, false)
+    else:
+        _message("НЕТ ДАННЫХ", "Лоты этого раздела определяет оригинальный сервер PPA.")
+    _message("ТОВАР ИЗ-ПОД ПРИЛАВКА", "500 PPA · скрытое содержимое, 1 раз за обновление. Покупка отключена до серверной синхронизации.")
+    _locked_action("КУПИТЬ / СКУПКА")
 
 func _show_forge() -> void:
-    _section("КУЗНЕЦ · " + tab.to_upper(), "Схема подготавливается под настоящий серверный инвентарь PPA")
+    _section("КУЗНЕЦ · " + tab.to_upper(), "Экипировка и ресурсы поступят из серверного инвентаря PPA")
     if tab == "enhance":
-        _message("ЗАТОЧКА ЭКИПИРОВКИ", "Выбери предмет, камень и подходящие руны после получения серверного инвентаря.")
+        _message("ЗАТОЧКА", "Выбирай вещь, камень и руну из подтверждённого инвентаря. Шанс и итог — только сервер.")
         var row := HBoxContainer.new()
-        row.add_theme_constant_override("separation", 9)
+        row.add_theme_constant_override("separation", 6)
         _body.add_child(row)
-        for name in ["ВЕЩЬ", "КАМЕНЬ", "РУНА"]:
-            var slot := PanelContainer.new()
-            slot.custom_minimum_size = Vector2(125, 100)
-            slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            slot.add_theme_stylebox_override("panel", _style(Color("#171A1F"), EDGE))
-            row.add_child(slot)
-            slot.add_child(_label(name + "\n\n◇", 12, GOLD))
-        _body.add_child(_label("Шанс / расход / результат: — (рассчитывает сервер)", 12, SUB))
+        for slot_name in ["ВЕЩЬ", "КАМЕНЬ", "РУНА"]:
+            var cell := PanelContainer.new()
+            cell.custom_minimum_size = Vector2(74.0 if _frame.size.x < 520 else 125.0, 89.0)
+            cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            cell.add_theme_stylebox_override("panel", _style(Color("#151A20"), EDGE))
+            row.add_child(cell)
+            cell.add_child(_label(slot_name + "\n◇", 13, GOLD))
         _locked_action("ЗАТОЧИТЬ")
+    elif tab == "rune_fusion":
+        _message("СЛИЯНИЕ РУН", "Источник рун — отдельная сумка рун персонажа, не общий инвентарь экипировки.")
+        _slot_grid(_body, 10, "runebag")
+        _mini_row("Выбранные руны", "0 / 2")
+        _locked_action("СЛИТЬ РУНЫ")
     else:
-        var names := {"equipment":"СНАРЯЖЕНИЕ", "legendary":"ЛЕГЕНДАРНОЕ СНАРЯЖЕНИЕ",
-            "accessories":"АКСЕССУАРЫ", "pets":"ПИТОМЦЫ"}
-        _message(str(names.get(tab, "КРАФТ")), "Каталог рецептов и требования будут показаны по подтверждённым данным PPA.")
+        var names := {"equipment":"СНАРЯЖЕНИЕ", "legendary":"ЛЕГЕНДАРНОЕ",
+            "accessories":"АКСЕССУАРЫ", "pets":"ПЕТЫ"}
+        _message(str(names.get(tab, "КРАФТ")), "Категории и рецепты как в Telegram PPA. Редкость, стоимость и компоненты появятся из проверенного каталога сервера.")
         _slot_grid(_body, 10, "forge")
+        _mini_row("Рецепт", "Ожидаем выбор предмета")
+        _mini_row("Ресурсы · Gold · Gram · PPA", "—")
         _locked_action("СОЗДАТЬ")
-    _body.add_child(_label("Ни один ресурс или предмет не меняется локально.", 11, SUB))
+    _body.add_child(_label("Ни заточка, ни слияние, ни крафт не изменяют реальный аккаунт в этом тесте.", 11, SUB))
 
 func _show_storage() -> void:
-    _section("СКЛАД ПЕРСОНАЖА", "Один склад PPA для Telegram и Native после подключения аккаунта")
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 12)
-    _body.add_child(row)
-    for part in ["ИНВЕНТАРЬ", "ХРАНИЛИЩЕ"]:
-        var box := VBoxContainer.new()
-        box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        row.add_child(box)
-        box.add_child(_label(part, 14, GOLD))
-        var area := PanelContainer.new()
-        area.custom_minimum_size.y = 154
-        area.add_theme_stylebox_override("panel", _style(Color("#12191D"), Color("#52412C")))
-        box.add_child(area)
-        area.add_child(_label("—\nОжидаем серверные предметы", 12, SUB))
-    _message("ПЕРЕМЕЩЕНИЕ ПРЕДМЕТОВ", "Положить и забрать можно будет только по подтверждённому запросу к серверу, без локальных копий.")
-    _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+    var captions := {"personal":"ЛИЧНОЕ ХРАНИЛИЩЕ", "clan":"КЛАНОВОЕ ХРАНИЛИЩЕ",
+        "premium":"ПРЕМИУМ ХРАНИЛИЩЕ", "sort":"СОРТИРОВКА"}
+    _section(str(captions.get(tab, "ХРАНИЛИЩЕ")), "Инвентарь Telegram и Native будет общим после серверного подключения")
+    if tab == "sort":
+        _message("СОРТИРОВКА ПРЕДМЕТОВ", "Выбор способа упорядочивания не должен менять серверный порядок без подтверждения.")
+        _choice_tiles([
+            {"key":"rarity","label":"ПО РЕДКОСТИ"},
+            {"key":"type","label":"ПО ТИПУ"},
+            {"key":"name","label":"ПО НАЗВАНИЮ"}], selected_id, _select_item)
+        _locked_action("СОХРАНИТЬ ПОРЯДОК")
+        return
+    var horizontal := HBoxContainer.new()
+    horizontal.add_theme_constant_override("separation", 8)
+    _body.add_child(horizontal)
+    for side in ["ИНВЕНТАРЬ", "СКЛАД"]:
+        var area := VBoxContainer.new()
+        area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        area.add_theme_constant_override("separation", 6)
+        horizontal.add_child(area)
+        area.add_child(_label(side, 13, GOLD))
+        var grid := GridContainer.new()
+        grid.columns = 4
+        grid.name = "NpcWarehouseSlots_" + side
+        grid.add_theme_constant_override("h_separation", 4)
+        grid.add_theme_constant_override("v_separation", 4)
+        area.add_child(grid)
+        var cell_px := clampf((_frame.size.x - 90.0) / 9.0, 25.0, 60.0)
+        for i in range(20):
+            var blank := PanelContainer.new()
+            blank.custom_minimum_size = Vector2(cell_px, cell_px)
+            blank.add_theme_stylebox_override("panel", _style(Color("#10161A"), Color("#514532"), 4))
+            grid.add_child(blank)
+    if tab == "clan":
+        _message("ДОСТУП ПО ПРАВАМ КЛАНА", "Разрешения и вместимость кланового склада проверяются сервером.")
+    elif tab == "premium":
+        _message("ПРЕМИУМ СКЛАД", "Премиум-предметы и свободные ячейки придут из настоящего хранилища.")
+    _mini_row("Gold / Gram / PPA", "— · данные сервера")
+    _locked_action("ПОЛОЖИТЬ")
+    _locked_action("ЗАБРАТЬ")
 
 func _show_auction() -> void:
-    var heading := {"all":"ТОРГИ", "mine":"МОИ ЛОТЫ", "sell":"ВЫСТАВИТЬ ПРЕДМЕТ"}
-    _section("АУКЦИОН · " + str(heading.get(tab, "")), "Лоты и ставки хранятся на сервере PPA")
+    var captions := {"all":"КУПИТЬ", "mine":"МОИ ЛОТЫ", "sell":"ПРОДАТЬ"}
+    _section("АУКЦИОН · " + str(captions.get(tab, "")), "Предметы, цены и комиссия авторитетны только на сервере PPA")
+    if tab != "mine":
+        _choice_tiles([
+            {"key":"all","label":"ВСЕ"}, {"key":"weapon","label":"ОРУЖИЕ"},
+            {"key":"armor","label":"БРОНЯ"}, {"key":"accessories","label":"АКСЕССУАРЫ"},
+            {"key":"consumables","label":"РАСХОДНИКИ"}, {"key":"materials","label":"МАТЕРИАЛЫ"},
+            {"key":"books","label":"КНИГИ"}, {"key":"quest","label":"КВЕСТОВЫЕ"},
+            {"key":"misc","label":"РАЗНОЕ"}], _auction_category, _auction_filter)
     if tab == "all":
-        _message("ОЖИДАНИЕ АКТИВНЫХ ЛОТОВ", "После синхронизации здесь появятся реальные товары, фильтры и цены.")
+        _message("ТОРГОВЫЕ ПРЕДЛОЖЕНИЯ", "Поиск и категории открыты, реальные лоты появятся при подключении аукциона.")
         _locked_action("КУПИТЬ")
-    elif tab == "mine":
-        _message("МОИ ЛОТЫ", "Сервер должен вернуть выставленные предметы и число свободных слотов.")
-        _locked_action("СНЯТЬ ЛОТ")
+    elif tab == "sell":
+        _message("ВЫБЕРИ ВЕЩЬ ИЗ ИНВЕНТАРЯ", "После авторизации доступны цена, количество, валюта PPA/Gram, срок и комиссия.")
+        _slot_grid(_body, 16, "auction_sell")
+        _mini_row("Свободные лоты", "— / —")
+        _mini_row("Комиссия", "Проверяет сервер")
+        _locked_action("ВЫСТАВИТЬ ЛОТ")
     else:
-        _message("ПРОДАЖА", "Выбор вещи из подтверждённого серверного инвентаря и установка цены.")
-        _slot_grid(_body, 5, "auction")
-        _locked_action("ВЫСТАВИТЬ")
-    _body.add_child(_label("Валюта аукциона и комиссия берутся только из PPA.", 11, SUB))
+        _message("МОИ ЛОТЫ", "Только реальные объявления, зарегистрированные на сервере.")
+        _locked_action("СНЯТЬ С ПРОДАЖИ")
 
 func _show_clan() -> void:
-    var title := {"my":"МОЙ КЛАН", "list":"СПИСОК КЛАНОВ",
-        "rank":"РЕЙТИНГ КЛАНОВ", "boss":"КЛАНОВЫЙ БОСС"}
-    _section(str(title.get(tab, "КЛАНЫ")), "Общий сервер: участники, казна, войны и награды")
+    var captions := {"overview":"ОБЗОР КЛАНА", "clans":"КЛАНЫ И РЕЙТИНГ",
+        "members":"УЧАСТНИКИ", "storage":"КЛАНОВЫЙ СКЛАД",
+        "exchange":"ОБМЕН", "bosses":"КЛАНОВЫЕ БОССЫ",
+        "bonuses":"БОНУСЫ КЛАНА", "wars":"ВОЙНЫ И ЦИТАДЕЛЬ", "journal":"ЖУРНАЛ"}
+    _section(str(captions.get(tab, "МАГИСТР КЛАНОВ")), "Структура Telegram PPA · все операции через общий сервер")
     match tab:
-        "my": _message("КЛАН ПЕРСОНАЖА", "Имя, состав, бонусы и хранилище будут загружены из PPA.")
-        "list": _message("КАТАЛОГ КЛАНОВ", "Реальные заявки и список кланов появятся после подключения.")
-        "rank": _message("ТАБЛИЦА ЛИДЕРОВ", "Рейтинг не подменяется тестовыми числами.")
-        "boss": _message("БОСС · ВКЛАД · НАГРАДЫ", "Урон, сундук и распределение наград считает сервер PPA.")
-    _locked_action("КЛАНОВОЕ ДЕЙСТВИЕ")
+        "overview":
+            _message("ВАШ КЛАН", "Название, глава, режим и уровень загрузятся из PPA.")
+            _message("СОСТАВ", "Участники · приглашения · заявки · управление по правам.")
+            _message("КЛАНОВЫЙ СКЛАД", "Общая ёмкость и разрешения будут получены из PPA.")
+            _message("РАЗВИТИЕ КЛАНА", "Уровень, вклад и активные бонусы — только сервер.")
+            _locked_action("УПРАВЛЯТЬ")
+        "clans":
+            _message("СПИСОК КЛАНОВ", "Кланы, заявки, вступление, создание и позиции рейтинга.")
+            _locked_action("ВСТУПИТЬ / СОЗДАТЬ")
+        "members":
+            _message("УЧАСТНИКИ И ЗАЯВКИ", "Роли, онлайн, урон, управление, исключение и приглашения — по полномочиям.")
+            _locked_action("УПРАВЛЕНИЕ СОСТАВОМ")
+        "storage":
+            _message("ОБЩИЙ КЛАНОВЫЙ СКЛАД", "До 500 ячеек по правилам PPA; содержимое и права загрузятся с сервера.")
+            _slot_grid(_body, 20, "clan")
+            _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+        "exchange":
+            _message("КЛАНОВЫЙ ОБМЕН", "Никаких переводов или списаний без подтверждённого серверного запроса.")
+            _locked_action("ОБМЕНЯТЬ")
+        "bosses":
+            _message("КЛАН-БОССЫ", "Возрождение, HP, личный вклад, сундук, распределение и ролл наград — серверные.")
+            _locked_action("ВОЙТИ К БОССУ")
+        "bonuses":
+            _message("БОНУСЫ И РАЗВИТИЕ", "Вклад, исследования, уровни и доступные усиления.")
+            _locked_action("УЛУЧШИТЬ")
+        "wars":
+            _message("ВОЙНЫ И ЦИТАДЕЛЬ", "Захват, владение, защита и кнопка выхода управляются сервером.")
+            _locked_action("УЧАСТВОВАТЬ")
+        "journal":
+            _message("ЖУРНАЛ СОБЫТИЙ", "История клана, операции склада и результаты войн придут из PPA.")
 
 func _show_arena() -> void:
-    var title := {"fights":"PVP АРЕНА", "rating":"РЕЙТИНГ АРЕНЫ", "rewards":"НАГРАДЫ"}
-    _section(str(title.get(tab, "АРЕНА")), "Настоящий подбор соперников — через PPA")
+    _section("МЕЧНИК АРЕНЫ", "Telegram PPA · испытания, PvP и рейтинг")
     match tab:
-        "fights": _message("ПОИСК СОПЕРНИКА", "Автоподбор, бой и завершение матча будут синхронизированы через сервер.")
-        "rating": _message("РЕЙТИНГ И ИСТОРИЯ", "Победы, поражения и позиции приходят из PPA.")
-        "rewards": _message("НАГРАДЫ АРЕНЫ", "Доступны после подтверждения сервером.")
-    _locked_action("НАЧАТЬ ПОИСК")
+        "fights":
+            _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
+            _message("ПРОТИВ ИИ", "Испытание против ботов. Состав и доступность определяет сервер.")
+            _message("PVP АРЕНА", "Режимы 1×1 и 3×3 / 5×5 — где они доступны в живой PPA.")
+            _message("СЕЗОННЫЙ РЕЙТИНГ", "Позиция и подбор на сервере.")
+            _locked_action("ВОЙТИ В ИСПЫТАНИЕ")
+        "attempts":
+            _message("PVP · ПОПЫТКИ", "Лимит, остаток попыток, жетоны арены и обновление доступны после синхронизации.")
+            _locked_action("НАЧАТЬ МАТЧ")
+        "rating":
+            _message("РЕЙТИНГ PVP", "Бои, победы, позиции и таблица лидеров должны совпадать с Telegram.")
+        "shop":
+            _message("МАГАЗИН АРЕНЫ", "Жетоны и доступные предметы загрузятся из серверного каталога.")
+            _locked_action("КУПИТЬ")
+        "history":
+            _message("ИСТОРИЯ БОЁВ", "Исходы матчей и награды по подтверждённым серверным записям.")
 
 func _show_dungeon() -> void:
-    _section("ПОДЗЕМЕЛЬЕ 1–60", "Доступ к этажам и убийства боссов проверяет сервер")
+    _section("ХРАНИТЕЛЬ ПОДЗЕМЕЛЬЯ", "Вход по уровню и задания из Telegram PPA")
     match tab:
         "floors":
-            for name in ["ЭТАЖИ 1–20", "ЭТАЖИ 21–40", "ЭТАЖИ 41–60"]:
-                _message(name, "Открытые уровни и телепорты будут отмечены после синхронизации.")
+            for floor_range in ["1–20", "21–40", "41–60"]:
+                _message("ПОДЗЕМЕЛЬЕ " + floor_range, "Доступ, комнаты, боссы и телепорт проверяются сервером.")
+            _locked_action("ВОЙТИ В ПОДЗЕМЕЛЬЕ")
+            _section("ПОРУЧЕНИЯ ХРАНИТЕЛЯ", "Награды только после подтверждённого выполнения")
+            _quest_tiles()
+        "quests":
+            _quest_tiles()
+            if _quest_tier == "21-30":
+                for quest in [
+                    "Новые враги · 80 мобов",
+                    "Синяя охота · синяя экипировка или ресурсы",
+                    "Элитная угроза · 8 элитных врагов",
+                    "Охотник за рунами · руна с монстров",
+                    "Испытание Хранителя II · 200 мобов",
+                    "Награда за цепочку · после выполнения поручений"]:
+                    _message(quest, "Из Telegram PPA · личный прогресс ещё не подключён.")
+            else:
+                _message("ПОРУЧЕНИЯ " + _quest_tier, "Получим список, прогресс и награды из общего сервера PPA.")
+            _locked_action("СДАТЬ ПОРУЧЕНИЕ")
         "bosses":
-            for name in ["ФЕНИКС · 20", "ВЛАДЫКА · 40", "ДРАКОН · 60"]:
-                _message(name, "Комната босса, доступ и таймеры — данные сервера.")
-        "rewards": _message("ДОБЫЧА ПОДЗЕМЕЛЬЯ", "Таблицы дропа, шансы и ограничения берутся из PPA.")
-    _locked_action("ВОЙТИ / ТЕЛЕПОРТ")
+            for boss_name in ["ФЕНИКС · 20", "ВЛАДЫКА · 40", "ДРАКОН · 60"]:
+                _message(boss_name, "Вход, живой HP и повторные попытки проверяет сервер.")
+        "rewards":
+            _message("ДОБЫЧА", "Шансы дропа, сундуки и ограничения берутся из утверждённых таблиц PPA.")
+
+func _quest_tiles() -> void:
+    _choice_tiles([
+        {"key":"1-20","label":"1–20"},
+        {"key":"21-30","label":"21–30"},
+        {"key":"31-40","label":"31–40"},
+        {"key":"daily","label":"ЕЖЕДНЕВНЫЕ"}], _quest_tier, _quest_filter)
+    _body.add_child(_label("Задания доступны только по реальному прогрессу персонажа.", 11, SUB))
 
 func _show_fartzone() -> void:
-    _section("ФАРТ-ЗОНА", "Зона добычи и охраны ресурсов из Telegram PPA")
+    _section("ШАХТЁР ФАРТ-ЗОНЫ", "Добыча, кирки и стражи · настоящая PPA")
     match tab:
-        "about": _message("ОСОБАЯ ЗОНА", "Правила входа, доступный уровень и экипировка уточняются по серверным данным.")
-        "mining": _message("ШАХТА И КИРКИ", "Добыча и время кирки должны считаться сервером, даже если приложение закрыто.")
-        "guards": _message("СТРАЖИ И НАГРАДЫ", "Охрана месторождений, редкий дроп и повторное появление задаются PPA.")
-    _locked_action("ПЕРЕЙТИ В ЗОНУ")
+        "about":
+            _message("ДОСТУП В ЗОНУ", "Правила и уровень входа сервер проверит для выбранного персонажа.")
+            _mini_row("ШЛАК · СПРАВОЧНАЯ ЦЕНА", "2 PPA / шт.")
+            _locked_action("ВОЙТИ В ФАРТ-ЗОНУ")
+        "mining":
+            _message("ОБЫЧНАЯ КИРКА", "200 PPA · 4 часа · серверный таймер.")
+            _message("ЛЕГЕНДАРНАЯ КИРКА", "2120 PPA · 14 часов · серверный таймер.")
+            _locked_action("КУПИТЬ КИРКУ")
+            _locked_action("ПРОДАТЬ ШЛАК")
+        "guards":
+            _message("СТРАЖИ И ДОБЫЧА", "Охрана месторождений, появление стражей и редкие награды только серверные.")
+            _locked_action("ВОЙТИ В ЗОНУ")
