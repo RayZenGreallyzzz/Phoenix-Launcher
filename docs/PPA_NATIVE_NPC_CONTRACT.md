@@ -60,3 +60,20 @@ Both native NPCs use the reusable `ppa_inventory_picker.gd`. It displays the **e
 - **Forge enhance:** choose gear from inventory **or equipped slots**, then separately choose sharpening material and rune using filters on the same inventory. The three selections are retained while switching filters. Chance and cost are not fabricated: server will compute outcome after a validated request. `ЗАТОЧИТЬ` stays disabled until integration.
 - The future NPC service snapshot should include `{ service, data: { inventory: [{ id, slot, name, kind, qty, rarity, upgrade, ... }], equipment: { weapon: {...}, ... } } }`. `slot` is an absolute 0-based bag position; item IDs alone are **not** unique stack/instance identifiers. For real mutations use verified unique item instance keys, ownership, inventory revisions and idempotent transaction IDs.
 - No sample items are inserted into player inventory. Headless CI injects a test-only read-only fixture to verify selection, filters, listing controls, worn items and disabled server writes, then checks original private stash is unchanged.
+
+## Global PPA menus vs world scene migration (2026-10-08)
+
+Native now has one independent `ppa_global_hub.gd`, accessible from a **РАЗДЕЛЫ** HUD button beside **ГЕРОЙ**. The four groups are premium store, TON/Gram wallet, source-backed event center, and map/location index. The HUD hub, character menu and NPC menu never stack; tapping an NPC closes the hub, tapping the hero action closes the hub and opens the five-page hero screen.
+
+### Current working scope
+- **Premium store:** PPA-inspired visual layout for subscriptions, services and items. No invented premium currency balances/prices. All purchases locked pending verified server catalog and shop routes.
+- **Wallet:** TON Connect and Gram overview, Kazna distinct from withdrawals. No embedded signer or unsafe simulated wallet connection. Top-up/withdraw controls disabled. Later use a verifiable TON Connect bridge plus server-side transaction and admin approval flow, not local balance mutation.
+- **Events:** original `gateway/native-events-srcdoc.html` menu categories and events, as present in `ppa-phoenixpixarena`: Great Ruri, Crystal Titan, Mimic-Sombrero, Phoenix Citadel and updates. Read-only event names/details; no made-up active status, drop ownership or countdown. Server snapshot flow is prepared but not yet implemented.
+- **Locations:** read-only world index describing Peace City, dungeon 1–60, Fart/farming, arena, clan boss and event maps. **Only Peace City currently has a native Godot gameplay scene**. A location listing is not a replacement for terrain art, masks/collisions, monster spawning, fight simulation, separate map scenes, save state, server entry permissions or live events. Entrances/teleports stay disabled until real maps and routes exist.
+- **Global snapshot interface:** `global_snapshot_requested(section)` and `apply_snapshot({section, data})` provide a future verified read-only bridge. Never enable transaction controls from a UI snapshot alone.
+
+### Required location port
+1. Export/audit original PPA authoritative maps, collision masks, spawn rooms and overlays (dungeon 1–60, farm/Fart zone, and each event arena).
+2. Create Godot scenes with native movement/collision/visuals and scene transition manager, with return-to-city path and async asset-loading bounds.
+3. Move entry validation, monster states and all rewards to shared server authority; ensure Telegram and Godot see same character and timers.
+4. Stress-test FPS on tablet, portrait/landscape layouts, world scenes and event entry/exit, especially UI overlays and returning to city.
