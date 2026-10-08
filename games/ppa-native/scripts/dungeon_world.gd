@@ -495,8 +495,9 @@ func _add_dungeon_hud() -> void:
     label.anchor_right = 1.0
     label.offset_left = 14
     label.offset_right = -14
-    label.offset_top = 77
-    label.offset_bottom = 107
+    # Do not cover the new read-only server HP/MP header at Y=81..105.
+    label.offset_top = 106
+    label.offset_bottom = 129
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     label.add_theme_font_size_override("font_size", 12)
     label.add_theme_color_override("font_color", Color("#ECCC93"))
