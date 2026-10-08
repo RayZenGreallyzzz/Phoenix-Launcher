@@ -652,5 +652,65 @@ func _run() -> void:
         quit(1)
         return
     print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 original_character=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
+    # Global PPA sections are neither NPCs nor the five-page character panel.
+    var hub = menu._global_hub
+    for section in ["premium", "wallet", "events", "locations"]:
+        menu.open_page("character")
+        menu.open_global_section(section)
+        if hub == null or not hub.is_open() or menu._character_screen.visible or menu._npc_screen.is_open() or menu._panel.visible:
+            push_error("PPA_GLOBAL_ISOLATION: global page overlaps character or NPC: " + section)
+            quit(1)
+            return
+        if hub.section != section or hub._tabs.get_child_count() != 4 or hub._body.get_child_count() == 0:
+            push_error("PPA_GLOBAL_NAV: missing native global page " + section)
+            quit(1)
+            return
+        var all_locks: Array[Node] = hub.find_children("GlobalServerActionLocked", "Button", true, false)
+        if all_locks.is_empty():
+            push_error("PPA_GLOBAL_AUTHORITY: no locked server operations in " + section)
+            quit(1)
+            return
+        for locked_node in all_locks:
+            var locked_button := locked_node as Button
+            if locked_button == null or not locked_button.disabled:
+                push_error("PPA_GLOBAL_AUTHORITY: server operation enabled in " + section)
+                quit(1)
+                return
+    menu.open_global_section("events")
+    if hub.find_child("GlobalEvent_ruri", true, false) == null:
+        push_error("PPA_GLOBAL_EVENTS: Ruri entry missing")
+        quit(1)
+        return
+    hub._change_event("mimic")
+    if hub.find_child("GlobalEvent_mimic", true, false) == null:
+        push_error("PPA_GLOBAL_EVENTS: Mimic event missing")
+        quit(1)
+        return
+    hub._change_sub("war")
+    if hub.find_child("GlobalEvent_citadel", true, false) == null:
+        push_error("PPA_GLOBAL_EVENTS: Citadel entry missing")
+        quit(1)
+        return
+    hub._change_sub("updates")
+    if hub.find_child("GlobalEvent_updates", true, false) == null:
+        push_error("PPA_GLOBAL_EVENTS: update category missing")
+        quit(1)
+        return
+    menu.open_npc(NPCS.NPCS[0])
+    if hub.is_open() or not menu._npc_screen.is_open():
+        push_error("PPA_GLOBAL_ISOLATION: NPC opened while global hub remained visible")
+        quit(1)
+        return
+    menu.open_global_section("locations")
+    menu.close_menu()
+    if hub.is_open() or menu.is_open():
+        push_error("PPA_GLOBAL_ISOLATION: close left global hub visible")
+        quit(1)
+        return
+    if menu.find_child("OpenGlobalPpaHub", true, false) == null:
+        push_error("PPA_GLOBAL_NAV: HUD entry button absent")
+        quit(1)
+        return
+    print("PPA_GLOBAL_MENUS_OK sections=4 events=4 disabled_transactions=1 city_only=1 overlaps=0")
     menu.queue_free()
     quit(0)

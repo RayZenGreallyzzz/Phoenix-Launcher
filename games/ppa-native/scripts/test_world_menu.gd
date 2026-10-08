@@ -8,10 +8,12 @@ const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const SHOP_CATALOG = preload("res://scripts/test_shop_catalog.gd")
 const CANONICAL_CHARACTER = preload("res://scripts/ppa_character_screen.gd")
 const NPC_SCREEN = preload("res://scripts/ppa_npc_screen.gd")
+const GLOBAL_HUB = preload("res://scripts/ppa_global_hub.gd")
 
 signal change_class_requested
 # Future server adapter listens to this and returns a verified read-only NPC snapshot.
 signal npc_snapshot_requested(service: String)
+signal global_snapshot_requested(section: String)
 
 
 var account: Dictionary = {}
@@ -23,6 +25,7 @@ var _background: ColorRect
 var _panel: PanelContainer
 var _character_screen
 var _npc_screen
+var _global_hub
 var _native_web_ui
 var _web_open := false
 var _use_original_web_ui := false
@@ -79,6 +82,13 @@ func _ready() -> void:
     _npc_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _npc_screen.close_requested.connect(close_menu)
     _npc_screen.authoritative_state_requested.connect(func(service: String): npc_snapshot_requested.emit(service))
+    _global_hub = GLOBAL_HUB.new()
+    _global_hub.z_index = 110
+    add_child(_global_hub)
+    _global_hub.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _global_hub.close_requested.connect(close_menu)
+    _global_hub.character_requested.connect(func(): open_page("character"))
+    _global_hub.snapshot_requested.connect(func(section: String): global_snapshot_requested.emit(section))
     # Optional A/B comparison of the untouched Telegram character iframe.
     # Keep it disabled for normal Android builds; never render both menus.
     if _use_original_web_ui and Engine.has_singleton("PPAOriginalWebUI"):
@@ -117,7 +127,7 @@ func _button_style(color: Color) -> StyleBoxFlat:
 
 func _build_buttons() -> void:
     _menu_button = Button.new()
-    _menu_button.text = "МЕНЮ"
+    _menu_button.text = "ГЕРОЙ"
     _menu_button.anchor_left = 1.0
     _menu_button.anchor_right = 1.0
     _menu_button.offset_left = -150.0
@@ -129,6 +139,22 @@ func _build_buttons() -> void:
     _menu_button.add_theme_color_override("font_color", Color("#F6E2CC"))
     _menu_button.pressed.connect(func(): open_page("character"))
     add_child(_menu_button)
+
+    # Permanent top-level navigation, NOT a child of character or NPC UI.
+    var hub_button := Button.new()
+    hub_button.name = "OpenGlobalPpaHub"
+    hub_button.text = "РАЗДЕЛЫ"
+    hub_button.anchor_left = 1.0
+    hub_button.anchor_right = 1.0
+    hub_button.offset_left = -310.0
+    hub_button.offset_right = -160.0
+    hub_button.offset_top = 142.0
+    hub_button.offset_bottom = 185.0
+    hub_button.z_index = 65
+    hub_button.add_theme_stylebox_override("normal", _button_style(Color("#32221D")))
+    hub_button.add_theme_color_override("font_color", Color("#F2CC89"))
+    hub_button.pressed.connect(func(): open_global_section("events"))
+    add_child(hub_button)
 
     _interact_button = Button.new()
     _interact_button.text = "ПОГОВОРИТЬ"
@@ -243,7 +269,24 @@ func _interact() -> void:
         open_npc(nearby_npc)
 
 func is_open() -> bool:
-    return _web_open or (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible) or (_npc_screen != null and _npc_screen.is_open())
+    return _web_open or (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible) or (_npc_screen != null and _npc_screen.is_open()) or (_global_hub != null and _global_hub.is_open())
+
+func open_global_section(which: String) -> void:
+    if _global_hub == null:
+        return
+    # Strictly one modal: global navigation cannot coexist with an NPC,
+    # the five-page hero screen, or optional original HTML/WebView.
+    if _npc_screen != null:
+        _npc_screen.close_npc()
+    if _native_web_ui != null and _web_open:
+        _native_web_ui.hideUi()
+    _web_open = false
+    if _character_screen != null:
+        _character_screen.visible = false
+    _panel.visible = false
+    _background.visible = false
+    current_page = "global_" + which
+    _global_hub.open_section(which)
 
 func _on_character_unequip(slot: String) -> void:
     var result: String = stash.unequip_test_item(slot)
@@ -272,6 +315,8 @@ func open_npc(npc: Dictionary) -> void:
         _character_screen.visible = false
     _panel.visible = false
     _background.visible = false
+    if _global_hub != null:
+        _global_hub.close_global()
     current_page = "npc_" + valid_service
     _npc_screen.open_npc(npc)
 
@@ -288,6 +333,8 @@ func set_near_npc(npc: Dictionary) -> void:
     _interact_button.text = "ПОГОВОРИТЬ" if new_id.is_empty() else "NPC · " + str(npc.get("name", ""))
 
 func open_page(page: String) -> void:
+    if _global_hub != null and _global_hub.is_open():
+        _global_hub.close_global()
     if _npc_screen != null and _npc_screen.is_open():
         _npc_screen.close_npc()
     current_page = page
@@ -345,6 +392,8 @@ func _resize_active_panel() -> void:
         _tab_bar.visible = hero_page or warehouse_page
 
 func close_menu() -> void:
+    if _global_hub != null:
+        _global_hub.close_global()
     if _npc_screen != null:
         _npc_screen.close_npc()
     if _native_web_ui != null and _web_open:
