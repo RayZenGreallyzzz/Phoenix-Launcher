@@ -1,8 +1,8 @@
-name: Test PPA Native HUD Hero Dedup
+name: Test PPA Native Dungeon Authentic Mob Boss Preview
 
 on:
   push:
-    branches: [ "feature/godot-remove-duplicate-hero-hud-button" ]
+    branches: [ "feature/godot-dungeon-offline-mob-boss-preview" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-hero-dedup-test-${{ github.ref }}
+  group: ppa-native-dungeon-enemies-test-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((360000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="1.5.${GITHUB_RUN_NUMBER}-hero-hud"
+          VERSION_CODE=$((370000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="1.6.${GITHUB_RUN_NUMBER}-enemy-test"
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -160,6 +160,8 @@ jobs:
           test -s games/ppa-native/assets/dungeon_layout.webp
           test -s games/ppa-native/assets/dungeon_walk_mask.png
           test -s games/ppa-native/scripts/ppa_dungeon_spawn_generated.gd
+          test -s games/ppa-native/scripts/ppa_dungeon_entities_generated.gd
+          grep -q "PPA_ORIGINAL_DUNGEON_ENTITIES_OK" /tmp/ppa-original-dungeon.log
 
       - name: Fetch approved live PPA dwarf and validate GLB
         shell: bash
@@ -318,6 +320,7 @@ jobs:
           cd games/ppa-native
           timeout 110s godot --headless --path . --script res://scripts/audit_native_dungeon.gd 2>&1 | tee /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_WALK_TEST_OK" /tmp/ppa-dungeon-test.log
+          grep -q "PPA_DUNGEON_ENEMIES_TEST_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
 
       - name: Build native PPA APK
@@ -348,7 +351,7 @@ jobs:
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Hero-HUD-TEST
+          name: PhoenixPixArena-Dungeon-Mobs-Bosses-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
