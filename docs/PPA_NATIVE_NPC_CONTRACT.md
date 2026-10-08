@@ -77,3 +77,18 @@ Native now has one independent `ppa_global_hub.gd`, accessible from a **РАЗД
 2. Create Godot scenes with native movement/collision/visuals and scene transition manager, with return-to-city path and async asset-loading bounds.
 3. Move entry validation, monster states and all rewards to shared server authority; ensure Telegram and Godot see same character and timers.
 4. Stress-test FPS on tablet, portrait/landscape layouts, world scenes and event entry/exit, especially UI overlays and returning to city.
+
+## First real scene port — dungeon walk test (2026-10-08)
+
+The proof-of-port is not another placeholder menu: `games/ppa-native/dungeon_test.tscn` instantiates `dungeon_world.gd` reusing the exact same 3D hero, smooth joystick, portrait/landscape scaling, camera, and return-to-city path as native Peace City. It loads **the deployed PPA dungeon composite** `/assets/dungeon-layout-test.webp` (new rectangular stone map with outside-only dark masonry) and **the deployed, losslessly decoded 2048px collision grid** embedded by PPA's `build.mjs` in its public runtime HTML. The original source PNG remains private; no GitHub credentials are used. Godot reads the actual image pixels for collision using PPA's build.mjs threshold **red ≥ 112/255 and alpha ≥ 48/255**, plus nine-point player footprint and sliding. Width is 4096px as in production build.mjs; height and mask scale derive from decoded assets. The temporary visual-test entrance is selected automatically on a safe interior pixel near the left branch, *not* asserted as the authentic portal spawn.
+
+From **РАЗДЕЛЫ → ЛОКАЦИИ → ПРОЙТИ ПО КАРТЕ ДАНЖА · ТЕСТ**, the player can enter this actual map scene and return via **В ГОРОД**, entirely locally. No entry tickets, level unlocks, enemy spawns, drops, character XP, auction items or server saves are modified. The proper server-authorized **ВОЙТИ В ИГРОВУЮ ЛОКАЦИЮ** remains disabled.
+
+### Next staged work
+1. Derive and verify room centers and branch metadata from approved PPA source `build.mjs` (`DG_ROOM_META`, `DG_ACTIVE_SPAWNS`, 10 top odd / 10 bottom even branches). Add visual markers for room/level debugging only; do not invent encounter state.
+2. Implement typed, authenticated scene entry and exit with server-side unlock/teleport checks, state reconciliation and return-to-city on death; never call client-only `change_scene_to_file` as proof of a server transfer.
+3. Bind authoritative room monster list, boss positions, HP/AI and attacks from the existing PPA realtime protocol and validate no duplicate spawns or client-issued fake damage/loot.
+4. Tablet stress test at live mob densities; preserve clipping/culling of entities. Only then enable actual dungeon UI entry.
+5. Repeat source-backed approach for Fart-zone and event arenas; no generic copy-pasted placeholder maps.
+
+CI tests the original deployed art and its exact public runtime walk grid, the 4096 world geometry, a safe spawn, nine-probe collision bounds and a functioning exit button. It does not claim production dungeon gameplay has been ported.

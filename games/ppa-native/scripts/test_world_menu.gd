@@ -14,6 +14,7 @@ signal change_class_requested
 # Future server adapter listens to this and returns a verified read-only NPC snapshot.
 signal npc_snapshot_requested(service: String)
 signal global_snapshot_requested(section: String)
+signal dungeon_visual_test_requested
 
 
 var account: Dictionary = {}
@@ -89,6 +90,7 @@ func _ready() -> void:
     _global_hub.close_requested.connect(close_menu)
     _global_hub.character_requested.connect(func(): open_page("character"))
     _global_hub.snapshot_requested.connect(func(section: String): global_snapshot_requested.emit(section))
+    _global_hub.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     # Optional A/B comparison of the untouched Telegram character iframe.
     # Keep it disabled for normal Android builds; never render both menus.
     if _use_original_web_ui and Engine.has_singleton("PPAOriginalWebUI"):

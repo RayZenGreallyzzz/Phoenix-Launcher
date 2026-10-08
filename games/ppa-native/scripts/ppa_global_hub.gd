@@ -6,6 +6,7 @@ extends Control
 signal close_requested
 signal character_requested
 signal snapshot_requested(section: String)
+signal dungeon_visual_test_requested
 
 const CATEGORIES := [
     {"id":"premium", "title":"ПРЕМИУМ МАГАЗИН"},
@@ -291,7 +292,7 @@ func _locations() -> void:
     _section("МИР PPA", "Карты и переходы — отдельные игровые сцены с серверной проверкой входа. Город уже существует; остальные карты ещё не перенесены в Native.")
     for item in [
         {"title":"МИРНЫЙ ГОРОД", "detail":"Текущая игровая сцена Godot. Отдельный вход не требуется."},
-        {"title":"ПОДЗЕМЕЛЬЯ 1–60", "detail":"Шестьдесят этажей, комнаты, монстры и боссы. Карта данжа требует настоящего переноса."},
+        {"title":"ПОДЗЕМЕЛЬЯ 1–60", "detail":"Оригинальная новая каменная карта и маска проходов теперь доступны для проверки в Godot. Мобы, боссы и награды пока не подключены."},
         {"title":"ФАРТ-ЗОНА / ФАРМ", "detail":"Месторождения, стражи, кирки и добыча. Нужны карта и серверный режим."},
         {"title":"КЛАНОВЫЙ БОСС", "detail":"Отдельная арена, вклады игроков, сундук и распределение лута."},
         {"title":"АРЕНА PVP", "detail":"Отдельная боевая сцена, подбор и серверные удары."},
@@ -300,4 +301,8 @@ func _locations() -> void:
         {"title":"КРИСТАЛЬНЫЙ ТИТАН", "detail":"Мировой босс со своим серверным откатом."}
     ]:
         _section(str(item["title"]), str(item["detail"]))
-    _locked("ПЕРЕЙТИ В ВЫБРАННУЮ ЛОКАЦИЮ")
+    var inspect := _button("ПРОЙТИ ПО КАРТЕ ДАНЖА · ТЕСТ (БЕЗ НАГРАД)", true)
+    inspect.name = "GlobalDungeonMapPreview"
+    inspect.pressed.connect(func(): dungeon_visual_test_requested.emit())
+    _body.add_child(inspect)
+    _locked("ПЕРЕЙТИ В ИГРОВУЮ ЛОКАЦИЮ")
