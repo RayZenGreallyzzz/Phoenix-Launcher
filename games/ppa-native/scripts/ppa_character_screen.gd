@@ -67,6 +67,7 @@ func _ready() -> void:
     _mono = SystemFont.new()
     _mono.font_names = PackedStringArray(["monospace", "Courier New"])
     _create_frame()
+    _create_book_overlay()
     _fit_to_viewport()
     visible = false
 
@@ -289,6 +290,8 @@ func _fit_to_viewport() -> void:
 
 func open_index(index: int) -> void:
     _page = posmod(index, 5)
+    if _book_overlay != null:
+        _book_overlay.visible = false
     visible = true
     _fit_to_viewport()
     _draw_page()
@@ -391,6 +394,7 @@ func _draw_page() -> void:
             Color("#FFB843") if active else Color("#5A5B5C"),
             Color("#FFCF63") if active else Color("#252525"), 4
         ))
+    _original_skill_card_count = 0
     match _page:
         0: _draw_inventory()
         1: _draw_stats()
@@ -584,56 +588,196 @@ func _draw_stats() -> void:
         8, MUTED
     ))
 
+# Unlike the old placeholders, this uses the ACTUAL GRIMOIRE_CATALOG
+# and GRIMOIRE_ART extracted from the live PPA on every build.
+# The selected hero class is only a visual native test, not a real server
+# class change. Never invent book counts, ranks, or upgrades.
 func _draw_skills(passive: bool) -> void:
-    # From actual PPA charFrame.makeSkillPlaceholder()/renderSkills:
-    # Four active + five passive cards, 58×76 icons and their exact empty texts.
-    # A single explanation line is NOT equivalent to the real menu.
     _section("ПАССИВНЫЕ НАВЫКИ" if passive else "АКТИВНЫЕ НАВЫКИ")
-    var count := 5 if passive else 4
-    for index in range(count):
-        var card := PanelContainer.new()
-        card.custom_minimum_size.y = 82
-        card.add_theme_stylebox_override("panel", _style_box(Color("#17191B"), Color("#685235"), 7))
-        _page_container.add_child(card)
-        var row := HBoxContainer.new()
-        row.add_theme_constant_override("separation", 8)
-        card.add_child(row)
+    var definition: Dictionary = ORIGINAL_GRIMOIRES.class_info(class_key)
+    var category := "passive" if passive else "active"
+    var items: Array = definition.get(category, [])
+    var target_count := 5 if passive else 4
+    if items.size() != target_count:
+        _page_container.add_child(_text("Каталог гримуаров PPA не загружен.", 10, Color("#F68C75")))
+        return
+    for raw in items:
+        var skill: Dictionary = raw
+        _draw_real_skill_card(skill, passive, str(definition.get("name", class_key)))
 
-        var icon := PanelContainer.new()
-        icon.custom_minimum_size = Vector2(58, 76)
-        icon.add_theme_stylebox_override("panel", _style_box(Color("#121416"), Color("#715936"), 6))
-        row.add_child(icon)
-        var lock := _text("🔒", 17, Color("#918476"))
-        lock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        lock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-        icon.add_child(lock)
+func _draw_real_skill_card(skill: Dictionary, passive: bool, class_title: String) -> void:
+    var card := PanelContainer.new()
+    card.name = "OriginalPPARealSkillCard"
+    card.custom_minimum_size.y = 100.0
+    card.add_theme_stylebox_override("panel", _style_box(Color("#17191B"), Color("#685235"), 7))
+    _page_container.add_child(card)
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 8)
+    card.add_child(row)
 
-        var content := VBoxContainer.new()
-        content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        content.add_theme_constant_override("separation", 4)
-        row.add_child(content)
-        content.add_child(_text("ПАССИВНЫЙ НАВЫК" if passive else "АКТИВНЫЙ НАВЫК", 9, Color("#8D8377")))
-        content.add_child(_text("Ожидание данных выбранного класса", 8, Color("#686D72")))
-        var meta := HBoxContainer.new()
-        meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        content.add_child(meta)
-        var pips := HBoxContainer.new()
-        pips.add_theme_constant_override("separation", 3)
-        meta.add_child(pips)
-        for rank in range(5):
-            var pip := PanelContainer.new()
-            pip.custom_minimum_size = Vector2(9, 9)
-            pip.add_theme_stylebox_override("panel", _style_box(Color("#151515"), Color("#655135"), 0))
-            pips.add_child(pip)
-        var flex := Control.new()
-        flex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        meta.add_child(flex)
-        meta.add_child(_text("закрыто", 7, Color("#777777")))
-        var upgrade := _button("НУЖЕН ГРИМУАР", 8)
-        upgrade.disabled = true
-        upgrade.custom_minimum_size.y = 24
-        upgrade.add_theme_stylebox_override("disabled", _style_box(Color("#111315"), Color("#3C4145"), 4))
-        content.add_child(upgrade)
+    var art_button := _button("", 8)
+    art_button.name = "OriginalPPARealGrimoireArt"
+    art_button.custom_minimum_size = Vector2(58, 76)
+    art_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+    art_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    art_button.clip_contents = true
+    art_button.add_theme_stylebox_override("normal", _style_box(Color("#090B0D"), Color("#715936"), 6))
+    art_button.pressed.connect(_open_grimoire_popup.bind(skill, passive, class_title))
+    row.add_child(art_button)
+    var art := _book_picture(str(skill.get("cardArt", "")), Vector2(58, 76))
+    art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    art.modulate = Color(0.75, 0.72, 0.77, 0.88)
+    art_button.add_child(art)
+    art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+    var info := VBoxContainer.new()
+    info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    info.add_theme_constant_override("separation", 4)
+    row.add_child(info)
+    var title := _text(str(skill.get("n", "")), 9, Color("#E4B650"))
+    title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    info.add_child(title)
+    var descrip := _text(
+        ("Пассивный навык" if passive else "Активный навык")
+        + " · Ранг: — · " + str((skill.get("preview", []) as Array)[0])
+        + " · книги I×— II×— III×—",
+        8, Color("#9CA1A5")
+    )
+    info.add_child(descrip)
+    var meta := HBoxContainer.new()
+    meta.add_theme_constant_override("separation", 5)
+    info.add_child(meta)
+    var pips := HBoxContainer.new()
+    pips.add_theme_constant_override("separation", 3)
+    meta.add_child(pips)
+    for rank in range(5):
+        var pip := PanelContainer.new()
+        pip.custom_minimum_size = Vector2(9, 9)
+        pip.add_theme_stylebox_override("panel", _style_box(Color("#151515"), Color("#655135"), 0))
+        pips.add_child(pip)
+    var spacer := Control.new()
+    spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    meta.add_child(spacer)
+    meta.add_child(_text("Ранг и книги: данные PPA", 7, Color("#777777")))
+
+    var ranks := HBoxContainer.new()
+    ranks.add_theme_constant_override("separation", 3)
+    info.add_child(ranks)
+    # Same three upgrade choices I/II/III and 30px height as live PPA.
+    # Disabled until we get true authoritative skillRanks/grimoires.
+    for br in ["I", "II", "III"]:
+        var b := _button(br + " ×—\n—%", 8)
+        b.name = "OriginalPPABookRankChoice"
+        b.disabled = true
+        b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        b.custom_minimum_size.y = 30
+        b.add_theme_stylebox_override("disabled", _style_box(Color("#211A13"), Color("#89551C"), 4))
+        b.add_theme_color_override("font_disabled_color", Color("#A68D69"))
+        ranks.add_child(b)
+    _original_skill_card_count += 1
+
+func _book_picture(path: String, dimensions: Vector2) -> TextureRect:
+    var picture := TextureRect.new()
+    picture.custom_minimum_size = dimensions
+    picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    if ResourceLoader.exists(path):
+        picture.texture = load(path) as Texture2D
+    return picture
+
+func _create_book_overlay() -> void:
+    _book_overlay = ColorRect.new()
+    _book_overlay.name = "OriginalPPAGrimoirePopup"
+    _book_overlay.color = Color(0, 0, 0, 0.73)
+    _book_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _book_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    _book_overlay.z_index = 20
+    _book_overlay.visible = false
+    _frame.add_child(_book_overlay)
+
+    _book_dialog = PanelContainer.new()
+    _book_dialog.anchor_left = 0.5
+    _book_dialog.anchor_right = 0.5
+    _book_dialog.anchor_top = 0.5
+    _book_dialog.anchor_bottom = 0.5
+    _book_dialog.offset_left = -142.5
+    _book_dialog.offset_right = 142.5
+    _book_dialog.offset_top = -250
+    _book_dialog.offset_bottom = 250
+    _book_dialog.mouse_filter = Control.MOUSE_FILTER_STOP
+    _book_dialog.add_theme_stylebox_override("panel", _style_box(Color("#1B1F22"), Color("#9A6424"), 10, 2))
+    _book_overlay.add_child(_book_dialog)
+    var book_margin := MarginContainer.new()
+    for side in ["margin_left", "margin_right"]:
+        book_margin.add_theme_constant_override(side, 9)
+    for side in ["margin_top", "margin_bottom"]:
+        book_margin.add_theme_constant_override(side, 9)
+    _book_dialog.add_child(book_margin)
+    var book_scroll := ScrollContainer.new()
+    book_scroll.name = "OriginalPPABookDetailsScroll"
+    book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    book_scroll.scroll_deadzone = 100000
+    book_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    book_margin.add_child(book_scroll)
+    _book_container = VBoxContainer.new()
+    _book_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _book_container.add_theme_constant_override("separation", 7)
+    book_scroll.add_child(_book_container)
+
+func _open_grimoire_popup(skill: Dictionary, passive: bool, class_title: String) -> void:
+    if _book_overlay == null:
+        return
+    for child in _book_container.get_children():
+        _book_container.remove_child(child)
+        child.queue_free()
+
+    var header := HBoxContainer.new()
+    _book_container.add_child(header)
+    var title := _text("ГРИМУАР · " + str(skill.get("n", "")), 11, Color("#C990FF"))
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    header.add_child(title)
+    var close := _button("✕", 15)
+    close.custom_minimum_size = Vector2(26, 26)
+    close.pressed.connect(func(): _book_overlay.visible = false)
+    header.add_child(close)
+
+    var hero := HBoxContainer.new()
+    hero.add_theme_constant_override("separation", 8)
+    _book_container.add_child(hero)
+    hero.add_child(_book_picture(str(skill.get("cardArt", "")), Vector2(64, 86)))
+    var textcol := VBoxContainer.new()
+    textcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    hero.add_child(textcol)
+    textcol.add_child(_text(str(skill.get("n", "")), 11, Color("#C990FF")))
+    textcol.add_child(_text(
+        ("Пассивный" if passive else "Активный") + " навык · " + class_title,
+        8, Color("#C990FF")
+    ))
+    textcol.add_child(_text("Ранг: —  / V", 8, Color("#A8A9AF")))
+    textcol.add_child(_text("Гримуары: — (сервер PPA)", 8, Color("#A8A9AF")))
+
+    var effect := PanelContainer.new()
+    effect.add_theme_stylebox_override("panel", _style_box(Color("#0D0A11"), Color("#493459"), 7))
+    _book_container.add_child(effect)
+    var effect_col := VBoxContainer.new()
+    effect.add_child(effect_col)
+    effect_col.add_child(_text("РОСТ НАВЫКА ПО РАНГАМ", 9, Color("#D9B86D")))
+    var previews: Array = skill.get("preview", [])
+    for idx in range(mini(3, previews.size())):
+        var label := PanelContainer.new()
+        label.add_theme_stylebox_override("panel", _style_box(Color("#0B0C0F"), Color("#343038"), 5))
+        effect_col.add_child(label)
+        var name := _text("Ранг " + ["I", "II", "III"][idx] + " · " + str(previews[idx]), 8, Color("#BFB2C9"))
+        label.add_child(name)
+    _book_container.add_child(_text("Книга I / II / III: шанс определяется текущим рангом навыка PPA.", 8, Color("#D8C28F")))
+    _book_container.add_child(_text("Ранги навыка и число книг будут показаны после синхронизации сохранения.", 8, Color("#A8A9AF")))
+
+    var act := _button("ИЗУЧИТЬ / УЛУЧШИТЬ · НУЖНЫ ДАННЫЕ PPA", 8)
+    act.disabled = true
+    act.custom_minimum_size.y = 32
+    act.add_theme_stylebox_override("disabled", _style_box(Color("#151219"), Color("#493459"), 5))
+    _book_container.add_child(act)
+    _book_overlay.visible = true
 
 func _draw_runes() -> void:
     _section("РУНЫ")
