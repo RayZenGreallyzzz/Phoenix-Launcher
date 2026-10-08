@@ -42,6 +42,7 @@ public final class PPAOriginalWebUI extends GodotPlugin {
     private static final String EVENT_NAME = "ppa_ui_event";
     private WebView browser;
     private volatile boolean showing = false;
+    private long openedAtNanos = 0L;
 
     public PPAOriginalWebUI(Godot godot) { super(godot); }
 
@@ -58,7 +59,10 @@ public final class PPAOriginalWebUI extends GodotPlugin {
 
     @UsedByGodot
     public void showCharacter(String className, int initialPage) {
-        final String safeClassName = className == null ? "ГЕРОЙ" : className;
+        // The native visual-class key is NOT the Telegram character's actual
+        // saved profession. Until a verified player snapshot arrives,
+        // this title is only the currently selected 3D test model.
+        final String safeClassName = sourceClassLabel(className);
         final int page = Math.max(0, Math.min(4, initialPage));
         runOnHostThread(() -> {
             final Activity activity = getActivity();
@@ -120,6 +124,7 @@ public final class PPAOriginalWebUI extends GodotPlugin {
                         ViewGroup.LayoutParams.MATCH_PARENT);
                 root.addView(browser, bounds);
                 showing = true;
+                openedAtNanos = System.nanoTime();
                 browser.loadDataWithBaseURL(BASE_URL,
                         buildHostDocument(original, safeClassName, page),
                         "text/html", "UTF-8", null);
@@ -157,6 +162,21 @@ public final class PPAOriginalWebUI extends GodotPlugin {
         }
     }
 
+    private static String sourceClassLabel(String key) {
+        if (key == null) return "ГЕРОЙ";
+        switch (key.toLowerCase(java.util.Locale.ROOT)) {
+            case "tank": return "СТРАЖ";
+            case "barbarian": return "ВАРВАР";
+            case "paladin": return "ПАЛАДИН";
+            case "gnome": return "ГНОМ · КАНОНИР";
+            case "archer": return "ЛУЧНИК";
+            case "mage": return "МАГ";
+            case "assassin": return "АССАСИН";
+            case "priest": return "ЖРЕЦ";
+            default: return "ГЕРОЙ";
+        }
+    }
+
     private static String htmlAttribute(String text) {
         return text.replace("&", "&amp;").replace("\"", "&quot;")
                 .replace("<", "&lt;").replace(">", "&gt;");
@@ -176,20 +196,43 @@ public final class PPAOriginalWebUI extends GodotPlugin {
                 "@media(orientation:landscape) and (max-height:500px){#charFrame{width:min(48vw,410px);height:94dvh}}" +
                 "@media(orientation:landscape) and (max-height:620px){#charFrame{left:0;top:0;transform:none;" +
                 "width:100vw;height:100dvh;max-width:none;max-height:none;border-radius:0}}" +
-                "</style><script>window.addEventListener('message',function(e){" +
+                "</style><script>(function(){'use strict';" +
+                "var initialPage=" + page + ";var className=" + JSONObject.quote(className) + ";" +
+                "var pageApplied=false;" +
+                "function tell(type){PPA_NATIVE.deliver(JSON.stringify({type:type}));}" +
+                "function sendClass(){" +
+                "var frame=document.getElementById('charFrame');" +
+                "if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'setClass',name:className},'*');}" +
+                "function selectPageAfterOriginalBoot(){" +
+                "if(pageApplied)return;pageApplied=true;" +
+                // The original PPA srcdoc itself calls go(0) 300 ms after
+                // loading. Request navigation only AFTER that original
+                // initialization; we do not patch any original JS or CSS.
+                "if(initialPage===0)return;" +
+                "window.setTimeout(function(){" +
+                "var f=document.getElementById('charFrame');" +
+                "if(f&&f.contentWindow&&typeof f.contentWindow.go==='function')" +
+                "f.contentWindow.go(initialPage);" +
+                "},370);" +
+                "}" +
+                "window.addEventListener('message',function(e){" +
                 "var f=document.getElementById('charFrame');" +
                 "if(!f||e.source!==f.contentWindow)return;" +
                 "var d=e.data||{};if(typeof d.type!=='string')return;" +
-                "if(['closeChar','charReady','charPageChanged'].includes(d.type)){" +
-                "PPA_NATIVE.deliver(JSON.stringify({type:d.type}));}" +
-                "});function showPage(){" +
-                "var f=document.getElementById('charFrame');if(!f||!f.contentWindow)return;" +
-                "f.contentWindow.postMessage({type:'setClass',name:" + JSONObject.quote(className) + "},'*');" +
-                "try{if(typeof f.contentWindow.go==='function')f.contentWindow.go(" + page + ");}catch(_ignored){}" +
-                "PPA_NATIVE.deliver('{\"type\":\"charReady\"}');" +
-                "}function closePpa(){PPA_NATIVE.deliver('{\"type\":\"closeChar\"}');}</script></head>" +
+                "if(d.type==='charReady'){" +
+                "sendClass();selectPageAfterOriginalBoot();tell('charReady');return;}" +
+                "if(d.type==='closeChar'){tell('closeChar');return;}" +
+                // Original PPA menu emits charRequestState whenever pages
+                // switch. It is deliberately unanswered until the real
+                // authenticated state bridge is ready. Empty server data
+                // must never be confused with fabricated test inventory.
+                "if(d.type==='charRequestState'){tell('stateRequested');return;}" +
+                "});" +
+                "window.closePpa=function(){tell('closeChar');};" +
+                "window.onPpaFrameLoad=function(){sendClass();};" +
+                "})();</script></head>" +
                 "<body><div id=\"shade\" onclick=\"closePpa()\"></div>" +
-                "<iframe id=\"charFrame\" title=\"Персонаж\" onload=\"showPage()\" srcdoc=\"" +
+                "<iframe id=\"charFrame\" title=\"Персонаж\" onload=\"onPpaFrameLoad()\" srcdoc=\"" +
                 htmlAttribute(original) + "\"></iframe></body></html>";
     }
 
@@ -203,6 +246,11 @@ public final class PPAOriginalWebUI extends GodotPlugin {
         browser = null;
         showing = false;
         if (previous == null) return;
+        if (openedAtNanos > 0L) {
+            final long elapsedMs = Math.max(0L, (System.nanoTime() - openedAtNanos) / 1_000_000L);
+            Log.i(TAG, "PPA_ORIGINAL_WEBVIEW_LIFETIME_MS " + elapsedMs);
+            openedAtNanos = 0L;
+        }
         ViewGroup owner = (ViewGroup) previous.getParent();
         if (owner != null) owner.removeView(previous);
         previous.removeJavascriptInterface("PPA_NATIVE");
@@ -220,7 +268,7 @@ public final class PPAOriginalWebUI extends GodotPlugin {
                 String type = object.optString("type", "");
                 if ("closeChar".equals(type)) {
                     runOnHostThread(PPAOriginalWebUI.this::closeFromPage);
-                } else if ("charReady".equals(type) || "charPageChanged".equals(type)) {
+                } else if ("charReady".equals(type) || "stateRequested".equals(type)) {
                     emitSignal(EVENT_NAME, type);
                 }
                 // No iframe action ever changes accounts, inventory, books,
