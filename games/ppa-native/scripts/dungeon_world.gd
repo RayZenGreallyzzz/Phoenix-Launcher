@@ -337,6 +337,9 @@ func _animate_preview_enemies(dt: float) -> void:
             proposed = pos
         state["pos"] = proposed
         node.position = proposed
+        # Reuse the authentic live 4x4 directional run sheet, with no per-frame
+        # texture decoding. The existing 24-visible-mob cap stays unchanged.
+        node.call("set_motion", proposed - pos, proposed.distance_squared_to(pos) > 0.01)
         node.call("set_aggro", aggro)
         node.call("set_attack", aggro and distance < 80.0)
         _enemy_active[key] = state
