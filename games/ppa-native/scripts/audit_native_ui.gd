@@ -6,6 +6,7 @@ const WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const NPCS = preload("res://scripts/test_city_npcs.gd")
 const CATALOG = preload("res://scripts/test_shop_catalog.gd")
 const CANONICAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
+const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 
 func _initialize() -> void:
     call_deferred("_run")
@@ -371,12 +372,86 @@ func _run() -> void:
         push_error("PPA_PORTRAIT_UI: NPC frame is clipped or tab strip missing: " + str(Vector2(frame_width, frame_height)))
         quit(1)
         return
-    if npc_ui._tabs is HFlowContainer or npc_ui._tabs.get_child_count() != 9:
-        push_error("PPA_PORTRAIT_UI: clan categories are not horizontally scrollable")
+    if not (npc_ui._tabs is GridContainer) or npc_ui._tabs.columns != 3 or npc_ui._tabs.get_child_count() != 9:
+        push_error("PPA_PORTRAIT_UI: all nine clan tabs must be visible in a 3x3 grid")
+        quit(1)
+        return
+    if npc_ui._tab_scroller.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+        push_error("PPA_CLAN_TABS: sideways hidden tabs remain in portrait")
+        quit(1)
+        return
+    if npc_ui._tabs.find_child("NpcTab_exchange", false, false) == null:
+        push_error("PPA_CLAN_EXCHANGE: exchange tab is missing")
+        quit(1)
+        return
+    npc_ui._select_tab("exchange")
+    if not npc_ui._heading.text.contains("КЛАН") or not npc_ui._body.find_children("ServerActionLocked", "Button", true, false).size():
+        push_error("PPA_CLAN_EXCHANGE: exchange page did not render or mutate action unlocked")
+        quit(1)
+        return
+    npc_ui._select_tab("storage")
+    if npc_ui._body.find_child("NpcStorageGrid_clan", true, false) == null:
+        push_error("PPA_CLAN_STORAGE: 500-slot clan storage page not displayed")
+        quit(1)
+        return
+    if npc_ui.find_children("NpcStorageCell_clan_*", "PanelContainer", true, false).size() != STORAGE.PAGE_SIZE:
+        push_error("PPA_CLAN_STORAGE: must render only 20 slots on each page")
+        quit(1)
+        return
+    npc_ui._storage_page("clan", 99)
+    if int(npc_ui._storage_pages["clan"]) != 24 or npc_ui.find_child("NpcStorageCell_clan_499", true, false) == null:
+        push_error("PPA_CLAN_STORAGE: last page (481–500) absent or page index exceeded")
+        quit(1)
+        return
+    var clan_next: Button = npc_ui.find_child("NpcStorageNext_clan", true, false)
+    if clan_next == null or not clan_next.disabled:
+        push_error("PPA_CLAN_STORAGE: next must be disabled on final page")
+        quit(1)
+        return
+    menu.open_npc(NPCS.NPCS[1])
+    var capacities := {"inventory":100, "personal":200, "clan":500, "premium":50}
+    for scope in capacities.keys():
+        if STORAGE.capacity(scope) != int(capacities[scope]):
+            push_error("PPA_STORAGE_CONTRACT: incorrect capacity: " + scope)
+            quit(1)
+            return
+    for scope in ["personal", "clan", "premium"]:
+        npc_ui._select_tab(scope)
+        if npc_ui.find_child("NpcStorageGrid_inventory", true, false) == null or npc_ui.find_child("NpcStorageGrid_" + scope, true, false) == null:
+            push_error("PPA_STORAGE_UI: inventory or warehouse grid missing in " + scope)
+            quit(1)
+            return
+        var last_page := STORAGE.pages(scope) - 1
+        npc_ui._storage_page(scope, 99)
+        if int(npc_ui._storage_pages.get(scope, -1)) != last_page:
+            push_error("PPA_STORAGE_UI: page bound wrong " + scope)
+            quit(1)
+            return
+        var cells := npc_ui.find_children("NpcStorageCell_" + scope + "_*", "PanelContainer", true, false)
+        if cells.size() != STORAGE.visible_slots(scope, last_page):
+            push_error("PPA_STORAGE_UI: last-page cell count wrong " + scope)
+            quit(1)
+            return
+        if npc_ui.find_child("NpcStorageCell_" + scope + "_" + str(STORAGE.capacity(scope) - 1), true, false) == null:
+            push_error("PPA_STORAGE_UI: last slot missing " + scope)
+            quit(1)
+            return
+    var local_items: Array = []
+    for i in range(251):
+        local_items.append({"id":"ci_slot_" + str(i), "name":"Preview %s" % i})
+    if menu.stash._filter(local_items, menu.stash.MAX_BAG).size() != 100 or menu.stash._filter(local_items, menu.stash.MAX_WAREHOUSE).size() != 200:
+        push_error("PPA_TEST_STASH_CAPACITY: local 64-slot truncation remains")
         quit(1)
         return
     npc_ui.size = Vector2(1280.0, 720.0)
     npc_ui._fit()
+    menu.open_npc(NPCS.NPCS[4])
+    if npc_ui._tabs.columns != 5 or npc_ui._tabs.get_child_count() != 9:
+        push_error("PPA_CLAN_LANDSCAPE: nine tabs must fit in two rows")
+        quit(1)
+        return
+    print("PPA_STORAGE_CAPACITY_OK bag=100 personal=200 clan=500 premium=50 last_pages=verified rendered_per_panel=20")
+    print("PPA_CLAN_EXCHANGE_VISIBLE_OK portrait=3x3 landscape=5x2")
     print("PPA_TELEGRAM_NPC_PARITY_OK clan=9 forge=6 storage=4 arena=5 portrait=1")
 
 
