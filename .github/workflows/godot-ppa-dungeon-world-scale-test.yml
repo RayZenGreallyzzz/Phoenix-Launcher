@@ -1,8 +1,8 @@
-name: Build install-over Godot PPA test APK (direct download)
+name: Build Godot PPA 21-40 and 41-60 test APK (direct download)
 
 on:
   push:
-    branches: [ "test/godot-direct-apk-mobs-20261009" ]
+    branches: [ "test/godot-dungeon-tiers-21-60-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -121,9 +121,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_CODE=$((500000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="0.2.${GITHUB_RUN_NUMBER}-godot-mobs-test"
-          test "$VERSION_CODE" -gt 410000
+          VERSION_CODE=$((600000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.3.${GITHUB_RUN_NUMBER}-mob-tiers-1-60"
+          test "$VERSION_CODE" -gt 500042
           grep -q '^package/unique_name="com.phoenixgames.ppa"$' games/ppa-native/export_presets.cfg
           grep -q '^package/name="Phoenix Pix Arena"$' games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
@@ -347,6 +347,7 @@ jobs:
           timeout 110s godot --headless --path . --script res://scripts/audit_native_dungeon.gd 2>&1 | tee /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_WALK_TEST_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_ENEMIES_TEST_OK" /tmp/ppa-dungeon-test.log
+          grep -q "PPA_DUNGEON_2160_REUSE_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_LEGACY_ART_DISABLED_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
@@ -414,7 +415,7 @@ jobs:
       - name: Upload signed test APK as backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Godot-Direct-Test-APK-ZIP
+          name: PhoenixPixArena-Godot-21-60-Test-APK-ZIP
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -433,7 +434,7 @@ jobs:
           DIGEST="$(sha256sum "build/$APP" | cut -d" " -f1)"
           test "$SIZE" -gt 100000000
           echo "Build ${PPA_VERSION_NAME} | code ${PPA_VERSION_CODE} | SHA256 $DIGEST | bytes $SIZE" > build/direct-test-notes.txt
-          echo "Separate test APK installed over PPA (com.phoenixgames.ppa); server integration not yet active." >> build/direct-test-notes.txt
+          echo "Separate visual QA with all three monster tiers (1-20, 21-40, 41-60). Installs over PPA, still no server sync." >> build/direct-test-notes.txt
           echo "NOT an update for Phoenix Launcher, and NOT on ppa-native-stable." >> build/direct-test-notes.txt
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PPA Godot Direct Test" --notes-file build/direct-test-notes.txt --latest=false

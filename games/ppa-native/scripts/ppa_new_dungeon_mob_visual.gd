@@ -1,7 +1,8 @@
 extends Node2D
 
-# Approved 1-20 mob names are taken from the current PPA video, not from
-# old 2026-09 art posters. Artwork itself remains gated until verified.
+# Live PPA's 60 levels share ONE 20-species visual set. The gameplay client
+# uses baseLvl and raises display levels by +20 and +40; DO NOT make up 40
+# new monster sprites. Archetype tags modify PPA stats, not the source art.
 # Every PNG belongs in res://assets/dungeon_new_mobs/; never fall back to
 # DUNGEON_MOB_SPRITES or the legacy original_dungeon_mob_XX.png assets.
 const NEW_MOBS := [
@@ -84,18 +85,29 @@ static func artwork_complete() -> bool:
         return false
     return available_count() == required_file_count()
 
-static func art_index_for_spawn(level: int, _spawn_id: int) -> int:
-    if level < 1 or level > NEW_MOBS.size():
+static func base_level_for(level: int) -> int:
+    if level < 1 or level > 60:
         return -1
-    # A whole level has one mob KIND, not a random creature from a five-level tier.
-    return level - 1
+    return ((level - 1) % NEW_MOBS.size()) + 1
+
+static func archetype_for(level: int, room_ordinal: int) -> String:
+    if level < 21 or level > 60:
+        return ""
+    return ["ЖИВУЧИЙ", "БРОНИРОВАННЫЙ", "БЕРСЕРК"][posmod(room_ordinal, 3)]
+
+static func art_index_for_spawn(level: int, _spawn_id: int) -> int:
+    var base_level := base_level_for(level)
+    if base_level < 1:
+        return -1
+    return base_level - 1
 
 static func sprite_filename_for_spawn(level: int, spawn_id: int) -> String:
-    if level < 1 or level > NEW_MOBS.size():
+    var base_level := base_level_for(level)
+    if base_level < 1:
         return ""
-    if level == 4:
+    if base_level == 4:
         return SLIME_VARIANTS[posmod(spawn_id, SLIME_VARIANTS.size())]
-    return String(NEW_MOBS[level - 1])
+    return String(NEW_MOBS[base_level - 1])
 
 func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void:
     if boss:
@@ -105,8 +117,9 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
         visible = false
         return
     selected_level = level
-    if level < 1 or level > 20:
-        push_error("PPA_NEW_DUNGEON_LEVEL_ART_PENDING: " + str(level))
+    var base_level := base_level_for(level)
+    if base_level < 1:
+        push_error("PPA_DUNGEON_OUT_OF_RANGE: " + str(level))
         visible = false
         return
     var kind := art_index_for_spawn(level, _index)
@@ -125,11 +138,11 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
         return
     # Use ORIGINAL PPA sheets with 4 directional rows x 4 run frames,
     # not a synthetic 112x112 cropped static mob.
-    var is_slime := level == 4
+    var is_slime := base_level == 4
     var cols := 1 if is_slime else 4
     var rows := 1 if is_slime else 4
     var fw := 165 if is_slime else 192
-    var fh := 112 if level == 2 else 160
+    var fh := 112 if base_level == 2 else 160
     if tex.get_width() != fw * cols or tex.get_height() != fh * rows:
         visible = false
         push_error("PPA_LIVE_MOB_SHEET_SIZE_CHANGED: " + resource_path)
@@ -141,7 +154,7 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
     image_sprite.centered = true
     image_sprite.hframes = cols
     image_sprite.vframes = rows
-    var target_height := float(DISPLAY_HEIGHT[level - 1])
+    var target_height := float(DISPLAY_HEIGHT[base_level - 1])
     var zoom := minf(88.0 / float(fw), target_height / float(fh))
     image_sprite.scale = Vector2.ONE * zoom
     image_sprite.position = Vector2(0.0, -target_height * 0.5)
@@ -155,7 +168,7 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
         _frame_count = 4
         # The spider uses its own source timing, so only its QA playback
         # defaults to 120ms; all other delays are read from live MOB_ANIM_PACKS.
-        _frame_delay = 0.12 if level == 2 else float(FRAME_MS[level - 1]) / 1000.0
+        _frame_delay = 0.12 if base_level == 2 else float(FRAME_MS[base_level - 1]) / 1000.0
     add_child(image_sprite)
 
 func set_motion(delta_pos: Vector2, moved: bool) -> void:

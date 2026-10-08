@@ -1,0 +1,27 @@
+name: Audit live dungeon monster levels 21-60
+on:
+  push:
+    branches: [ "test/godot-dungeon-tiers-21-60-20261009" ]
+    paths:
+      - "games/ppa-native/tools/audit_live_dungeon_tiers_21_60.py"
+      - ".github/workflows/audit-dungeon-tiers-21-60.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deployed PPA 21-60 mob selection, no source changes
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/audit_live_dungeon_tiers_21_60.py > /tmp/ppa-21-60.txt
+          cat /tmp/ppa-21-60.txt
+          grep -q 'PPA_READONLY_TIER_ANALYSIS_OK' /tmp/ppa-21-60.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PPA-live-dungeon-tiers-21-60-raw-audit
+          path: audit-output/tier21-60/tier-debug.json
+          retention-days: 5
