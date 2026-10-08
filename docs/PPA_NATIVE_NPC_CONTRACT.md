@@ -20,3 +20,19 @@
 - Tabs and item inspection work without touching currency or test bag. Disabled server commands cannot change local inventory.
 - Landscape and portrait tablet layouts must be inspected manually; CI headless checks structure and navigation, not final device visual quality.
 - Build APK only from the separate NPC test workflow. Do not publish to the launcher release channel before user approves.
+
+## Telegram menu parity / dual orientation (2026-10-08)
+Compared against owner-provided screenshots from the live Telegram PPA (not conjectural stock). The native Godot UI now includes:
+- **Clan:** overview, clans/ranking, participants, clan warehouse, exchange, bosses, bonuses, wars/citadel, journal (9 horizontally scrollable tabs).
+- **Forge:** enhancement, equipment, legendary, accessories, pets, rune fusion (from the separate rune bag).
+- **Storage:** personal, clan, premium, sorting; inventory and storage displayed in distinct slot regions.
+- **Arena:** challenges (endless waves, AI, PvP, season), attempts, rating, arena store, match history.
+- **Dungeon keeper:** three floor ranges, quest tier selector (1–20, 21–30, 31–40, daily), bosses, loot. The 21–30 quest names are *reference labels* from user screenshots; progress/reward fulfillment remain unconnected.
+- **Auction:** buy/sell/my listings and Telegram-style item categories.
+- **Black market:** existing categories plus buyback; static reference items are never mislabeled as live offers.
+- **Fart-zone miner:** entrance, ordinary and legendary pickaxe, slag, guards.
+- **Merchant:** retains 12 original catalog items, no fabricated balance or stock.
+
+Android project `display/window/handheld/orientation=6` (SCREEN_SENSOR) and stretch aspect `expand`. A square 720×720 reference viewport supports portrait and landscape while preserving the desktop 1280×720 override. NPC category tabs use one horizontal scroll row, the character menu already sizes from viewport, and the class selector stacks its preview above the choices in portrait. Gameplay city/camera/3D viewport already read dynamic Control size. Automatic rotation still depends on Android's auto-rotate setting and actual device behavior; headless checks alone cannot prove tablet sensor behavior.
+
+Only navigation, descriptions and *read-only* catalog controls work before server integration. Mutating controls are disabled. Do not transfer quest completion, clan permissions, balances or actual warehouse content by copying labels from screenshots.
