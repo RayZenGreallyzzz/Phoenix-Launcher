@@ -12,5 +12,5 @@ android {
 }
 dependencies {
     // Godot Android library is already provided by the export template.
-    compileOnly 'org.godotengine:godot:4.6.stable'
+    compileOnly 'org.godotengine:godot:4.6.1.stable'
 }
