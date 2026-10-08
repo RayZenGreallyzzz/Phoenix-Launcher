@@ -23,3 +23,15 @@ The current backend stores **one** authoritative player/profile/save per Telegra
 
 ## Publishing
 The native Android CI build verifies image, GLB, splash imports and APK signature. It stamps a monotonically increasing Android versionCode, and publishes the verified game APK to the Phoenix Launcher beta update release channel after a successful build. Launcher updates install through the Android package installer (with explicit confirmation).
+
+## Character screen — five Godot pages (native Android pilot)
+The Android character menu now defaults to the same native Godot screen used for desktop visual tests; it does **not** require WebView to open. The five pages follow Telegram PPA's structure and navigation:
+1. Inventory — equipment around the portrait, cosmetics, 5-column bag and locked slots.
+2. Characteristics — level/XP, stat rows, stat distribution and rebirth controls.
+3. Active skills — four grimoire slots with five rank indicators.
+4. Passive skills — five grimoire slots with five rank indicators.
+5. Runes — rune sockets and rune bag preview.
+
+Left/right arrows, five dots and horizontal swipes change pages. Vertical swipes scroll the current page. These are **UI-only previews** until an authenticated PPA character snapshot and server mutations are connected. Local TEST stash/warehouse are not Telegram PPA saves; unavailable progress, skill ranks and prices must not be invented.
+
+The old original-iframe Android WebView experiment remains packaged for A/B comparison only: set `ppa/ui/use_original_webview=true` in `project.godot` for an explicit test build. Both interfaces are never displayed simultaneously.
