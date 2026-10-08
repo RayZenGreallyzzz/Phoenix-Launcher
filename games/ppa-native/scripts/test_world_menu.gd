@@ -487,91 +487,301 @@ func _open_service_by_id(id: String) -> void:
             open_npc(npc)
             return
 
+# Reuses the SAME native window as character, warehouse and every NPC;
+# never spawns a secondary shop or translucent overlay over another one.
 func _show_shop() -> void:
     var service := str(nearby_npc.get("service", ""))
-    var goods: Array = SHOP_CATALOG.goods(service)
-    _line(str(nearby_npc.get("name", "МАГАЗИН")) + "     УЧЕБНЫЕ МОНЕТЫ: " + str(stash.coins), false, true)
-    _line("Каталог для проверки интерфейса. Цены и покупки только тестовые; реальное золото и PPA не расходуются.", true)
-    _spacer()
-    var grid := GridContainer.new()
-    grid.columns = 4
-    grid.add_theme_constant_override("h_separation", 9)
-    grid.add_theme_constant_override("v_separation", 9)
-    _list.add_child(grid)
-    for item in goods:
-        var product: Dictionary = item
-        var panel := PanelContainer.new()
-        panel.custom_minimum_size = Vector2(177, 153)
-        var style := _button_style(Color("#17212A"))
-        style.border_color = SHOP_CATALOG.rarity_tint(str(product.get("rarity", "common")))
-        panel.add_theme_stylebox_override("panel", style)
-        grid.add_child(panel)
-        var column := VBoxContainer.new()
-        column.add_theme_constant_override("separation", 4)
-        panel.add_child(column)
-        var item_name := Label.new()
-        item_name.text = str(product.get("short", "")) + "  " + str(product.get("name", ""))
-        item_name.add_theme_font_size_override("font_size", 12)
-        item_name.add_theme_color_override("font_color", SHOP_CATALOG.rarity_tint(str(product.get("rarity", "common"))))
-        item_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-        column.add_child(item_name)
-        var description := Label.new()
-        description.text = str(product.get("description", ""))
-        description.add_theme_font_size_override("font_size", 10)
-        description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-        description.size_flags_vertical = Control.SIZE_EXPAND_FILL
-        column.add_child(description)
-        var price := Label.new()
-        price.text = str(product.get("price", 0)) + " МОНЕТ"
-        price.add_theme_font_size_override("font_size", 11)
-        price.add_theme_color_override("font_color", Color("#F7C176"))
-        column.add_child(price)
-        var buy := Button.new()
-        buy.text = "КУПИТЬ · ТЕСТ"
-        buy.custom_minimum_size = Vector2(0, 32)
-        buy.disabled = stash.coins < int(product.get("price", 0))
-        buy.add_theme_font_size_override("font_size", 11)
-        buy.pressed.connect(_buy_demo_item.bind(product))
-        column.add_child(buy)
-    _spacer()
-    _line("Приобретённые учебные вещи сразу появятся в общей сумке.", true)
-    var open_bag := Button.new()
-    open_bag.text = "ОТКРЫТЬ СУМКУ"
-    open_bag.custom_minimum_size = Vector2(0, 40)
-    open_bag.pressed.connect(open_page.bind("bag"))
-    _list.add_child(open_bag)
+    if service == "merchant":
+        _show_canonical_merchant()
+    elif service == "blackmarket":
+        _show_canonical_black_market()
+    else:
+        _line("Это не магазин PPA.", true)
 
-func _buy_demo_item(item: Dictionary) -> void:
-    var message: String = stash.buy_test_item(item)
+func _set_merchant_tab(tab: String) -> void:
+    _merchant_tab = tab
+    _merchant_selected = ""
+    _shop_qty = 1
     _refresh()
-    _notice.text = message
+
+func _select_merchant_item(id: String) -> void:
+    _merchant_selected = id
+    _shop_qty = 1
+    _refresh()
+
+func _adjust_merchant_quantity(change: int) -> void:
+    _shop_qty = clampi(_shop_qty + change, 1, 999)
+    _refresh()
+
+func _catalog_picture(path: String, size_px: float) -> TextureRect:
+    var picture := TextureRect.new()
+    picture.custom_minimum_size = Vector2(size_px, size_px)
+    picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    if ResourceLoader.exists(path):
+        picture.texture = load(path) as Texture2D
+    return picture
+
+func _show_canonical_merchant() -> void:
+    _title.text = "ЛАВКА ТОРГОВЦА"
+    _line("ЛАВКА ТОРГОВЦА", false, true)
+    _line("ВСЕ ПОКУПКИ · ТОЛЬКО ЗА GOLD", true)
+    var tabs := HBoxContainer.new()
+    tabs.add_theme_constant_override("separation", 8)
+    _list.add_child(tabs)
+    for entry in SHOP_CATALOG.MERCHANT_TABS:
+        var key := str(entry.get("key", ""))
+        var button := _action(tabs, str(entry.get("label", "")), _set_merchant_tab.bind(key))
+        button.modulate = Color("#FFD395") if key == _merchant_tab else Color("#A7B0B7")
+    _spacer()
+
+    var contents := HBoxContainer.new()
+    contents.add_theme_constant_override("separation", 16)
+    _list.add_child(contents)
+    var items_left := VBoxContainer.new()
+    items_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    contents.add_child(items_left)
+    var products: Array = []
+    for raw in SHOP_CATALOG.MERCHANT:
+        if str(raw.get("tab", "")) == _merchant_tab:
+            products.append(raw)
+    var count_label := Label.new()
+    count_label.text = str(products.size()) + " товаров"
+    count_label.add_theme_color_override("font_color", Color("#BEAA8A"))
+    items_left.add_child(count_label)
+    var grid := GridContainer.new()
+    grid.columns = 3
+    grid.add_theme_constant_override("h_separation", 7)
+    grid.add_theme_constant_override("v_separation", 7)
+    items_left.add_child(grid)
+    for raw in products:
+        var product: Dictionary = raw
+        var tile := PanelContainer.new()
+        tile.custom_minimum_size = Vector2(154.0, 146.0)
+        tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        tile.add_theme_stylebox_override("panel", _button_style(Color("#10171B")))
+        grid.add_child(tile)
+        var stack := VBoxContainer.new()
+        stack.add_theme_constant_override("separation", 3)
+        tile.add_child(stack)
+        stack.add_child(_catalog_picture(str(product.get("img", "")), 63.0))
+        var name := Label.new()
+        name.text = str(product.get("name", ""))
+        name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        name.add_theme_font_size_override("font_size", 11)
+        stack.add_child(name)
+        var price := str(product.get("price", 0)) + (" PPA" if str(product.get("currency", "gold")) == "ppa" else " Gold")
+        var select := Button.new()
+        select.text = price
+        select.custom_minimum_size = Vector2(0, 30)
+        select.add_theme_font_size_override("font_size", 12)
+        select.pressed.connect(_select_merchant_item.bind(str(product.get("id", ""))))
+        stack.add_child(select)
+
+    var detail := PanelContainer.new()
+    detail.custom_minimum_size = Vector2(337.0, 360.0)
+    detail.add_theme_stylebox_override("panel", _button_style(Color("#0C1013")))
+    contents.add_child(detail)
+    var detail_col := VBoxContainer.new()
+    detail_col.add_theme_constant_override("separation", 9)
+    detail.add_child(detail_col)
+    var selected: Dictionary = {}
+    for product in SHOP_CATALOG.MERCHANT:
+        if str(product.get("id", "")) == _merchant_selected:
+            selected = product
+            break
+    if selected.is_empty():
+        var label := Label.new()
+        label.text = "ВЫБЕРИТЕ ТОВАР"
+        label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        label.add_theme_font_size_override("font_size", 18)
+        label.add_theme_color_override("font_color", Color("#F0C166"))
+        detail_col.add_child(label)
+        detail_col.add_child(_catalog_picture("", 118.0))
+        var message := Label.new()
+        message.text = "Нажми на товар слева, чтобы узнать его настоящую цену и описание PPA."
+        message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        detail_col.add_child(message)
+    else:
+        detail_col.add_child(_catalog_picture(str(selected.get("img", "")), 108.0))
+        var item_title := Label.new()
+        item_title.text = str(selected.get("name", ""))
+        item_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        item_title.add_theme_color_override("font_color", Color("#F0C166"))
+        item_title.add_theme_font_size_override("font_size", 16)
+        detail_col.add_child(item_title)
+        var text_desc := Label.new()
+        text_desc.text = str(selected.get("desc", ""))
+        text_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        text_desc.add_theme_font_size_override("font_size", 12)
+        detail_col.add_child(text_desc)
+        var currency := " PPA" if str(selected.get("currency", "gold")) == "ppa" else " Gold"
+        var unit_price := int(selected.get("price", 0))
+        var price_label := Label.new()
+        price_label.text = "Цена: " + str(unit_price) + currency + " / шт."
+        price_label.add_theme_color_override("font_color", Color("#F0C166"))
+        detail_col.add_child(price_label)
+        var own := Label.new()
+        own.text = "У вас: — (серверный инвентарь не загружен)"
+        own.add_theme_font_size_override("font_size", 11)
+        detail_col.add_child(own)
+        var qty_row := HBoxContainer.new()
+        detail_col.add_child(qty_row)
+        _action(qty_row, "−", _adjust_merchant_quantity.bind(-1))
+        var qty := Label.new()
+        qty.text = "×" + str(_shop_qty)
+        qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        qty_row.add_child(qty)
+        _action(qty_row, "+", _adjust_merchant_quantity.bind(1))
+        var total := Label.new()
+        total.text = "Итого: " + str(unit_price * _shop_qty) + currency
+        detail_col.add_child(total)
+        var buy := Button.new()
+        buy.text = "КУПИТЬ · ТРЕБУЕТСЯ СИНХРОНИЗАЦИЯ PPA"
+        buy.disabled = true
+        buy.custom_minimum_size = Vector2(0, 45)
+        detail_col.add_child(buy)
+    _spacer()
+    _line("🪙 Gold: —        ◆ Gram: —        ◉ PPA: —", true)
+    _notice.text = "ОРИГИНАЛЬНЫЕ 12 ТОВАРОВ И ЦЕНЫ PPA · ПОКУПКИ ВРЕМЕННО ЗАБЛОКИРОВАНЫ"
+
+func _set_market_category(key: String) -> void:
+    _market_category = key
+    _refresh()
+
+func _show_canonical_black_market() -> void:
+    _title.text = "БЛЕК МАРКЕТ"
+    _line("БЛЕК МАРКЕТ     ·     редкие товары · закрытые сделки", false, true)
+    _line("Оригинальный рынок PPA · ассортимент и лимиты зависят от серверного сохранения, обновление каждые 24 часа.", true)
+    _spacer()
+    var tabs := HBoxContainer.new()
+    _list.add_child(tabs)
+    var shop_label := _action(tabs, "ТОВАРЫ", _set_market_category.bind("all"))
+    shop_label.modulate = Color("#F2BAB5")
+    var buyback := Button.new()
+    buyback.text = "СКУПКА · ДАННЫЕ СЕРВЕРА"
+    buyback.disabled = true
+    buyback.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    tabs.add_child(buyback)
+
+    var categories := GridContainer.new()
+    categories.columns = 4
+    categories.add_theme_constant_override("h_separation", 6)
+    categories.add_theme_constant_override("v_separation", 6)
+    _list.add_child(categories)
+    for entry in SHOP_CATALOG.BM_CATEGORIES:
+        var key := str(entry.get("key", ""))
+        var button := _action(categories, str(entry.get("label", "")), _set_market_category.bind(key))
+        button.modulate = Color("#FFD2D2") if key == _market_category else Color("#9E8D91")
+    _spacer()
+    _line("БАЗОВЫЕ ПРЕДЛОЖЕНИЯ ИЗ PPA", false, true)
+    _line("Ниже показаны только постоянные позиции из исходного алгоритма. Случайные лоты и состояние «куплено» без сохранения игрока не подменяем.", true)
+    var grid := GridContainer.new()
+    grid.columns = 3
+    _list.add_child(grid)
+    var found := 0
+    for raw in SHOP_CATALOG.BLACK_MARKET_REFERENCE:
+        var item: Dictionary = raw
+        if _market_category != "all" and str(item.get("category", "")) != _market_category:
+            continue
+        found += 1
+        var tile := PanelContainer.new()
+        tile.custom_minimum_size = Vector2(230, 146)
+        var style := _button_style(Color("#160D12"))
+        style.border_color = Color("#71363C")
+        tile.add_theme_stylebox_override("panel", style)
+        grid.add_child(tile)
+        var stack := VBoxContainer.new()
+        stack.add_theme_constant_override("separation", 5)
+        tile.add_child(stack)
+        var title := Label.new()
+        title.text = str(item.get("name", ""))
+        title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        title.add_theme_font_size_override("font_size", 15)
+        title.add_theme_color_override("font_color", Color("#F0C0B6"))
+        stack.add_child(title)
+        var desc := Label.new()
+        desc.text = str(item.get("desc", ""))
+        desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        desc.add_theme_font_size_override("font_size", 11)
+        stack.add_child(desc)
+        var price := Label.new()
+        price.text = str(item.get("price", 0)) + " PPA  ·  лимит " + str(item.get("limit", 1))
+        price.add_theme_font_size_override("font_size", 12)
+        price.add_theme_color_override("font_color", Color("#F0A79B"))
+        stack.add_child(price)
+    if found == 0:
+        _line("Предложения этого раздела генерируются PPA индивидуально при обновлении рынка.", true)
+    _spacer()
+    _line("☠ ТОВАР ИЗ-ПОД ПРИЛАВКА · 500 PPA · содержимое скрыто до покупки", false, true)
+    _line("Реальные случайные товары, лимиты, ежедневная скупка и таймер появятся после подключения того же состояния, что использует веб-PPA.", true)
+    _line("◉ PPA: —      ◆ Gram: —", true)
+    _notice.text = "ОРИГИНАЛЬНАЯ СТРУКТУРА РЫНКА · НЕТ ФАЛЬШИВЫХ ЛОТОВ И ПОКУПОК"
+
+func _set_smith_tab(tab: String) -> void:
+    _smith_tab = tab
+    _refresh()
 
 func _show_forge() -> void:
-    _line("КУЗНЕЦ · ТЕСТОВАЯ ЗАТОЧКА", false, true)
-    _line("Кузница проверяет слоты и действие, не меняя настоящие характеристики предметов PPA.", true)
+    _title.text = "КУЗНЕЦ"
+    _line("КУЗНЕЦ", false, true)
+    _line("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ", true)
+    var tabs := HBoxContainer.new()
+    tabs.add_theme_constant_override("separation", 6)
+    _list.add_child(tabs)
+    for entry in SHOP_CATALOG.SMITH_TABS:
+        var key := str(entry.get("key", ""))
+        var button := _action(tabs, str(entry.get("label", "")), _set_smith_tab.bind(key))
+        button.modulate = Color("#F0C166") if key == _smith_tab else Color("#AFA091")
     _spacer()
-    var equipped: Dictionary = stash.equipment.get("weapon", {})
-    _line("ОРУЖИЕ: " + (str(equipped.get("name", "")) if not equipped.is_empty() else "НЕТ"), false, true)
-    _line("ТЕСТОВАЯ ЗАТОЧКА: " + str(equipped.get("upgrade", 0)) + " / 10", true)
-    var enchant_count := 0
-    for item in stash.bag:
-        if str(item.get("id", "")) == "test_enchant":
-            enchant_count = int(item.get("qty", 1))
-            break
-    _line("МАТЕРИАЛ В СУМКЕ: " + str(enchant_count))
+    match _smith_tab:
+        "enhance":
+            _line("ЗАТОЧКА СНАРЯЖЕНИЯ / АКСЕССУАРОВ / ПЕТОВ", false, true)
+            _line("Обычные камни — до +5. Премиум камни — до +7, сохраняют предмет и заточку при провале.", true)
+            _line("Премиум руна: +12–16 п.п. к шансу попытки.", true)
+            _spacer()
+            var chances := GridContainer.new()
+            chances.columns = 4
+            chances.add_theme_constant_override("h_separation", 8)
+            chances.add_theme_constant_override("v_separation", 8)
+            _list.add_child(chances)
+            for spec in [
+                ["+1","43%"],["+2","35%"],["+3","27%"],["+4","19%"],
+                ["+5","12%"],["+6","7%"],["+7","3%"]
+            ]:
+                var label := Label.new()
+                label.text = str(spec[0]) + "  ·  " + str(spec[1])
+                label.add_theme_color_override("font_color", Color("#F0C166"))
+                chances.add_child(label)
+            _spacer()
+            _line("При обычной неудаче редкости до редкой могут сгореть; эпический предмет теряет 1 уровень заточки.", true)
+        "equipment":
+            _line("ЭПИЧЕСКОЕ СНАРЯЖЕНИЕ", false, true)
+            _line("Эпик-доспехи доступны всем 8 классам. Оружие и шмот: только крафт, 12 000–15 000 PPA + ресурсы + Перо Феникса.", true)
+        "legendary":
+            _line("ЛЕГЕНДАРНОЕ СНАРЯЖЕНИЕ · ФАРТ ЗОНА", false, true)
+            _line("Базовые характеристики ×3 от эпических +0.", true)
+            _line("Оружие: 14 000 PPA + 1000 Адской руды.", true)
+            _line("Остальное: 12 000 PPA + 1000 легендарных кристаллов.", true)
+        "accessories":
+            _line("АКСЕССУАРЫ", false, true)
+            _line("КОЛЬЦО · ПЛАЩ · ОЖЕРЕЛЬЕ · АРТЕФАКТ · КРЫЛЬЯ", true)
+            _line("Редкости: обычный · необычный · редкий · эпический · легендарный.", true)
+        "pets":
+            _line("8 БАЗОВЫХ ПИТОМЦЕВ", false, true)
+            _line("Выбор питомца и редкости; эпические петы не крафтятся — только события и особые условия.", true)
     _spacer()
-    var row := HBoxContainer.new()
-    _list.add_child(row)
-    _action(row, "ЭКИПИРОВКА", func(): open_page("character"))
-    _action(row, "ЗАТОЧИТЬ · ТЕСТ", _sharpen_demo)
-    _action(row, "МАТЕРИАЛЫ", func(): _open_service_by_id("blackmarket"))
-    _spacer()
-    _line("Заточка из тестового инвентаря только локальная. Серверный кузнец PPA не затрагивается.", true)
-
-func _sharpen_demo() -> void:
-    var result: String = stash.sharpen_test_weapon()
-    _refresh()
-    _notice.text = result
+    _line("ИНВЕНТАРЬ СЕРВЕРА: —       Gold: —       Gram: —       PPA: —", true)
+    var safe_button := Button.new()
+    safe_button.text = "ЗАТОЧИТЬ / СОЗДАТЬ · ДОСТУПНО ПОСЛЕ СИНХРОНИЗАЦИИ"
+    safe_button.disabled = true
+    safe_button.custom_minimum_size = Vector2(0, 46)
+    _list.add_child(safe_button)
+    _notice.text = "КУЗНЕЦ ИЗ PPA · ТЕКУЩЕЕ СНАРЯЖЕНИЕ И РЕЦЕПТЫ НЕ ПОДМЕНЯЕМ"
 
 func _show_auction() -> void:
     _line("АУКЦИОН · ТЕСТОВЫЙ ИНТЕРФЕЙС", false, true)
