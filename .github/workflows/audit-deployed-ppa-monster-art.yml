@@ -5,6 +5,7 @@ on:
       - fix/godot-qa-slime-not-bird-20261009
     paths:
       - games/ppa-native/tools/audit_live_dungeon_art.py
+      - games/ppa-native/tools/export_live_runtime_monsters.py
       - .github/workflows/audit-deployed-ppa-monster-art.yml
   workflow_dispatch:
 
@@ -27,10 +28,28 @@ jobs:
           grep -q 'PPA_LIVE_MOB_ART_AUDIT_OK' /tmp/ppa-mob-art-audit.txt
           test "$(find audit-output/live-dungeon-art -maxdepth 1 -name 'level_*_runtime_slot.*' | wc -l)" -eq 20
           test -s audit-output/live-dungeon-art/audit.json
+      - name: Extract exact live 22 rendering assets (19 atlases and 3 slimes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/ppa-native/tools/export_live_runtime_monsters.py
+          python3 games/ppa-native/tools/export_live_runtime_monsters.py \
+            --output audit-output/deployed-real-animation-art | tee /tmp/ppa-real-art-export.txt
+          grep -q 'PPA_LIVE_REAL_RENDER_ART_OK assets=22 levels=20' /tmp/ppa-real-art-export.txt
+          test "$(find audit-output/deployed-real-animation-art -maxdepth 1 -name 'mob_*.png' | wc -l)" -eq 22
+          test -s audit-output/deployed-real-animation-art/manifest.json
       - name: Preserve separate auditable 20-source-asset snapshot (NOT imported in game)
         uses: actions/upload-artifact@v4
         with:
           name: PPA-Deployed-Mob-Sprite-Audit-NOT-Approved
           path: audit-output/live-dungeon-art/
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Upload actual 22 renderer assets (read-only source export)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPA-Current-22-Rendered-Mob-Assets
+          path: audit-output/deployed-real-animation-art/
           retention-days: 5
           if-no-files-found: error
