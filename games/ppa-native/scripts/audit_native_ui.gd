@@ -52,7 +52,7 @@ func _run() -> void:
         "warehouse": menu.stash.warehouse,
         "equipment": menu.stash.equipment
     })
-    var native_panel_id := menu._panel.get_instance_id()
+    var native_panel_id: int = int(menu._panel.get_instance_id())
     menu.open_npc(NPCS.NPCS[5])
     menu._set_merchant_tab("boosters")
     menu._select_merchant_item("magic_small")
