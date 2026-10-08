@@ -136,29 +136,33 @@ func _check() -> void:
         "Адская гончая", "Огненный демон", "Пустотный наблюдатель",
         "Элитный голем", "Пепельный палач"
     ]
-    for level in range(1, 21):
-        if scene.ENEMY_VISUAL.LEVEL_NAMES[level - 1] != approved_names[level - 1]:
-            _fail("Mob level/name mapping has drifted: " + str(level))
+    for level in range(1, 61):
+        var base_level: int = ((level - 1) % 20) + 1
+        if scene.ENEMY_VISUAL.base_level_for(level) != base_level:
+            _fail("PPA tier shift changed base level for " + str(level))
             return
-        for sample_id in range(4):
-            if scene.ENEMY_VISUAL.art_index_for_spawn(level, sample_id) != level - 1:
-                _fail("Cross-species mixed into room level " + str(level))
+        for sample_id in range(6):
+            if scene.ENEMY_VISUAL.art_index_for_spawn(level, sample_id) != base_level - 1:
+                _fail("Wrong original PPA art in tier level " + str(level))
                 return
-            if level != 4 and scene.ENEMY_VISUAL.sprite_filename_for_spawn(level, sample_id) != scene.ENEMY_VISUAL.NEW_MOBS[level - 1]:
-                _fail("Wrong monster asset for level " + str(level))
+            if base_level != 4 and scene.ENEMY_VISUAL.sprite_filename_for_spawn(level, sample_id) != scene.ENEMY_VISUAL.NEW_MOBS[base_level - 1]:
+                _fail("Wrong PPA 4x4 atlas for level " + str(level))
                 return
-    var approved_slimes := [
-        "mob_04_slime_green.png", "mob_04_slime_red.png", "mob_04_slime_blue.png"
-    ]
-    for i in range(6):
-        if scene.ENEMY_VISUAL.sprite_filename_for_spawn(4, i) != approved_slimes[i % 3]:
-            _fail("Fourth level must mix only green/red/blue slime variants")
+            if base_level == 4:
+                var expected_slime: String = ["mob_04_slime_green.png", "mob_04_slime_red.png", "mob_04_slime_blue.png"][sample_id % 3]
+                if scene.ENEMY_VISUAL.sprite_filename_for_spawn(level, sample_id) != expected_slime:
+                    _fail("Wrong green/red/blue slime at tier level " + str(level))
+                    return
+            var expected_archetype: String = "" if level <= 20 else ["ЖИВУЧИЙ", "БРОНИРОВАННЫЙ", "БЕРСЕРК"][sample_id % 3]
+            if scene.ENEMY_VISUAL.archetype_for(level, sample_id) != expected_archetype:
+                _fail("Wrong PPA three-archetype cycle at level " + str(level))
+                return
+    for invalid in [-1, 0, 61, 80]:
+        if scene.ENEMY_VISUAL.base_level_for(invalid) != -1 or scene.ENEMY_VISUAL.art_index_for_spawn(invalid, 0) != -1:
+            _fail("Out-of-range level re-used a live mob texture: " + str(invalid))
             return
-    if scene.ENEMY_VISUAL.sprite_filename_for_spawn(1, 0) != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.sprite_filename_for_spawn(3, 0) != "mob_03_charred_beetle.png":
-        _fail("Approved rat/spider/beetle order changed")
-        return
-    if scene.ENEMY_VISUAL.art_index_for_spawn(21, 0) != -1:
-        _fail("missing 21–60 new art must not silently reuse 1–20 art")
+    if scene.ENEMY_VISUAL.required_file_count() != 22:
+        _fail("60 levels should share 22 authentic PPA files, not generate new PNGs")
         return
     var new_count: int = scene.ENEMY_VISUAL.available_count()
     if new_count != 0 and new_count != 22:
@@ -180,7 +184,7 @@ func _check() -> void:
     if enemies == null or scene._enemy_spawns.size() < 250 or scene._enemy_spawns.size() > 2500:
         _fail("missing authentic published mob spawn list")
         return
-    if scene._enemy_spawns.size() != scene._enemy_branch.size():
+    if scene._enemy_spawns.size() != scene._enemy_branch.size() or scene._enemy_spawns.size() != scene._enemy_room_ordinal.size():
         _fail("original dungeon spawn coordinates and branch indices drifted")
         return
     if new_count == 0:
@@ -194,7 +198,7 @@ func _check() -> void:
         for state in scene._enemy_active.values():
             var sprite := (state["node"] as Node2D).find_child("NewDungeonMob_*", true, false) as Sprite2D
             if sprite == null or sprite.texture == null:
-                _fail("new monster preview visible without its original Library PNG")
+                _fail("new monster preview visible without exact live PPA PNG")
                 return
     if not scene._can_walk(scene._boss_home):
         _fail("published boss chamber is outside the genuine shifted mask")
@@ -222,21 +226,51 @@ func _check() -> void:
     if selector == null:
         _fail("missing preview 1–20/21–40/41–60 level switcher")
         return
-    selector.pressed.emit()
-    if scene._preview_mode != 1 or scene._preview_boss_id() != "lord" or scene._mob_preview_level(0) > 40:
-        _fail("21–40 Lord preview branch didn't switch")
-        return
-    selector.pressed.emit()
-    if scene._preview_mode != 2 or scene._preview_boss_id() != "dragon" or scene._mob_preview_level(0) < 41:
-        _fail("41–60 Dragon preview branch didn't switch")
-        return
+    # Testing original published rooms, not fabricating 40 new branches.
+    # Teleport ONLY this headless QA scene near an already-approved spawn.
+    # Preserve the original point before mask/collision tests below.
+    var safe_audit_position: Vector2 = scene.world_pos_px
+    if new_count == 22:
+        scene.world_pos_px = scene._enemy_spawns[0]
+        scene._refresh_preview_enemies()
+        if scene._enemy_active.is_empty() or scene._enemy_active.size() > scene.PREVIEW_CAP:
+            _fail("Tier-1 live visual preview did not spawn safely")
+            return
+    for tier in [1, 2]:
+        selector.pressed.emit()
+        if scene._preview_mode != tier or scene._preview_boss_id() != ["phoenix", "lord", "dragon"][tier]:
+            _fail("Tier switch or correct separate boss kind failed: " + str(tier))
+            return
+        if selector.text != ["МОБЫ 1–20", "МОБЫ 21–40", "МОБЫ 41–60"][tier]:
+            _fail("Godot 21-40/41-60 test HUD still says art pending")
+            return
+        if new_count == 22:
+            if scene._enemy_active.is_empty() or scene._enemy_active.size() > scene.PREVIEW_CAP:
+                _fail("Real PPA tier " + str(tier) + " lacks visible monsters")
+                return
+            for state in scene._enemy_active.values():
+                var displayed: int = int(state["preview_level"])
+                var creature: Node2D = state["node"] as Node2D
+                var sprite: Sprite2D = creature.find_child("NewDungeonMob_*", true, false) as Sprite2D
+                if displayed < tier * 20 + 1 or displayed > tier * 20 + 20 or sprite == null or sprite.texture == null:
+                    _fail("Tier " + str(tier) + " lost its authentic monster animation")
+                    return
+                if String(state["archetype"]).is_empty():
+                    _fail("Live three-archetype variant missing at level " + str(displayed))
+                    return
+                if creature.get_meta("ppa_dungeon_preview_level", -1) != displayed:
+                    _fail("Level metadata does not agree with published room branch")
+                    return
     selector.pressed.emit()
     if scene._preview_mode != 0 or scene._preview_boss_id() != "phoenix":
         _fail("test mode cannot return to original 1–20 branch")
         return
+    scene.world_pos_px = safe_audit_position
+    scene._refresh_preview_enemies()
     print("PPA_DUNGEON_ENEMIES_TEST_OK authentic_spawn_points=",scene._enemy_spawns.size(),
-        " physical_level_branches=20 modes=3 preview_mobs=0 preview_bosses=0",
-        " old_art_removed=1 wall_spawn=0 server_damage=0 inventory_writes=0")
+        " physical_level_branches=20 modes=3 tiers=1-20,21-40,41-60",
+        " 22_png_reused=1 60_levels_visible=1 preview_cap=",scene.PREVIEW_CAP,
+        " preview_bosses=0 old_art_removed=1 wall_spawn=0 server_damage=0 inventory_writes=0")
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
     if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
