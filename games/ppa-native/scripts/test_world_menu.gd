@@ -49,6 +49,9 @@ func _ready() -> void:
     _character_screen = CANONICAL_CHARACTER.new()
     _character_screen.configure(account, class_key, stash)
     add_child(_character_screen)
+    # The existing single modal dimmer is z=90; this replaces, never overlays,
+    # the old z=95 native character panel while keeping exactly one window up.
+    _character_screen.z_index = 95
     _character_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _character_screen.close_requested.connect(close_menu)
     _character_screen.select_item_requested.connect(_open_item)
