@@ -47,8 +47,11 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: real merchant prices changed")
         quit(1)
         return
-    var before_gold := int(menu.stash.coins)
-    var before_size: int = (menu.stash.bag as Array).size()
+    var before_items := JSON.stringify({
+        "bag": menu.stash.bag,
+        "warehouse": menu.stash.warehouse,
+        "equipment": menu.stash.equipment
+    })
     var native_panel_id := menu._panel.get_instance_id()
     menu.open_npc(NPCS.NPCS[5])
     menu._set_merchant_tab("boosters")
@@ -67,8 +70,13 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: an NPC created a duplicate store panel")
         quit(1)
         return
-    if int(menu.stash.coins) != before_gold or (menu.stash.bag as Array).size() != before_size:
-        push_error("PPA_UI_SMOKE: NPC display unexpectedly changed test inventory or money")
+    var after_items := JSON.stringify({
+        "bag": menu.stash.bag,
+        "warehouse": menu.stash.warehouse,
+        "equipment": menu.stash.equipment
+    })
+    if after_items != before_items:
+        push_error("PPA_UI_SMOKE: NPC display unexpectedly changed test inventory")
         quit(1)
         return
 
