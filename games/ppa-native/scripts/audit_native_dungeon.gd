@@ -4,7 +4,6 @@ extends SceneTree
 # Never simulates server state, drops, mob kills, entry tickets or account saves.
 const DUNGEON = preload("res://scripts/dungeon_world.gd")
 const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
-const ENEMY_ART = preload("res://scripts/ppa_dungeon_art_generated.gd")
 
 func _initialize() -> void:
     call_deferred("_check")
@@ -120,27 +119,16 @@ func _check() -> void:
     if scene.city_world.get_child_count() != 4:
         _fail("dungeon should contain floor, mask, ground marker and local enemy preview layer")
         return
-    # Real PPA art MUST be present, not temporary green polygon drawings.
-    if ENEMY_ART.MOB_RESOURCES.size() != 20:
-        _fail("expected exactly twenty original PPA monster images")
+    # Critical: old 20 PNGs from the deployed 2026 PPA are explicitly
+    # disallowed; the approved replacement art remains unpublished.
+    if scene.APPROVED_DUNGEON_ENEMY_ART_READY:
+        _fail("unapproved dungeon art unexpectedly enabled")
         return
-    for original_path in ENEMY_ART.MOB_RESOURCES:
-        var sprite_path := str(original_path)
-        if not ResourceLoader.exists(sprite_path):
-            _fail("original PPA monster art missing " + sprite_path)
-            return
-        var source_texture := load(sprite_path) as Texture2D
-        if source_texture == null or source_texture.get_width() < 24 or source_texture.get_height() < 24:
-            _fail("original PPA sprite import invalid " + sprite_path)
-            return
-    for boss_name in ["phoenix", "lord", "dragon"]:
-        if not ENEMY_ART.BOSS_RESOURCES.has(boss_name):
-            _fail("original PPA boss art not found: " + boss_name)
-            return
-        if not ResourceLoader.exists(str(ENEMY_ART.BOSS_RESOURCES[boss_name])):
-            _fail("published original PPA boss texture missing: " + boss_name)
-            return
-    print("PPA_DUNGEON_ORIGINAL_ENEMY_ART_OK mobs=20 bosses=3 placeholders=0 mob_nameplates=0")
+    if ResourceLoader.exists("res://scripts/ppa_dungeon_art_generated.gd"):
+        _fail("legacy original_dungeon_art_generated.gd was shipped in APK")
+        return
+    print("PPA_DUNGEON_LEGACY_ART_DISABLED_OK legacy_png=0 replacement_pending=1")
+
     var enemies := scene.city_world.find_child("PPAOriginalDungeonEnemyTestLayer", true, false) as Node2D
     if enemies == null or scene._enemy_spawns.size() < 250 or scene._enemy_spawns.size() > 2500:
         _fail("missing authentic published mob spawn list")
@@ -148,8 +136,8 @@ func _check() -> void:
     if scene._enemy_spawns.size() != scene._enemy_branch.size():
         _fail("original dungeon spawn coordinates and branch indices drifted")
         return
-    if enemies.get_child_count() > scene.PREVIEW_CAP + 1:
-        _fail("too many visible enemy preview nodes; tablet FPS risk")
+    if enemies.get_child_count() != 0 or not scene._enemy_active.is_empty() or scene._boss_visual != null:
+        _fail("legacy mob/boss visuals appeared before new approved asset import")
         return
     if not scene._can_walk(scene._boss_home):
         _fail("published boss chamber is outside the genuine shifted mask")
@@ -190,8 +178,8 @@ func _check() -> void:
         _fail("test mode cannot return to original 1–20 branch")
         return
     print("PPA_DUNGEON_ENEMIES_TEST_OK authentic_spawn_points=",scene._enemy_spawns.size(),
-        " physical_level_branches=20 modes=3 bosses=3 nearby_cap=",scene.PREVIEW_CAP,
-        " wall_spawn=0 server_damage=0 inventory_writes=0")
+        " physical_level_branches=20 modes=3 preview_mobs=0 preview_bosses=0",
+        " old_art_removed=1 wall_spawn=0 server_damage=0 inventory_writes=0")
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
     if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
