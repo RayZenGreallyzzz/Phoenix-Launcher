@@ -12,6 +12,10 @@ const ENEMY_CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
 # selected, preserve authentic spawn data but keep old enemy art OFF.
 const APPROVED_DUNGEON_ENEMY_ART_READY := false
 const ENEMY_VISUAL = preload("res://scripts/ppa_dungeon_enemy_test_visual.gd")
+# QA-only art exists only in a private build. Never ship proprietary assets
+# through the public launcher repository.
+func _new_candidate_preview_available() -> bool:
+    return ENEMY_VISUAL.source_ready()
 const PREVIEW_CAP := 24
 const PREVIEW_RADIUS := 675.0
 const PREVIEW_AGGRO_RADIUS := 235.0
@@ -78,6 +82,10 @@ func _ready() -> void:
     _sync_world_visuals()
     _add_dungeon_hud()
     _refresh_preview_enemies()
+    if _new_candidate_preview_available():
+        print("PPA_NEW_DUNGEON_CANDIDATE_ART_READY monsters=5 boss_previews=2 old_art=0")
+    else:
+        print("PPA_NEW_DUNGEON_CANDIDATE_ART_PENDING no_legacy_fallback=1")
     print("PPA_NATIVE_DUNGEON_MAP_OK map=", _dungeon_bounds, " mask=", _mask_image.get_size(), " entry=", _entrance, " mask_offset_y=", MASK_Y_OFFSET_PX)
 
 func _build_city_2d() -> void:
@@ -234,7 +242,7 @@ func _preview_boss_id() -> String:
     return ["phoenix", "lord", "dragon"][_preview_mode]
 
 func _spawn_preview_enemy(index: int) -> void:
-    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+    if not _new_candidate_preview_available():
         return
     if _enemy_active.has(index):
         return
@@ -244,7 +252,7 @@ func _spawn_preview_enemy(index: int) -> void:
     var visual := ENEMY_VISUAL.new() as Node2D
     visual.call("setup", index, _mob_preview_level(index), false)
     visual.position = home
-    visual.name = "LocalMobVisual_%d" % index
+    visual.name = "NewCandidateMobVisual_%d" % index
     _enemy_layer.add_child(visual)
     _enemy_active[index] = {
         "node":visual,"home":home,"pos":home,
@@ -254,9 +262,9 @@ func _spawn_preview_enemy(index: int) -> void:
     }
 
 func _refresh_preview_enemies() -> void:
-    # Absolute safety gate: neither regular mobs nor bosses may render with
-    # the old 20-species roster while the new illustrated roster is pending.
-    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+    # Only display the new candidate pack if provided privately.
+    # No old sprite fallback, ever.
+    if not _new_candidate_preview_available():
         return
     if _enemy_layer == null or _enemy_spawns.is_empty():
         return
@@ -285,6 +293,12 @@ func _refresh_preview_enemies() -> void:
                 node.queue_free()
             _enemy_active.erase(key)
 
+    # Lord40 approved replacement art is not in the candidate pack.
+    if _preview_boss_id() == "lord":
+        if _boss_visual != null:
+            _boss_visual.queue_free()
+            _boss_visual = null
+        return
     if world_pos_px.distance_to(_boss_home) < BOSS_ACTIVATION_RADIUS:
         if _boss_visual == null:
             _boss_visual = ENEMY_VISUAL.new() as Node2D
@@ -298,7 +312,7 @@ func _refresh_preview_enemies() -> void:
         _boss_world = _boss_home
 
 func _animate_preview_enemies(dt: float) -> void:
-    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+    if not _new_candidate_preview_available():
         return
     for key in _enemy_active.keys():
         var state: Dictionary = _enemy_active[key]
@@ -357,7 +371,7 @@ func _cycle_preview_depth() -> void:
         _boss_visual = null
     _boss_world = _boss_home
     if _preview_mode_button != null:
-        _preview_mode_button.text = ["ТЕСТ 1–20", "ТЕСТ 21–40", "ТЕСТ 41–60"][_preview_mode]
+        _preview_mode_button.text = ["АРТ 1–20", "АРТ 21–40", "АРТ 41–60"][_preview_mode]
     _refresh_preview_enemies()
     print("PPA_DUNGEON_TEST_DEPTH_OK bracket=", _preview_mode,
         " boss=", _preview_boss_id(), " no_rewards=1")
@@ -527,7 +541,7 @@ func _add_dungeon_hud() -> void:
     # Test-only level branch switch, never changes the server character.
     _preview_mode_button = Button.new()
     _preview_mode_button.name = "DungeonPreviewDepthSelector"
-    _preview_mode_button.text = "ТЕСТ 1–20"
+    _preview_mode_button.text = "АРТ 1–20"
     _preview_mode_button.anchor_left = 1.0
     _preview_mode_button.anchor_right = 1.0
     _preview_mode_button.offset_left = -156.0
