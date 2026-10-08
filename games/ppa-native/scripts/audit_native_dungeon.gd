@@ -3,6 +3,7 @@ extends SceneTree
 # CI-only, real native dungeon floor+mask / joystick collision test.
 # Never simulates server state, drops, mob kills, entry tickets or account saves.
 const DUNGEON = preload("res://scripts/dungeon_world.gd")
+const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
 
 func _initialize() -> void:
     call_deferred("_check")
@@ -162,11 +163,12 @@ func _check() -> void:
     if scene.player_3d == null or scene.player_3d.get_child_count() != 1:
         _fail("separate 3D ground-shadow mesh is still attached to player")
         return
-    var model := scene.player_visual.get_child(0) as Node3D if scene.player_visual.get_child_count() > 0 else null
+    var model: Node3D = null
+    if scene.player_visual.get_child_count() > 0:
+        model = scene.player_visual.get_child(0) as Node3D
     if model != null and model.find_children("*", "Skeleton3D", true, false).size() > 0:
-        var fitter = load("res://scripts/dwarf_model_fit.gd")
-        var skeletal_bounds: AABB = fitter.rest_bone_bounds(model)
-        var foot_floor: float = fitter.rest_foot_floor(model, skeletal_bounds)
+        var skeletal_bounds: AABB = DWARF_FIT.rest_bone_bounds(model)
+        var foot_floor: float = DWARF_FIT.rest_foot_floor(model, skeletal_bounds)
         if absf(model.position.y + foot_floor * model.scale.y) > 0.035:
             _fail("3D foot bones are not resting on the y=0 ground plane")
             return
