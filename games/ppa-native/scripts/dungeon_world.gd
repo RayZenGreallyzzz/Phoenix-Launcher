@@ -236,7 +236,7 @@ func _spawn_preview_enemy(index: int) -> void:
     if not _can_walk(home):
         return
     var visual := ENEMY_VISUAL.new() as Node2D
-    visual.setup(index, _mob_preview_level(index), false)
+    visual.call("setup", index, _mob_preview_level(index), false)
     visual.position = home
     visual.name = "LocalMobVisual_%d" % index
     _enemy_layer.add_child(visual)
@@ -278,7 +278,7 @@ func _refresh_preview_enemies() -> void:
     if world_pos_px.distance_to(_boss_home) < BOSS_ACTIVATION_RADIUS:
         if _boss_visual == null:
             _boss_visual = ENEMY_VISUAL.new() as Node2D
-            _boss_visual.setup(-1, 20 + _preview_mode * 20, true, _preview_boss_id())
+            _boss_visual.call("setup", -1, 20 + _preview_mode * 20, true, _preview_boss_id())
             _boss_visual.name = "LocalBossVisual_" + _preview_boss_id()
             _enemy_layer.add_child(_boss_visual)
             _boss_visual.position = _boss_world
@@ -319,8 +319,8 @@ func _animate_preview_enemies(dt: float) -> void:
             proposed = pos
         state["pos"] = proposed
         node.position = proposed
-        node.set_aggro(aggro)
-        node.set_attack(aggro and distance < 80.0)
+        node.call("set_aggro", aggro)
+        node.call("set_attack", aggro and distance < 80.0)
         _enemy_active[key] = state
     if _boss_visual != null:
         var direction_to_player := world_pos_px - _boss_world
@@ -330,8 +330,8 @@ func _animate_preview_enemies(dt: float) -> void:
             if next_boss.distance_to(_boss_home) < 250.0 and _can_walk(next_boss):
                 _boss_world = next_boss
         _boss_visual.position = _boss_world
-        _boss_visual.set_aggro(boss_distance < 440.0)
-        _boss_visual.set_attack(boss_distance < 135.0)
+        _boss_visual.call("set_aggro", boss_distance < 440.0)
+        _boss_visual.call("set_attack", boss_distance < 135.0)
 
 func _cycle_preview_depth() -> void:
     _preview_mode = (_preview_mode + 1) % 3
