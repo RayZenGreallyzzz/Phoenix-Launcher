@@ -1,8 +1,8 @@
-name: Test PPA Dungeon Mask Touch Input
+name: Test PPA Dungeon Ground Hitbox Calibration
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-mask-button-touch-fix" ]
+    branches: [ "feature/godot-dungeon-ground-hitbox-calibration" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-dungeon-mask-touch-test-${{ github.ref }}
+  group: ppa-dungeon-ground-hitbox-test-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((310000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="1.1.${GITHUB_RUN_NUMBER}-mask-touch"
+          VERSION_CODE=$((320000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="1.2.${GITHUB_RUN_NUMBER}-ground-hitbox"
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -348,7 +348,7 @@ jobs:
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Dungeon-Mask-Touch-TEST
+          name: PhoenixPixArena-Dungeon-Hitbox-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
