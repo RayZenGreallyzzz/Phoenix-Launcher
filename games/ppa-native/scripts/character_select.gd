@@ -1,10 +1,11 @@
 extends Control
 
 const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
+const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 
-# Native Phoenix Pix Arena selection screen. Only authoritative Phoenix/PPA
-# account heroes may be played. Empty slots are visual placeholders until the
-# existing one-character server schema is migrated to true per-slot saves.
+# Native beta class gallery: choose any of eight official 3D models without
+# touching live server account class, inventory, progress or character ID.
+# One server character remains authoritative; this gallery is visual test only.
 signal character_confirmed
 
 var account: Dictionary = {}
@@ -16,6 +17,10 @@ var _enter_button: Button
 var _preview_host: TextureRect
 var _preview_viewport: SubViewport
 var _preview_camera: Camera3D
+var _preview_stage: Node3D
+var _preview_model: Node3D
+var _class_buttons: Dictionary = {}
+var _selected_class_key := "gnome"
 
 const CLASS_NAMES := {
     "gnome": "ГНОМ · КАНОНИР",
@@ -153,7 +158,7 @@ func _build_ui() -> void:
     columns.add_child(details)
 
     var slot_heading := Label.new()
-    slot_heading.text = "СЛОТ 01  ·  ОСНОВНОЙ ПЕРСОНАЖ"
+    slot_heading.text = "ТЕСТ ВСЕХ 8 КЛАССОВ · ОБЩАЯ СУМКА И СКЛАД"
     slot_heading.add_theme_font_size_override("font_size", 12)
     slot_heading.add_theme_color_override("font_color", Color("#F9A364"))
     details.add_child(slot_heading)
@@ -178,31 +183,28 @@ func _build_ui() -> void:
     _info_label.add_theme_color_override("font_color", Color("#A9B3BE"))
     details.add_child(_info_label)
 
-    var empty_note := Label.new()
-    empty_note.text = "ДОПОЛНИТЕЛЬНЫЕ СЛОТЫ"
-    empty_note.add_theme_font_size_override("font_size", 11)
-    empty_note.add_theme_color_override("font_color", Color("#D2AF88"))
-    details.add_child(empty_note)
+    var classes_heading := Label.new()
+    classes_heading.text = "ВЫБЕРИ КЛАСС ДЛЯ ТЕСТА"
+    classes_heading.add_theme_color_override("font_color", Color("#F9A364"))
+    classes_heading.add_theme_font_size_override("font_size", 12)
+    details.add_child(classes_heading)
 
-    var slots := HBoxContainer.new()
-    slots.add_theme_constant_override("separation", 10)
-    details.add_child(slots)
-    for number in [2, 3]:
-        var empty := PanelContainer.new()
-        empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var empty_style := StyleBoxFlat.new()
-        empty_style.bg_color = Color(0.060, 0.070, 0.080, 1.0)
-        empty_style.border_color = Color(0.20, 0.23, 0.25, 0.9)
-        empty_style.set_border_width_all(1)
-        empty_style.set_corner_radius_all(5)
-        empty.add_theme_stylebox_override("panel", empty_style)
-        slots.add_child(empty)
-        var empty_label := Label.new()
-        empty_label.text = "СЛОТ %02d  ·  ПОКА ЗАКРЫТ" % number
-        empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        empty_label.add_theme_font_size_override("font_size", 11)
-        empty_label.add_theme_color_override("font_color", Color("#81909D"))
-        empty.add_child(empty_label)
+    var button_grid := GridContainer.new()
+    button_grid.columns = 2
+    button_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    button_grid.add_theme_constant_override("h_separation", 9)
+    button_grid.add_theme_constant_override("v_separation", 6)
+    details.add_child(button_grid)
+    for hero in HERO_CATALOG.CLASSES:
+        var key := str(hero.get("key", ""))
+        var button := Button.new()
+        button.text = str(hero.get("name", key))
+        button.custom_minimum_size = Vector2(175, 42)
+        button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        button.add_theme_font_size_override("font_size", 12)
+        button.pressed.connect(_choose_class.bind(key))
+        button_grid.add_child(button)
+        _class_buttons[key] = button
 
     var spacer := Control.new()
     spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -220,12 +222,12 @@ func _build_ui() -> void:
     _enter_button.add_theme_stylebox_override("hover", hover_style)
     _enter_button.add_theme_color_override("font_color", Color.WHITE)
     _enter_button.add_theme_font_size_override("font_size", 14)
-    _enter_button.pressed.connect(func(): character_confirmed.emit())
+    _enter_button.pressed.connect(_confirm_preview)
     _enter_button.disabled = true
     details.add_child(_enter_button)
 
     var footer := Label.new()
-    footer.text = "ПРОГРЕСС И СНАРЯЖЕНИЕ ПРИВЯЗАНЫ К PHOENIX ACCOUNT"
+    footer.text = "ТЕСТОВАЯ ГАЛЕРЕЯ: СМЕНА КЛАССА НЕ ЗАПИСЫВАЕТСЯ НА СЕРВЕР PPA"
     footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     footer.anchor_left = 0.0
     footer.anchor_right = 1.0
@@ -238,87 +240,116 @@ func _build_ui() -> void:
 func _refresh_account() -> void:
     if _name_label == null:
         return
-    var nickname := str(account.get("ppaNickname", "")).strip_edges()
-    var class_key := str(account.get("classKey", "")).strip_edges().to_lower()
-    var available := not nickname.is_empty() and CLASS_NAMES.has(class_key)
-    _name_label.text = nickname if not nickname.is_empty() else "НЕТ ПЕРСОНАЖА"
-    _class_label.text = str(CLASS_NAMES.get(class_key, "ГЕРОЙ НЕ СОЗДАН"))
-    _enter_button.disabled = not available
-    if available:
-        _info_label.text = "Герой зарегистрирован на сервере PPA. Войти можно только этим персонажем: клиент не меняет класс и не создаёт другое сохранение."
-    else:
-        _info_label.text = "В аккаунте ещё нет зарегистрированного персонажа PPA. Создание героя в native станет доступно после подключения серверных слотов."
-    _status_label.text = "ПРЕВЬЮ 3D" if class_key == "gnome" else "ПРОФИЛЬ PPA"
-    if class_key == "gnome":
-        _build_dwarf_preview()
-    else:
-        _status_label.text = "3D-ПРЕВЬЮ ЭТОГО КЛАССА ПОКА НЕТ"
+    var server_key := str(account.get("classKey", "")).to_lower().strip_edges()
+    if not HERO_CATALOG.valid_key(server_key):
+        server_key = "gnome"
+    _choose_class(server_key)
 
-func _build_dwarf_preview() -> void:
-    if _preview_viewport != null or not ResourceLoader.exists("res://assets/Dwarf.glb"):
+func _choose_class(key: String) -> void:
+    if not HERO_CATALOG.valid_key(key):
         return
-    var res = load("res://assets/Dwarf.glb")
-    if not (res is PackedScene):
-        _status_label.text = "ОШИБКА ИМПОРТА 3D"
+    _selected_class_key = key
+    var hero: Dictionary = HERO_CATALOG.get_class(key)
+    var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
+    _name_label.text = nickname
+    _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
+    _info_label.text = str(hero.get("description", "")) + "\n\nВсе классы используют одну локальную тестовую сумку и склад. Реальный класс и прогресс PPA не изменяются."
+    _enter_button.disabled = account.is_empty()
+    _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
+    for id in _class_buttons.keys():
+        var button := _class_buttons[id] as Button
+        if button != null:
+            button.modulate = Color("#FFB375") if str(id) == key else Color("#B2BAC3")
+    _status_label.text = "ЗАГРУЖАЕМ 3D-МОДЕЛЬ..."
+    # Delay heavy GLB imports until the user actually selects a class.
+    call_deferred("_load_preview")
+
+func _confirm_preview() -> void:
+    if account.is_empty():
         return
-    var model := (res as PackedScene).instantiate() as Node3D
+    # Only in SceneTree memory. The server never receives this class choice.
+    get_tree().set_meta("ppa_native_test_class", _selected_class_key)
+    get_tree().set_meta("ppa_native_test_mode", true)
+    character_confirmed.emit()
+
+func _load_preview() -> void:
+    if not is_inside_tree():
+        return
+    var hero: Dictionary = HERO_CATALOG.get_class(_selected_class_key)
+    var scene_path := str(hero.get("model", ""))
+    if not ResourceLoader.exists(scene_path):
+        _status_label.text = "3D-МОДЕЛЬ ЕЩЁ НЕ УСТАНОВЛЕНА"
+        return
+    var resource = load(scene_path)
+    if not (resource is PackedScene):
+        _status_label.text = "ОШИБКА ЗАГРУЗКИ GLB"
+        return
+
+    if _preview_viewport == null:
+        _preview_viewport = SubViewport.new()
+        _preview_viewport.name = "CharacterPreviewViewport"
+        _preview_viewport.transparent_bg = true
+        _preview_viewport.own_world_3d = true
+        _preview_viewport.size = Vector2i(340, 360)
+        _preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+        add_child(_preview_viewport)
+        _preview_stage = Node3D.new()
+        _preview_viewport.add_child(_preview_stage)
+        var sun := DirectionalLight3D.new()
+        sun.light_color = Color("#FFE7BC")
+        sun.light_energy = 2.3
+        sun.rotation_degrees = Vector3(-35, -30, 0)
+        _preview_stage.add_child(sun)
+        var light := DirectionalLight3D.new()
+        light.light_color = Color("#95B4DA")
+        light.light_energy = 0.9
+        light.rotation_degrees = Vector3(-10, 130, 0)
+        _preview_stage.add_child(light)
+        _preview_camera = Camera3D.new()
+        _preview_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+        _preview_camera.near = 0.05
+        _preview_camera.far = 40.0
+        _preview_stage.add_child(_preview_camera)
+        _preview_camera.current = true
+        _preview_host.texture = _preview_viewport.get_texture()
+
+    if _preview_model != null:
+        _preview_model.queue_free()
+        _preview_model = null
+
+    var model := (resource as PackedScene).instantiate() as Node3D
     if model == null:
-        _status_label.text = "НЕТ 3D-МОДЕЛИ"
+        _status_label.text = "НЕТ 3D-УЗЛА ПЕРСОНАЖА"
+        return
+    _preview_stage.add_child(model)
+    _preview_model = model
+
+    var is_dwarf := _selected_class_key == "gnome"
+    var target_height := 2.10 if is_dwarf else 2.48
+    if not DWARF_FIT.fit(model, target_height):
+        _status_label.text = "ОШИБКА РАЗМЕРОВ СКЕЛЕТА"
+        model.queue_free()
+        _preview_model = null
         return
 
-    _preview_viewport = SubViewport.new()
-    _preview_viewport.transparent_bg = true
-    _preview_viewport.own_world_3d = true
-    _preview_viewport.size = Vector2i(340, 360)
-    _preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-    add_child(_preview_viewport)
+    # Preserve the 0.1.31 dwarf framing (head fully visible).
+    # Taller classes get extra breathing room without changing the city camera.
+    _preview_camera.size = 4.00 if is_dwarf else 4.80
+    var target_y := 1.85 if is_dwarf else 1.85
+    _preview_camera.position = Vector3(4.0, target_y + 1.65, 6.0)
+    _preview_camera.look_at(Vector3(0.0, target_y, 0.0), Vector3.UP)
+    _status_label.text = "IDLE · 3D-ПРЕВЬЮ"
 
-    var stage := Node3D.new()
-    _preview_viewport.add_child(stage)
-    stage.add_child(model)
-    _fit_preview_model(model)
-
-    var sun := DirectionalLight3D.new()
-    sun.light_color = Color("#FFE7BC")
-    sun.light_energy = 2.3
-    sun.rotation_degrees = Vector3(-35, -30, 0)
-    stage.add_child(sun)
-
-    var light := DirectionalLight3D.new()
-    light.light_color = Color("#95B4DA")
-    light.light_energy = 0.9
-    light.rotation_degrees = Vector3(-10, 130, 0)
-    stage.add_child(light)
-
-    _preview_camera = Camera3D.new()
-    _preview_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-    _preview_camera.size = 4.00
-    _preview_camera.near = 0.05
-    _preview_camera.far = 40.0
-    # Shift ONLY the character-selection framing downward (~0.8 game units
-    # on the portrait). Move camera and its target together to keep the
-    # approved perspective/weapon grip intact and reveal the full head.
-    # The world gameplay camera, character scale and skeleton remain unchanged.
-    const PREVIEW_VERTICAL_FRAMING := 0.80
-    _preview_camera.position = Vector3(4.0, 2.7 + PREVIEW_VERTICAL_FRAMING, 6.0)
-    stage.add_child(_preview_camera)
-    _preview_camera.look_at(Vector3(0, 1.05 + PREVIEW_VERTICAL_FRAMING, 0), Vector3.UP)
-    _preview_camera.current = true
-    _preview_host.texture = _preview_viewport.get_texture()
-
-    var anim_players = model.find_children("*", "AnimationPlayer", true, false)
-    for node in anim_players:
-        var player := node as AnimationPlayer
+    var players = model.find_children("*", "AnimationPlayer", true, false)
+    for obj in players:
+        var player := obj as AnimationPlayer
         if player == null:
             continue
         for anim_name in player.get_animation_list():
             if str(anim_name).to_lower().contains("idle"):
-                var anim := player.get_animation(anim_name)
-                if anim != null:
-                    anim.loop_mode = Animation.LOOP_LINEAR
+                var clip := player.get_animation(anim_name)
+                if clip != null:
+                    clip.loop_mode = Animation.LOOP_LINEAR
                 player.play(anim_name)
                 return
-
-func _fit_preview_model(model: Node3D) -> void:
-    if not DWARF_FIT.fit(model, 2.10):
-        push_error("[PPA-DWARF] Unable to fit 3D selection preview")
+    _status_label.text = "3D-МОДЕЛЬ ЗАГРУЖЕНА · БЕЗ IDLE"
