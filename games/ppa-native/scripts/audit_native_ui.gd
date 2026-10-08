@@ -38,6 +38,20 @@ func _run() -> void:
     print("PPA_EMPTY_TEST_BAG_OK seeded=0 migrated_demo=3")
     root.add_child(menu)
     menu.size = Vector2(1280, 720)
+    # Only top-right "РАЗДЕЛЫ" remains: character menu is accessed by
+    # tapping the 3D player, not a second "ГЕРОЙ" HUD control.
+    var direct_hero_buttons := 0
+    var global_hub_buttons := 0
+    for child in menu.get_children():
+        if child is Button and (child as Button).text == "ГЕРОЙ":
+            direct_hero_buttons += 1
+        if child is Button and child.name == "OpenGlobalPpaHub":
+            global_hub_buttons += 1
+    if direct_hero_buttons != 0 or global_hub_buttons != 1:
+        push_error("PPA_UI_SMOKE: duplicate hero HUD or missing global hub")
+        quit(1)
+        return
+    print("PPA_HERO_HUD_DEDUP_OK hero_button=0 hub_button=1")
     menu.open_page("character")
     if not menu.is_open():
         push_error("PPA_UI_SMOKE: character panel did not open")
