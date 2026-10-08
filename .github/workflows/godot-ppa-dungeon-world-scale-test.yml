@@ -172,6 +172,18 @@ jobs:
           test "$(find games/ppa-native/assets -maxdepth 1 -name 'original_dungeon_boss_*' | wc -l)" -eq 0
           echo "PPA_LEGACY_DUNGEON_ENEMY_ART_REMOVED_OK"
 
+      - name: Install verified new PPA dungeon sprite bundle when provided
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/install_new_mobs_from_zip.py | tee /tmp/ppa-new-mobs.log
+          if [ -f games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip ]; then
+            grep -q "PPA_NEW_DUNGEON_ART_IMPORTED_OK" /tmp/ppa-new-mobs.log
+            test "$(find games/ppa-native/assets/dungeon_new_mobs -type f -name '*.png' | wc -l)" -eq 20
+          else
+            grep -q "PPA_NEW_DUNGEON_ART_PENDING" /tmp/ppa-new-mobs.log
+          fi
+
       - name: Fetch approved live PPA dwarf and validate GLB
         shell: bash
         run: |
