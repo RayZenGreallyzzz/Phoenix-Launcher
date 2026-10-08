@@ -1,0 +1,47 @@
+name: Audit live PPA city map source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/audit-live-ppa-city.yml"
+
+jobs:
+  inspect-live-city:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Download live client markup and list scene image declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, urllib.request, urllib.error, pathlib, hashlib
+          base="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+          urls=[base+"/",base+"/index.html",base+"/game/",base+"/game/index.html"]
+          for n,url in enumerate(urls):
+              try:
+                  req=urllib.request.Request(url,headers={"User-Agent":"PPA-native-city-source-audit/1.0","Accept":"text/html"})
+                  with urllib.request.urlopen(req,timeout=25) as resp:
+                      data=resp.read(8000000); ctype=resp.headers.get("content-type"); final=resp.url; status=resp.status
+              except Exception as e:
+                  print("FETCH",url,"ERROR",repr(e),flush=True); continue
+              pathlib.Path("/tmp/live_ppa_"+str(n)+".html").write_bytes(data)
+              print("FETCH",url,"STATUS",status,"CT",ctype,"SIZE",len(data),"FINAL",final,"SHA256",hashlib.sha256(data).hexdigest(),flush=True)
+              text=data.decode("utf-8","replace")
+              if len(text)<1000:
+                  print("TINY RESPONSE",repr(text[:700])); continue
+              for term in ["BG_SAFE","imgSafe","scn.bg","scene.bg","safeBg","SAFE_BG","SCENES","МИРНЫЙ ГОРОД","town","city","background-image"]:
+                  locations=[x.start() for x in re.finditer(re.escape(term),text,re.I)]
+                  print("TERM",term,"COUNT",len(locations))
+                  for offset in locations[:6]:
+                      snippet=text[max(0,offset-150):min(len(text),offset+260)].replace("\n"," ").replace("\r"," ")
+                      print("  ",snippet[:410])
+              image_sources=re.findall(r"""(?:https?://[^"'< >\\]+|['"][^"']+\.(?:jpg|jpeg|png|webp|avif)(?:\?[^"']*)?['"])""",text,re.I)
+              relevant=[x for x in image_sources if re.search(r"city|town|safe|map|arena|bg|base44|peace|pust|gorod",x,re.I)]
+              print("POSSIBLE_MAP_URLS",len(relevant))
+              for src in dict.fromkeys(relevant):
+                  print("IMG",str(src)[:300])
+                  if len(relevant)>200: break
+              print("-----")
+          PY
