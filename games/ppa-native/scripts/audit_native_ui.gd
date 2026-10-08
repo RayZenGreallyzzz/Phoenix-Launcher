@@ -79,9 +79,69 @@ func _run() -> void:
             quit(1)
             return
         if page == 3 and (original_char._page_container.get_child_count() != 6 or original_char._original_skill_card_count != 5):
-            push_error("PPA_UI_SMOKE: expected 5 original PASSIVE illustrated grimoire cards")
+            push_error("PPA_UI_SMOKE: expected 5 PPA passive skill slots")
             quit(1)
             return
+        if page == 2 or page == 3:
+            var expected_count := 5 if page == 3 else 4
+            var placeholders := 0
+            for card_node in original_char._page_container.get_children():
+                if card_node.name != "OriginalPPASkillPlaceholder":
+                    continue
+                placeholders += 1
+                var original_icon = card_node.find_child("OriginalPPASkillIcon", true, false)
+                var pips = card_node.find_child("OriginalPPARankPips", true, false)
+                var book_button = card_node.find_child("OriginalPPAEmptySkillUpgrade", true, false)
+                if original_icon == null or pips == null or pips.get_child_count() != 5 or book_button == null or not book_button.disabled:
+                    push_error("PPA_SOURCE_SKILLS: incomplete original closed-skill card")
+                    quit(1)
+                    return
+                for pip in pips.get_children():
+                    if pip.custom_minimum_size != Vector2(9.0,9.0) or pip.position.y != 0.0:
+                        push_error("PPA_SOURCE_SKILLS: stretched rank pip detected")
+                        quit(1)
+                        return
+            if placeholders != expected_count:
+                push_error("PPA_SOURCE_SKILLS: catalog books shown as learned without confirmed player save")
+                quit(1)
+                return
+            await process_frame
+            for card_node in original_char._page_container.get_children():
+                if card_node.name != "OriginalPPASkillPlaceholder":
+                    continue
+                if card_node.size.y > 110.0 or card_node.size.y < 84.0:
+                    push_error("PPA_SOURCE_SKILLS: screenshot mismatch, skill placeholder height=" + str(card_node.size.y))
+                    quit(1)
+                    return
+            print("PPA_SOURCE_SKILL_PLACEHOLDERS_OK page=", page, " count=", placeholders, " max_height=110")
+    # Source skill catalog is reference material, not proof that the player
+    # learned it. A verified snapshot can still render an acquired skill.
+    var gnome_data: Dictionary = CANONICAL_GRIMOIRES.class_info("gnome")
+    var learned_example: Dictionary = (gnome_data.get("active", []) as Array)[0].duplicate(true)
+    learned_example["rank"] = 2
+    learned_example["book1"] = 3
+    learned_example["book2"] = 1
+    learned_example["book3"] = 0
+    original_char.apply_authoritative_skill_snapshot({"active":[learned_example], "passive":[]})
+    original_char.open_index(2)
+    var real_count := 0
+    var locked_count := 0
+    for card_node in original_char._page_container.get_children():
+        if card_node.name == "OriginalPPARealSkillCard":
+            real_count += 1
+        elif card_node.name == "OriginalPPASkillPlaceholder":
+            locked_count += 1
+    if real_count != 1 or locked_count != 3:
+        push_error("PPA_SOURCE_SKILLS: verified skill snapshot did not map to 1 learned + 3 locked")
+        quit(1)
+        return
+    original_char.clear_authoritative_skill_snapshot()
+    original_char.open_index(2)
+    if original_char._page_container.find_children("*", "PanelContainer", true, false).is_empty():
+        push_error("PPA_SOURCE_SKILLS: cleanup destroyed skill page")
+        quit(1)
+        return
+    print("PPA_SOURCE_SKILLS_SNAPSHOT_OK confirmed=1 locked=3 reverted=4")
     original_char.open_index(0)
     var bag_grid = original_char._page_container.find_child("OriginalPPABagGrid", true, false)
     if bag_grid == null or bag_grid.get_child_count() != 100:
