@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 HOST = "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
@@ -87,10 +87,31 @@ def main():
         sprites.append(approved_asset(orig,"original_dungeon_mob_%02d.%s"%(i+1,extension)))
 
     bosses={}
-    for tag,symbol in [("phoenix","imgPhoenix"),("lord","imgDungeon21Boss")]:
-        path=asset_source(text,symbol)
-        if path:
-            bosses[tag]=approved_asset(path,"original_dungeon_boss_%s.%s"%(tag,path.rsplit(".",1)[-1]))
+    # Phoenix is NOT assigned through imgPhoenix.src in the PPA runtime.
+    # Its approved image is BG_PHOENIX from the source asset manifest and is
+    # assigned generically through the shared image preload registry.
+    phoenix_ref=re.search(r"""\bconst\s+BG_PHOENIX\s*=\s*['"](https://[^'"]+/phoenix-boss\.png)['"]""",text)
+    if phoenix_ref:
+        phoenix_url=phoenix_ref.group(1)
+        source_host=urlparse(phoenix_url)
+        if (source_host.scheme!="https" or not source_host.hostname
+                or not source_host.hostname.endswith(".lovable.app")
+                or not source_host.path.endswith("/phoenix-boss.png")):
+            raise ValueError("Unexpected original Phoenix CDN source")
+        phoenix_bytes=fetch(phoenix_url,9_000_000)
+        if not phoenix_bytes.startswith(b"\x89PNG\r\n\x1a\n") or len(phoenix_bytes)<500:
+            raise ValueError("Original PPA Phoenix CDN art unavailable")
+        import struct
+        w,h=struct.unpack(">II",phoenix_bytes[16:24])
+        if not (64<=w<=4096 and 64<=h<=4096):
+            raise ValueError("Original Phoenix boss art dimensions invalid")
+        phoenix_dest=OUT/"original_dungeon_boss_phoenix.png"
+        phoenix_dest.write_bytes(phoenix_bytes)
+        bosses["phoenix"]="res://assets/"+phoenix_dest.name
+        print("PPA_ORIGINAL_PHOENIX_ART_OK size=%sx%s sha256=%s"%(w,h,hashlib.sha256(phoenix_bytes).hexdigest()),flush=True)
+    path=asset_source(text,"imgDungeon21Boss")
+    if path:
+        bosses["lord"]=approved_asset(path,"original_dungeon_boss_lord."+path.rsplit(".",1)[-1])
     # Canonical PPA Dragon60 renderer explicitly uses CLAN_BOSS_ART[4].
     # This is the SAME approved fourth-index clan event dragon image.
     # No phoenix/monster fallback is allowed for the level-60 dragon.
