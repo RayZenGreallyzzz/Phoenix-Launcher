@@ -6,6 +6,7 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const SHARED_STASH = preload("res://scripts/test_shared_storage.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const SHOP_CATALOG = preload("res://scripts/test_shop_catalog.gd")
+const CANONICAL_CHARACTER = preload("res://scripts/ppa_character_screen.gd")
 
 signal change_class_requested
 
@@ -17,6 +18,7 @@ var nearby_npc: Dictionary = {}
 var current_page := "character"
 var _background: ColorRect
 var _panel: PanelContainer
+var _character_screen: Control
 var _title: Label
 var _list: VBoxContainer
 var _interact_button: Button
@@ -44,7 +46,15 @@ func _ready() -> void:
         stash = SHARED_STASH.new(account)
     _build_buttons()
     _build_window()
+    _character_screen = CANONICAL_CHARACTER.new()
+    _character_screen.configure(account, class_key, stash)
+    add_child(_character_screen)
+    _character_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _character_screen.close_requested.connect(close_menu)
+    _character_screen.select_item_requested.connect(_open_item)
+    _character_screen.unequip_requested.connect(_on_character_unequip)
     _panel.visible = false
+    _character_screen.visible = false
     _background.visible = false
 
 func _button_style(color: Color) -> StyleBoxFlat:
@@ -187,7 +197,13 @@ func _interact() -> void:
         open_npc(nearby_npc)
 
 func is_open() -> bool:
-    return _panel != null and _panel.visible
+    return (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible)
+
+func _on_character_unequip(slot: String) -> void:
+    var result: String = stash.unequip_test_item(slot)
+    if _character_screen != null:
+        _character_screen.open_index(0)
+    print("[PPA-CHARACTER] Local test equipment action: ", result)
 
 func open_npc(npc: Dictionary) -> void:
     if npc.is_empty():
@@ -224,8 +240,16 @@ func set_near_npc(npc: Dictionary) -> void:
 
 func open_page(page: String) -> void:
     current_page = page
-    _panel.visible = true
     _background.visible = true
+    if ["character", "bag", "runes", "skills"].has(page):
+        # REPLACE the previously invented character panel; do not render
+        # an HTML replica above another native page.
+        _panel.visible = false
+        var native_page := 4 if page == "runes" else (2 if page == "skills" else 0)
+        _character_screen.open_index(native_page)
+        return
+    _character_screen.visible = false
+    _panel.visible = true
     _notice.text = _page_notice_default
     _resize_active_panel()
     _refresh()
@@ -250,6 +274,8 @@ func _resize_active_panel() -> void:
 
 func close_menu() -> void:
     _panel.visible = false
+    if _character_screen != null:
+        _character_screen.visible = false
     _background.visible = false
 
 func _clear() -> void:
