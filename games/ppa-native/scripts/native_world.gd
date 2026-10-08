@@ -371,8 +371,20 @@ func _build_hud() -> void:
     add_child(exit_button)
 
 func _input(event: InputEvent) -> void:
+    # No virtual joystick or 3D click handlers may steal touches from
+    # character panels, store buttons or inventory slots.
+    if test_menu != null and test_menu.is_open():
+        if _joy_touch_id != -1 or _joy_mouse_active:
+            _joy_touch_id = -1
+            _joy_mouse_active = false
+            _joy_end()
+        return
+
     if event is InputEventScreenTouch:
         if event.pressed:
+            if _try_world_tap(event.position):
+                get_viewport().set_input_as_handled()
+                return
             if _joy_touch_id == -1 and _joy_point_allowed(event.position):
                 _joy_touch_id = event.index
                 _joy_begin(event.position)
@@ -391,6 +403,9 @@ func _input(event: InputEvent) -> void:
 
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
         if event.pressed:
+            if _try_world_tap(event.position):
+                get_viewport().set_input_as_handled()
+                return
             if not _joy_mouse_active and _joy_touch_id == -1 and _joy_point_allowed(event.position):
                 _joy_mouse_active = true
                 _joy_begin(event.position)
@@ -446,6 +461,67 @@ func _build_test_menu() -> void:
     test_menu.configure(profile, selected_visual_class)
     add_child(test_menu)
     test_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    test_menu.change_class_requested.connect(_back_to_character_select)
+
+# Native tap dispatch. GUI panels/buttons are handled by Godot first and
+# this method is never invoked while a menu is open. Clicking the character
+# or any visible NPC sprite opens the corresponding familiar PPA-style window.
+# Only visual 2D map/NPC coordinates are touched; movement/collision is intact.
+func _back_to_character_select() -> void:
+    if _joy_touch_id != -1 or _joy_mouse_active:
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+    var err := get_tree().change_scene_to_file("res://main.tscn")
+    if err != OK:
+        push_warning("[PPA-UI] Cannot reopen class selection: " + error_string(err))
+
+func _try_world_tap(screen_position: Vector2) -> bool:
+    if test_menu == null or test_menu.is_open():
+        return false
+    if size.x <= 0.0 or size.y <= 0.0:
+        return false
+
+    # Buttons over the right side should stay clickable, even if the world
+    # happens to be scrolled under them.
+    if screen_position.x > size.x - 224.0:
+        if screen_position.y < 204.0 or screen_position.y > size.y - 175.0:
+            return false
+
+    if camera_3d != null and player_3d != null:
+        var hero_center: Vector2 = camera_3d.unproject_position(
+            player_3d.to_global(Vector3(0.0, 0.95, 0.0))
+        )
+        if hero_center.distance_to(screen_position) <= 62.0:
+            _joy_touch_id = -1
+            _joy_mouse_active = false
+            _joy_end()
+            test_menu.open_page("character")
+            return true
+
+    if city_world == null:
+        return false
+    var npc_hit: Dictionary = {}
+    var best_distance := INF
+    for npc in NPC_CATALOG.NPCS:
+        var anchor: Vector2 = NPC_CATALOG.world_pos(npc, SCN_SCALE) + city_world.position
+        var dx: float = absf(screen_position.x - anchor.x)
+        var dy: float = screen_position.y - anchor.y
+        var height: float = float(npc.get("height", 112.0))
+        var half_width: float = maxf(38.0, height * 0.52)
+        if dx > half_width or dy < -height - 15.0 or dy > 43.0:
+            continue
+        var distance: float = (screen_position - anchor).length_squared()
+        if distance < best_distance:
+            best_distance = distance
+            npc_hit = npc
+    if not npc_hit.is_empty():
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+        test_menu.open_npc(npc_hit)
+        return true
+    return false
 
 func _probe_nearest_npc() -> void:
     if test_menu == null:
