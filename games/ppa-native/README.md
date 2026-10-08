@@ -1,25 +1,25 @@
 # Phoenix Pix Arena — native Godot client
 
-Standalone native PPA runtime launched by Phoenix Launcher.
+Native PPA 2.5D module launched from Phoenix Launcher on Android.
 
-Current native bridge:
-- Android package: `com.phoenixgames.ppa`
-- Godot 4.6, GL Compatibility
-- one-time Launcher ticket -> native PPA session
-- same Phoenix/PPA account and nickname
+## Verified baseline
+- Package: `com.phoenixgames.ppa`, Godot 4.6 GL Compatibility
+- Launcher issues a one-time ticket; native client exchanges it for a server session.
+- Phoenix Account/profile and the live PPA hero come from the same backend.
+- The current Peace City bitmap is exactly the live `/assets/c73ef6814017bda6.png` (1254 × 1254) enlarged to the canonical 2822 × 2822 game world.
+- City walkability and building collision use the authoritative deployed PPA geometry.
+- Smart floating joystick, Android multi-touch and canonical directional movement.
+- Only players are 3D. The map, NPCs, mobs, pets and bosses remain 2D.
+- Live `Dwarf.glb` includes rigged cannon and Idle / Run / Attack clips. The character and cannon share one scaling root.
 
-Current City of Ashes milestone:
-- legacy 1024/3048 Peace City art is no longer used
-- current 2D City of Ashes world is 4347 x 3333
-- map is the exact two-WEBP compositor used by the approved City build
-- current map projection is preserved: zoom 4.00, vertical scale 4*cos(0.75)
-- city entry is (2174, 1666)
-- perimeter is left 290 / right 335 / top 225 / bottom 290
-- all 31 approved building placements are rendered as 2D sprites
-- current building collision rectangles are ported
-- current tree trunk collision circles are ported
-- buildings can move in front of the 3D player using the same depth rule as the web prototype
-- smart floating native joystick is unchanged
-- only the local player is rendered in 3D; world, buildings, mobs, bosses and pets stay 2D
+## Launch sequence
+1. Phoenix Launcher authorizes the same Phoenix Account and passes a one-time ticket.
+2. PPA starts with custom Phoenix-branded engine boot splash (not Godot logo).
+3. The on-screen PPA hero image appears while the session is checked.
+4. The account-bound native character-selection screen previews the real registered hero and class.
+5. Only the registered character can enter Peace City.
 
-The approved GLB player asset is still pending transfer into this repository; the lightweight orange fallback remains for native world tests.
+The current backend stores **one** authoritative player/profile/save per Telegram ID. Additional character slots are *not yet enabled*; rendering them as selectable would risk replacing existing save data. Empty slot placeholders are intentionally disabled until a genuine server-side multi-slot migration.
+
+## Publishing
+The native Android CI build verifies image, GLB, splash imports and APK signature. It stamps a monotonically increasing Android versionCode, and publishes the verified game APK to the Phoenix Launcher beta update release channel after a successful build. Launcher updates install through the Android package installer (with explicit confirmation).

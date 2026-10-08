@@ -174,6 +174,26 @@ jobs:
           print('VERIFIED: approved dwarf mesh, skeleton, cannon, Idle/Run/Attack')
           PY
 
+      - name: Prepare branded PNG engine splash
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Godot's engine boot splash accepts PNG only. Convert the approved
+          # Phoenix Launcher/PPA hero artwork without inventing new branding.
+          python3 -m pip install --disable-pip-version-check --quiet --user Pillow==11.3.0
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          source=Path('games/ppa-native/assets/ppa_hero.jpg')
+          output=Path('games/ppa-native/assets/ppa_boot.png')
+          with Image.open(source) as im:
+              im.convert('RGB').save(output,format='PNG',optimize=True)
+          with Image.open(output) as im:
+              assert im.format=='PNG'
+              assert min(im.size)>=256
+              print('PPA BOOT SPLASH:',im.size,output.stat().st_size)
+          PY
+
       - name: Import native PPA project
         shell: bash
         run: |
@@ -199,6 +219,14 @@ jobs:
             exit 1
           fi
           grep -q 'path=' "$MODEL_IMPORT"
+          SPLASH_IMPORT="games/ppa-native/assets/ppa_boot.png.import"
+          test -s "$SPLASH_IMPORT"
+          if grep -q 'valid=false' "$SPLASH_IMPORT"; then
+            echo "Approved branded PPA splash could not be imported"
+            cat "$SPLASH_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$SPLASH_IMPORT"
           godot --headless --path games/ppa-native --script res://scripts/audit_gnome_import.gd 2>&1 | tee /tmp/ppa-dwarf-import-audit.log
           grep -q "PPA_DWARF_IMPORT_OK" /tmp/ppa-dwarf-import-audit.log
 

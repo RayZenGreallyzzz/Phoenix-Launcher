@@ -2,6 +2,7 @@ extends Control
 
 const API_BASE := "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
 const GAME_ID := "phoenix-pix-arena"
+const CHARACTER_SELECT_SCRIPT = preload("res://scripts/character_select.gd")
 const SESSION_FILE := "user://phoenix_game_session.json"
 const TICKET_EXTRA := "phoenix_game_ticket"
 const GAME_ID_EXTRA := "phoenix_game_id"
@@ -17,6 +18,7 @@ var account_label: Label
 var details_label: Label
 var play_button: Button
 var retry_button: Button
+var selection_screen: Control
 
 func _ready() -> void:
     _build_ui()
@@ -99,7 +101,7 @@ func _build_ui() -> void:
     stack.add_child(brand)
 
     title_label = Label.new()
-    title_label.text = "НАТИВНЫЙ КЛИЕНТ GODOT 4.6"
+    title_label.text = "ЗАГРУЗКА ИГРОВОЙ СЕССИИ"
     title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     title_label.add_theme_font_size_override("font_size", 18)
     title_label.add_theme_color_override("font_color", Color("#EDEFF0"))
@@ -252,6 +254,20 @@ func _show_connected() -> void:
 
     play_button.disabled = false
     retry_button.visible = false
+    # Player selection is a real mandatory step after account verification.
+    # Never let the native client silently create/change the live hero class.
+    _show_character_selection()
+
+func _show_character_selection() -> void:
+    if selection_screen != null:
+        selection_screen.queue_free()
+        selection_screen = null
+    selection_screen = CHARACTER_SELECT_SCRIPT.new()
+    selection_screen.name = "AuthoritativeCharacterSelection"
+    add_child(selection_screen)
+    selection_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    selection_screen.set_account(account)
+    selection_screen.character_confirmed.connect(_enter_native_world)
 
 func _show_error(message: String) -> void:
     status_label.text = "✕ " + message
@@ -269,6 +285,11 @@ func _retry() -> void:
         _show_error("Нужен новый запуск через Phoenix Launcher.")
 
 func _enter_native_world() -> void:
+    # The selection is server-owned. A client-side class preview is NEVER
+    # permission to enter with an unregistered or different character.
+    if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
+        _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
+        return
     get_tree().set_meta("phoenix_account", account.duplicate(true))
     var err := get_tree().change_scene_to_file("res://world.tscn")
     if err != OK:
