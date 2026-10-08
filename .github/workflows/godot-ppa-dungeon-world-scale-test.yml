@@ -176,25 +176,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The 20 newly recovered user-Library PNGs are intentionally
-          # source-controlled as a base64 ZIP text asset. GitHub connector
-          # supports text writes; this unpack restores the exact binary files.
-          # The recovered original atlas still contains an obsolete carrion bird.
-          # Require the separately approved scavenger-slime SHA pin BEFORE
-          # decoding any candidate pack; never ship an invalid fourth creature.
-          if [ ! -s games/ppa-native/source_art/approved_mob04_sha256.txt ]; then
-            echo "::error::PPA_SLIME_APPROVAL_REQUIRED — fourth mob must be Слайм-падальщик, not carrion bird"
-            exit 1
-          fi
-          base64 --decode games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64 \
-            > games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip
-          echo "b003a53e9244840e31d2b7e2f6d7d2b88b2e1a42b7ef875dce739cd622824e6a  games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip" | sha256sum --check
-          python3 games/ppa-native/tools/install_new_mobs_from_zip.py | tee /tmp/ppa-new-mobs.log
-          if [ -f games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip ]; then
+          # No art fallback: old ZIP contained a carrion bird at dungeon level 4.
+          # Correct 22-image pack can be restored ONLY after 3 independently
+          # approved slime images and ZIP checksum have been supplied.
+          SRC=games/ppa-native/source_art
+          if [ -s "$SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64" ]; then
+            test -s "$SRC/approved_mob04_variants_sha256.json" || { echo "::error::Three approved slime SHA256 pins required"; exit 1; }
+            test -s "$SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip.sha256" || { echo "::error::New ZIP digest pin required"; exit 1; }
+            base64 --decode "$SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64" > "$SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip"
+            echo "$(cat "$SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip.sha256")  $SRC/PPA_New_Dungeon_Mobs_1-20_TEST.zip" | sha256sum --check
+            python3 games/ppa-native/tools/install_new_mobs_from_zip.py | tee /tmp/ppa-new-mobs.log
             grep -q "PPA_NEW_DUNGEON_ART_IMPORTED_OK" /tmp/ppa-new-mobs.log
-            test "$(find games/ppa-native/assets/dungeon_new_mobs -type f -name '*.png' | wc -l)" -eq 20
+            test "$(find games/ppa-native/assets/dungeon_new_mobs -type f -name '*.png' | wc -l)" -eq 22
           else
+            python3 games/ppa-native/tools/install_new_mobs_from_zip.py | tee /tmp/ppa-new-mobs.log
             grep -q "PPA_NEW_DUNGEON_ART_PENDING" /tmp/ppa-new-mobs.log
+            echo "PPA_22_MOB_PNGS_PENDING_QA: safe map-only preview; old birds forbidden"
           fi
 
       - name: Fetch approved live PPA dwarf and validate GLB
