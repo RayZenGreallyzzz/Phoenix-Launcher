@@ -538,6 +538,19 @@ func _probe_nearest_npc() -> void:
     test_menu.set_near_npc(closest)
 
 func _physics_process(delta: float) -> void:
+    # Do not run the local test hero's movement, collision resolver, NPC
+    # proximity checks or repeated 3D transforms behind a modal WebView.
+    # This does NOT pause any future server-authoritative world AI/timers.
+    # Saving CPU here is especially useful on entry-level Android tablets.
+    if test_menu != null and test_menu.is_open():
+        if _joy_touch_id != -1 or _joy_mouse_active:
+            _joy_touch_id = -1
+            _joy_mouse_active = false
+            _joy_end()
+        if not move_input.is_zero_approx():
+            move_input = Vector2.ZERO
+        _set_animation("idle")
+        return
     var keyboard := Vector2.ZERO
     if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
         keyboard.x -= 1.0
