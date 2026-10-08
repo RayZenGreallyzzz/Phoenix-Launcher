@@ -77,7 +77,13 @@ func _on_original_web_ui_event(event_name: String) -> void:
         push_warning("PPA ORIGINAL UI: " + event_name)
         # Fail visibly instead of pretending that a broken iframe is 1:1.
     elif event_name == "charReady":
+        # This is the REAL notification from the original PPA iframe,
+        # not a synthetic one emitted during WebView load.
         print("PPA_ORIGINAL_WEBVIEW_CHARFRAME_READY")
+    elif event_name == "stateRequested":
+        # Godot has no authenticated full character snapshot yet; do not
+        # invent inventory, books, ranks or server purchases in response.
+        print("PPA_ORIGINAL_UI_AWAITING_AUTHENTICATED_STATE")
 
 func _button_style(color: Color) -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
@@ -274,6 +280,14 @@ func open_page(page: String) -> void:
             _web_open = true
             _native_web_ui.showCharacter(class_key, source_page)
             return
+        if OS.get_name() == "Android":
+            # Never silently fall back to a hand-painted approximation
+            # when the required original iframe plugin failed to load.
+            _background.visible = false
+            push_error("PPA_ORIGINAL_WEBVIEW_REQUIRED: Android plugin missing")
+            OS.alert("Оригинальное меню PPA не загрузилось. Проверь сборку Android WebView.", "PPA · WebView")
+            return
+        # Editor-only fallback for headless desktop audit and development.
         _background.visible = true
         _character_screen.open_index(source_page)
         return
