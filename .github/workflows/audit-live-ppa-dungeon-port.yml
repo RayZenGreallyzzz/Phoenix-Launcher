@@ -1,0 +1,20 @@
+name: Audit deployed PPA dungeon layout
+
+on:
+  push:
+    branches: [ "feature/godot-dungeon-real-map-port" ]
+    paths:
+      - "games/ppa-native/tools/audit_live_dungeon.py"
+      - ".github/workflows/audit-live-ppa-dungeon-port.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect original PPA dungeon map references
+        run: python3 games/ppa-native/tools/audit_live_dungeon.py
