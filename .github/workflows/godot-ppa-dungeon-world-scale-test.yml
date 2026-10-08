@@ -1,8 +1,8 @@
-name: Test PPA Dungeon Mask Offset Down 14px
+name: Test PPA Native HUD Hero Dedup
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-mask-down-fourteen-pixels" ]
+    branches: [ "feature/godot-remove-duplicate-hero-hud-button" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-dungeon-offset14-test-${{ github.ref }}
+  group: ppa-native-hero-dedup-test-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((350000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="1.4.${GITHUB_RUN_NUMBER}-mask14"
+          VERSION_CODE=$((360000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="1.5.${GITHUB_RUN_NUMBER}-hero-hud"
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -348,7 +348,7 @@ jobs:
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Dungeon-Mask-14px-TEST
+          name: PhoenixPixArena-Hero-HUD-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
