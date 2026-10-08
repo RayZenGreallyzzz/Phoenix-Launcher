@@ -1,0 +1,18 @@
+name: Audit current PPA HP MP combat stats and skills
+on:
+  push:
+    branches: [ "test/godot-native-combat-hud-20261009" ]
+    paths:
+      - "games/ppa-native/tools/audit_live_combat_contract.py"
+      - ".github/workflows/audit-live-ppa-combat-20261009.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  combat-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/audit_live_combat_contract.py
