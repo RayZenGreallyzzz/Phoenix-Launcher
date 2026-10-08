@@ -42,6 +42,13 @@ Only navigation, descriptions and *read-only* catalog controls work before serve
 - Character bag visually contains 100 cells; early/locked status remains distinct from capacity and must eventually be populated from authoritative server permission data.
 - The temporary offline stash limits were corrected from 64 to bag 100 / personal warehouse 200. This local store is NOT the game server; no clan or premium items are persisted in it. Keep it isolated from live Telegram PPA saved data.
 - Server-owned inventory snapshots must include `storage_kind`, `capacity`, `unlocked_slots`, `items`, and for clan `role_permission` and revision. Verify capacity against server and do not manufacture missing items or privileges in the client.
-- To avoid freezing mobile/tablet: render only 20 visible slots per panel; page counts are bag 5, personal 10, clan 25, premium 3. Slot navigation is local UI only. Non-mutating page changes must never change inventory data.
+- To avoid freezing mobile/tablet: only draw the cells currently visible in each continuously scrollable virtual grid. No per-slot Control/Button nodes are allocated. Scrolling must not mutate inventory data.
 - All nine clan tabs are directly visible in native grid layout (portrait 3×3, landscape 5×2). `exchange` is always a clickable tab, but the actual exchange action stays server-locked. No mock transfer of clan coins/resources.
 - Automated audit verifies all four capacities, last-page indices, full 9-tab clan navigation, and that moving between screens never silently changes the local test stash. Device portrait/landscape still needs visual QA.
+
+## Continuous virtual warehouse grid (supersedes pagination)
+The 0.4 test's twenty-at-a-time page buttons were rejected: 25 page turns for the 500-slot clan warehouse are unplayable on a tablet. The Native implementation now uses **continuous vertical touch scrolling** with a single lightweight `ppa_virtual_storage_grid.gd` Control per inventory/storage panel. Its scrollbar is independent for left and right panels. It draws only cells in the visible rows and allocates **zero child nodes per slot**, regardless of capacity.
+
+All four capacities remain 100 / 200 / 500 / 50. No paging arrows, 1/25 labels, or 'next page' actions remain in the actual UI. The width of the panels and square cells adapts to portrait and landscape. The last slot is reachable by scrolling; the viewport only draws the visible slice. The drawing-only view intentionally has no fabricated items or server mutations. On future server integration, the backend must provide verified item IDs/positions and permissions before rendering interactive items.
+
+The old `PAGE_SIZE` and paging helpers in `ppa_storage_contract.gd` are removed; that contract now describes **capacities only**. CI verifies all grid capacity constants, first-to-last scroll coverage and bounded visible draw ranges. Real Android touch inertia must still be exercised on a tablet.
