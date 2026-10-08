@@ -19,6 +19,9 @@ var _preview_viewport: SubViewport
 var _preview_camera: Camera3D
 var _preview_stage: Node3D
 var _preview_model: Node3D
+var _class_layout: GridContainer
+var _preview_panel: PanelContainer
+var _class_buttons_grid: GridContainer
 var _class_buttons: Dictionary = {}
 var _selected_class_key := "gnome"
 
@@ -42,6 +45,8 @@ func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_STOP
     _build_ui()
     _refresh_account()
+    _adapt_orientation()
+    resized.connect(_adapt_orientation)
 
 func _build_ui() -> void:
     var art := TextureRect.new()
@@ -111,12 +116,17 @@ func _build_ui() -> void:
     padding.add_theme_constant_override("margin_bottom", 16)
     frame.add_child(padding)
 
-    var columns := HBoxContainer.new()
-    columns.add_theme_constant_override("separation", 22)
+    var columns := GridContainer.new()
+    columns.name = "ResponsiveClassLayout"
+    columns.columns = 2
+    columns.add_theme_constant_override("h_separation", 22)
+    columns.add_theme_constant_override("v_separation", 8)
     padding.add_child(columns)
+    _class_layout = columns
 
     var preview_panel := PanelContainer.new()
     preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _preview_panel = preview_panel
     preview_panel.size_flags_stretch_ratio = 0.90
     var preview_style := StyleBoxFlat.new()
     preview_style.bg_color = Color(0.030, 0.040, 0.055, 1.0)
@@ -190,6 +200,7 @@ func _build_ui() -> void:
     details.add_child(classes_heading)
 
     var button_grid := GridContainer.new()
+    _class_buttons_grid = button_grid
     button_grid.columns = 2
     button_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     button_grid.add_theme_constant_override("h_separation", 9)
@@ -236,6 +247,17 @@ func _build_ui() -> void:
     footer.add_theme_font_size_override("font_size", 10)
     footer.add_theme_color_override("font_color", Color("#AF9C89"))
     add_child(footer)
+
+func _adapt_orientation() -> void:
+    if _class_layout == null or size.x < 2.0 or size.y < 2.0:
+        return
+    var portrait := size.y > size.x
+    # Use stacked preview and controls in portrait, side by side in landscape.
+    _class_layout.columns = 1 if portrait else 2
+    if _preview_panel != null:
+        _preview_panel.custom_minimum_size.y = 185.0 if portrait else 0.0
+    if _class_buttons_grid != null:
+        _class_buttons_grid.columns = 2
 
 func _refresh_account() -> void:
     if _name_label == null:
