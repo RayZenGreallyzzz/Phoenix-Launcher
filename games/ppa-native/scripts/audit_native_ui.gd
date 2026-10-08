@@ -86,7 +86,7 @@ func _run() -> void:
             var expected_count := 5 if page == 3 else 4
             var placeholders := 0
             for card_node in original_char._page_container.get_children():
-                if card_node.name != "OriginalPPASkillPlaceholder":
+                if not str(card_node.name).contains("OriginalPPASkillPlaceholder"):
                     continue
                 placeholders += 1
                 var original_icon = card_node.find_child("OriginalPPASkillIcon", true, false)
@@ -107,7 +107,7 @@ func _run() -> void:
                 return
             await process_frame
             for card_node in original_char._page_container.get_children():
-                if card_node.name != "OriginalPPASkillPlaceholder":
+                if not str(card_node.name).contains("OriginalPPASkillPlaceholder"):
                     continue
                 if card_node.size.y > 110.0 or card_node.size.y < 84.0:
                     push_error("PPA_SOURCE_SKILLS: screenshot mismatch, skill placeholder height=" + str(card_node.size.y))
@@ -127,9 +127,9 @@ func _run() -> void:
     var real_count := 0
     var locked_count := 0
     for card_node in original_char._page_container.get_children():
-        if card_node.name == "OriginalPPARealSkillCard":
+        if str(card_node.name).contains("OriginalPPARealSkillCard"):
             real_count += 1
-        elif card_node.name == "OriginalPPASkillPlaceholder":
+        elif str(card_node.name).contains("OriginalPPASkillPlaceholder"):
             locked_count += 1
     if real_count != 1 or locked_count != 3:
         push_error("PPA_SOURCE_SKILLS: verified skill snapshot did not map to 1 learned + 3 locked")

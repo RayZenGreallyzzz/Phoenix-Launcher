@@ -19,6 +19,8 @@ var current_page := "character"
 var _background: ColorRect
 var _panel: PanelContainer
 var _character_screen
+var _native_web_ui
+var _web_open := false
 var _title: Label
 var _list: VBoxContainer
 var _interact_button: Button
@@ -59,6 +61,23 @@ func _ready() -> void:
     _panel.visible = false
     _character_screen.visible = false
     _background.visible = false
+    # Godot remains the 3D world. One Android WebView replaces its hand-built
+    # character UI, using the untouched current Telegram charFrame srcdoc.
+    if OS.get_name() == "Android" and Engine.has_singleton("PPAOriginalWebUI"):
+        _native_web_ui = Engine.get_singleton("PPAOriginalWebUI")
+        _native_web_ui.connect("ppa_ui_event", _on_original_web_ui_event)
+
+func _on_original_web_ui_event(event_name: String) -> void:
+    if event_name == "closeChar":
+        _web_open = false
+        _background.visible = false
+    elif event_name.begins_with("error:"):
+        _web_open = false
+        _background.visible = false
+        push_warning("PPA ORIGINAL UI: " + event_name)
+        # Fail visibly instead of pretending that a broken iframe is 1:1.
+    elif event_name == "charReady":
+        print("PPA_ORIGINAL_WEBVIEW_CHARFRAME_READY")
 
 func _button_style(color: Color) -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
@@ -200,7 +219,7 @@ func _interact() -> void:
         open_npc(nearby_npc)
 
 func is_open() -> bool:
-    return (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible)
+    return _web_open or (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible)
 
 func _on_character_unequip(slot: String) -> void:
     var result: String = stash.unequip_test_item(slot)
@@ -243,15 +262,26 @@ func set_near_npc(npc: Dictionary) -> void:
 
 func open_page(page: String) -> void:
     current_page = page
-    _background.visible = true
     if ["character", "bag", "runes", "skills"].has(page):
-        # REPLACE the previously invented character panel; do not render
-        # an HTML replica above another native page.
         _panel.visible = false
-        var native_page := 4 if page == "runes" else (2 if page == "skills" else 0)
-        _character_screen.open_index(native_page)
+        _character_screen.visible = false
+        var source_page := 4 if page == "runes" else (2 if page == "skills" else 0)
+        if _native_web_ui != null:
+            # Only the Android WebView is visible. It renders the exact original
+            # Telegram iframe with browser-native touch scrolling, not a Godot
+            # Button/Control recreation. No auth token or fake inventory injected.
+            _background.visible = false
+            _web_open = true
+            _native_web_ui.showCharacter(class_key, source_page)
+            return
+        _background.visible = true
+        _character_screen.open_index(source_page)
         return
+    if _native_web_ui != null and _web_open:
+        _native_web_ui.hideUi()
+        _web_open = false
     _character_screen.visible = false
+    _background.visible = true
     _panel.visible = true
     _notice.text = _page_notice_default
     _resize_active_panel()
@@ -276,6 +306,9 @@ func _resize_active_panel() -> void:
         _tab_bar.visible = hero_page or warehouse_page
 
 func close_menu() -> void:
+    if _native_web_ui != null and _web_open:
+        _native_web_ui.hideUi()
+        _web_open = false
     _panel.visible = false
     if _character_screen != null:
         _character_screen.visible = false

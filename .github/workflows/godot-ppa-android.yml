@@ -195,6 +195,36 @@ jobs:
           test -s games/ppa-native/scripts/ppa_grimoire_catalog_generated.gd
           test "$(find games/ppa-native/assets -maxdepth 1 -name 'ppa_grimoire_*.webp' | wc -l)" -eq 72
 
+      - name: Extract original PPA character iframe without reauthoring HTML or CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/extract_original_ppa_frame.py | tee /tmp/ppa-original-charframe.log
+          grep -q "PPA_ORIGINAL_CHARFRAME_EXTRACT_OK" /tmp/ppa-original-charframe.log
+          test -s games/ppa-native/webview-plugin/src/main/assets/ppa_original/charFrame.html
+
+      - name: Install Gradle 8.13 for Godot Android v2 WebView plugin
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Compile and package PPA original UI Android WebView plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p games/ppa-native/webview-plugin assembleDebug assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/ppa-android-webview-plugin-build.log
+          PLUGINS="games/ppa-native/webview-plugin/build/outputs/aar"
+          DEBUG="$(find "$PLUGINS" -maxdepth 1 -name '*-debug.aar' -type f | head -1)"
+          RELEASE="$(find "$PLUGINS" -maxdepth 1 -name '*-release.aar' -type f | head -1)"
+          test -s "$DEBUG"
+          test -s "$RELEASE"
+          mkdir -p games/ppa-native/addons/PPAOriginalWebUI/bin/debug
+          mkdir -p games/ppa-native/addons/PPAOriginalWebUI/bin/release
+          cp "$DEBUG" games/ppa-native/addons/PPAOriginalWebUI/bin/debug/PPAOriginalWebUI-debug.aar
+          cp "$RELEASE" games/ppa-native/addons/PPAOriginalWebUI/bin/release/PPAOriginalWebUI-release.aar
+          unzip -l "$DEBUG" | grep -q "assets/ppa_original/charFrame.html"
+          echo "PPA_ORIGINAL_WEBVIEW_AAR_OK debug=1 release=1 source_iframe=1"
+
       - name: Prepare branded PNG engine splash
         shell: bash
         run: |
@@ -275,7 +305,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          godot --headless --verbose --path games/ppa-native --export-debug "Android" "$GITHUB_WORKSPACE/build/PhoenixPixArena-native-debug.apk" 2>&1 | tee build/godot-export.log
+          godot --headless --verbose --path games/ppa-native --install-android-build-template --export-debug "Android" "$GITHUB_WORKSPACE/build/PhoenixPixArena-native-debug.apk" 2>&1 | tee build/godot-export.log
           if grep -E "SCRIPT ERROR: Parse Error|Failed to load script" build/godot-export.log; then
             echo "Godot script parse error detected; refusing to publish broken APK."
             exit 1
@@ -288,6 +318,11 @@ jobs:
           test -s build/PhoenixPixArena-native-debug.apk
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
           "$APKSIGNER" verify --verbose build/PhoenixPixArena-native-debug.apk
+          unzip -l build/PhoenixPixArena-native-debug.apk | grep -q 'assets/ppa_original/charFrame.html'
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          test -x "$AAPT"
+          "$AAPT" dump xmltree build/PhoenixPixArena-native-debug.apk AndroidManifest.xml | grep -q "org.godotengine.plugin.v2.PPAOriginalWebUI"
+          echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
 
       - name: Publish signed PPA APK to the launcher update channel
         shell: bash
