@@ -295,9 +295,14 @@ func _build_dwarf_preview() -> void:
     _preview_camera.size = 4.00
     _preview_camera.near = 0.05
     _preview_camera.far = 40.0
-    _preview_camera.position = Vector3(4.0, 2.7, 6.0)
+    # Shift ONLY the character-selection framing downward (~0.8 game units
+    # on the portrait). Move camera and its target together to keep the
+    # approved perspective/weapon grip intact and reveal the full head.
+    # The world gameplay camera, character scale and skeleton remain unchanged.
+    const PREVIEW_VERTICAL_FRAMING := 0.80
+    _preview_camera.position = Vector3(4.0, 2.7 + PREVIEW_VERTICAL_FRAMING, 6.0)
     stage.add_child(_preview_camera)
-    _preview_camera.look_at(Vector3(0, 1.05, 0), Vector3.UP)
+    _preview_camera.look_at(Vector3(0, 1.05 + PREVIEW_VERTICAL_FRAMING, 0), Vector3.UP)
     _preview_camera.current = true
     _preview_host.texture = _preview_viewport.get_texture()
 
