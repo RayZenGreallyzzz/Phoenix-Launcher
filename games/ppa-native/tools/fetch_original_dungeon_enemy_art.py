@@ -83,16 +83,18 @@ def main():
         path=asset_source(text,symbol)
         if path:
             bosses[tag]=approved_asset(path,"original_dungeon_boss_%s.%s"%(tag,path.rsplit(".",1)[-1]))
-    # The Dragon60 code may use a non-Image alias; report candidates rather
-    # than silently substitute the Phoenix art under the Dragon label.
-    for term in ["imgDungeon60Boss","imgDragon60","imgDragon","DUNGEON60_BOSS_SPRITE"]:
-        if term in text:
-            print("PPA_DRAGON_SOURCE_SYMBOL",term,"occurrences="+str(text.count(term)),flush=True)
-            if term.startswith("img"):
-                path=asset_source(text,term)
-                if path:
-                    bosses["dragon"]=approved_asset(path,"original_dungeon_boss_dragon."+path.rsplit(".",1)[-1])
-                    break
+    # Canonical PPA Dragon60 renderer explicitly uses CLAN_BOSS_ART[4].
+    # This is the SAME approved fourth-index clan event dragon image.
+    # No phoenix/monster fallback is allowed for the level-60 dragon.
+    clan_art = re.search(r"\\b(?:const|let|var)\\s+CLAN_BOSS_ART\\s*=\\s*(\\[[^;]{40,12000}\\])\\s*;",text,re.DOTALL)
+    if clan_art:
+        clan_files = re.findall(r"""['"]((?:\\./|/)?assets/[0-9a-f]{16}\\.(?:png|webp|jpg))['"]""",clan_art.group(1))
+        if len(clan_files) >= 5:
+            p=clan_files[4]
+            bosses["dragon"]=approved_asset(p,"original_dungeon_boss_dragon."+p.rsplit(".",1)[-1])
+            print("PPA_DRAGON60_CANONICAL_ART",p,"source=CLAN_BOSS_ART[4]",flush=True)
+    if "dragon" not in bosses:
+        print("PPA_DRAGON60_ART_UNRESOLVED: CLAN_BOSS_ART[4] unavailable",flush=True)
     resource = PROJECT / "scripts/ppa_dungeon_art_generated.gd"
     resource.write_text(
         "extends RefCounted\n"
