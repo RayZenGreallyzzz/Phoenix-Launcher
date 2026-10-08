@@ -10,8 +10,9 @@ const ENEMY_CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
 # DO NOT silently substitute 2026-09 legacy published PPA mob sprites.
 # User's replacement set is pre-deploy. Until those exact approved assets are
 # selected, preserve authentic spawn data but keep old enemy art OFF.
-const APPROVED_DUNGEON_ENEMY_ART_READY := false
-const ENEMY_VISUAL = preload("res://scripts/ppa_dungeon_enemy_test_visual.gd")
+var APPROVED_DUNGEON_ENEMY_ART_READY := false
+const APPROVED_DUNGEON_BOSS_ART_READY := false
+const ENEMY_VISUAL = preload("res://scripts/ppa_new_dungeon_mob_visual.gd")
 const PREVIEW_CAP := 24
 const PREVIEW_RADIUS := 675.0
 const PREVIEW_AGGRO_RADIUS := 235.0
@@ -75,6 +76,11 @@ func _ready() -> void:
         return
     world_pos_px = _entrance
     _load_original_enemy_spawns()
+    # Enabled only when ALL 20 newly recovered files are actually packed
+    # into Godot; a missing image yields an intentionally empty dungeon.
+    APPROVED_DUNGEON_ENEMY_ART_READY = ENEMY_VISUAL.artwork_complete()
+    print("PPA_NEW_DUNGEON_ART_GATE sprites=", ENEMY_VISUAL.available_count(),
+        " enabled=", APPROVED_DUNGEON_ENEMY_ART_READY, " legacy=0")
     _sync_world_visuals()
     _add_dungeon_hud()
     _refresh_preview_enemies()
@@ -256,7 +262,7 @@ func _spawn_preview_enemy(index: int) -> void:
 func _refresh_preview_enemies() -> void:
     # Absolute safety gate: neither regular mobs nor bosses may render with
     # the old 20-species roster while the new illustrated roster is pending.
-    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+    if not APPROVED_DUNGEON_ENEMY_ART_READY or _preview_mode != 0:
         return
     if _enemy_layer == null or _enemy_spawns.is_empty():
         return
@@ -285,7 +291,7 @@ func _refresh_preview_enemies() -> void:
                 node.queue_free()
             _enemy_active.erase(key)
 
-    if world_pos_px.distance_to(_boss_home) < BOSS_ACTIVATION_RADIUS:
+    if APPROVED_DUNGEON_BOSS_ART_READY and world_pos_px.distance_to(_boss_home) < BOSS_ACTIVATION_RADIUS:
         if _boss_visual == null:
             _boss_visual = ENEMY_VISUAL.new() as Node2D
             _boss_visual.call("setup", -1, 20 + _preview_mode * 20, true, _preview_boss_id())
@@ -357,7 +363,9 @@ func _cycle_preview_depth() -> void:
         _boss_visual = null
     _boss_world = _boss_home
     if _preview_mode_button != null:
-        _preview_mode_button.text = ["ТЕСТ 1–20", "ТЕСТ 21–40", "ТЕСТ 41–60"][_preview_mode]
+        _preview_mode_button.text = [
+            "НОВЫЕ МОБЫ 1–20", "21–40 · АРТ ОЖИДАЕТСЯ", "41–60 · АРТ ОЖИДАЕТСЯ"
+        ][_preview_mode]
     _refresh_preview_enemies()
     print("PPA_DUNGEON_TEST_DEPTH_OK bracket=", _preview_mode,
         " boss=", _preview_boss_id(), " no_rewards=1")
@@ -527,7 +535,7 @@ func _add_dungeon_hud() -> void:
     # Test-only level branch switch, never changes the server character.
     _preview_mode_button = Button.new()
     _preview_mode_button.name = "DungeonPreviewDepthSelector"
-    _preview_mode_button.text = "ТЕСТ 1–20"
+    _preview_mode_button.text = "НОВЫЕ МОБЫ 1–20"
     _preview_mode_button.anchor_left = 1.0
     _preview_mode_button.anchor_right = 1.0
     _preview_mode_button.offset_left = -156.0
