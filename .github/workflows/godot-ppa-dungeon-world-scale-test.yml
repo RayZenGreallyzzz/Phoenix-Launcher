@@ -179,6 +179,13 @@ jobs:
           # The 20 newly recovered user-Library PNGs are intentionally
           # source-controlled as a base64 ZIP text asset. GitHub connector
           # supports text writes; this unpack restores the exact binary files.
+          # The recovered original atlas still contains an obsolete carrion bird.
+          # Require the separately approved scavenger-slime SHA pin BEFORE
+          # decoding any candidate pack; never ship an invalid fourth creature.
+          if [ ! -s games/ppa-native/source_art/approved_mob04_sha256.txt ]; then
+            echo "::error::PPA_SLIME_APPROVAL_REQUIRED — fourth mob must be Слайм-падальщик, not carrion bird"
+            exit 1
+          fi
           base64 --decode games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64 \
             > games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip
           echo "b003a53e9244840e31d2b7e2f6d7d2b88b2e1a42b7ef875dce739cd622824e6a  games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip" | sha256sum --check
