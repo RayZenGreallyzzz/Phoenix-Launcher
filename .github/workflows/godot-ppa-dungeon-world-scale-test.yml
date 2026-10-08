@@ -1,8 +1,8 @@
-name: Probe Native Dungeon Original Enemy Art
+name: Test Native Dungeon Original PPA Monsters and Bosses
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-authentic-enemy-art" ]
+    branches: [ "feature/godot-dungeon-real-monster-sprites" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-authentic-enemy-art-test-${{ github.ref }}
+  group: ppa-native-original-enemy-art-test-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
-          VERSION_CODE=$((380000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="1.7.${GITHUB_RUN_NUMBER}-art-probe"
+          VERSION_CODE=$((390000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="1.8.${GITHUB_RUN_NUMBER}-original-mobs"
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -163,11 +163,14 @@ jobs:
           test -s games/ppa-native/scripts/ppa_dungeon_entities_generated.gd
           grep -q "PPA_ORIGINAL_DUNGEON_ENTITIES_OK" /tmp/ppa-original-dungeon.log
 
-      - name: Identify original PPA enemy art assets
+      - name: Fetch original PPA monster and boss artwork
         shell: bash
         run: |
           set -euo pipefail
-          python3 games/ppa-native/tools/probe_original_enemy_art.py
+          python3 games/ppa-native/tools/fetch_original_dungeon_enemy_art.py | tee /tmp/ppa-original-enemy-art.log
+          grep -q 'PPA_ORIGINAL_ENEMY_ART_OK' /tmp/ppa-original-enemy-art.log
+          test -s games/ppa-native/scripts/ppa_dungeon_art_generated.gd
+          test "$(find games/ppa-native/assets -maxdepth 1 -name 'original_dungeon_mob_*' | wc -l)" -eq 20
 
       - name: Fetch approved live PPA dwarf and validate GLB
         shell: bash
@@ -327,6 +330,7 @@ jobs:
           timeout 110s godot --headless --path . --script res://scripts/audit_native_dungeon.gd 2>&1 | tee /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_WALK_TEST_OK" /tmp/ppa-dungeon-test.log
           grep -q "PPA_DUNGEON_ENEMIES_TEST_OK" /tmp/ppa-dungeon-test.log
+          grep -q "PPA_DUNGEON_ORIGINAL_ENEMY_ART_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
 
       - name: Build native PPA APK
@@ -357,7 +361,7 @@ jobs:
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Dungeon-Enemy-Art-Probe-TEST
+          name: PhoenixPixArena-Original-Mobs-Bosses-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
