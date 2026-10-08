@@ -76,7 +76,7 @@ func _ready() -> void:
         return
     world_pos_px = _entrance
     _load_original_enemy_spawns()
-    # Enabled only when ALL 20 newly recovered files are actually packed
+    # Enabled only when all 22 verified sprites (20 levels + 2 extra slime colors) are packed
     # into Godot; a missing image yields an intentionally empty dungeon.
     APPROVED_DUNGEON_ENEMY_ART_READY = ENEMY_VISUAL.artwork_complete()
     print("PPA_NEW_DUNGEON_ART_GATE sprites=", ENEMY_VISUAL.available_count(),
