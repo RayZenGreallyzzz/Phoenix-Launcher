@@ -7,8 +7,11 @@ const SHARED_STASH = preload("res://scripts/test_shared_storage.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const SHOP_CATALOG = preload("res://scripts/test_shop_catalog.gd")
 const CANONICAL_CHARACTER = preload("res://scripts/ppa_character_screen.gd")
+const NPC_SCREEN = preload("res://scripts/ppa_npc_screen.gd")
 
 signal change_class_requested
+# Future server adapter listens to this and returns a verified read-only NPC snapshot.
+signal npc_snapshot_requested(service: String)
 
 
 var account: Dictionary = {}
@@ -19,6 +22,7 @@ var current_page := "character"
 var _background: ColorRect
 var _panel: PanelContainer
 var _character_screen
+var _npc_screen
 var _native_web_ui
 var _web_open := false
 var _use_original_web_ui := false
@@ -65,6 +69,14 @@ func _ready() -> void:
         _character_screen.visible = false
     _panel.visible = false
     _background.visible = false
+    # NPC windows are independent of BOTH the character UI and the old
+    # general purpose test panel. Exactly one NPC screen is instantiated.
+    _npc_screen = NPC_SCREEN.new()
+    _npc_screen.z_index = 105
+    add_child(_npc_screen)
+    _npc_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _npc_screen.close_requested.connect(close_menu)
+    _npc_screen.authoritative_state_requested.connect(func(service: String): npc_snapshot_requested.emit(service))
     # Optional A/B comparison of the untouched Telegram character iframe.
     # Keep it disabled for normal Android builds; never render both menus.
     if _use_original_web_ui and Engine.has_singleton("PPAOriginalWebUI"):
@@ -229,7 +241,7 @@ func _interact() -> void:
         open_npc(nearby_npc)
 
 func is_open() -> bool:
-    return _web_open or (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible)
+    return _web_open or (_panel != null and _panel.visible) or (_character_screen != null and _character_screen.visible) or (_npc_screen != null and _npc_screen.is_open())
 
 func _on_character_unequip(slot: String) -> void:
     var result: String = stash.unequip_test_item(slot)
@@ -238,7 +250,10 @@ func _on_character_unequip(slot: String) -> void:
     print("[PPA-CHARACTER] Local test equipment action: ", result)
 
 func open_npc(npc: Dictionary) -> void:
-    if npc.is_empty():
+    if npc.is_empty() or _npc_screen == null:
+        return
+    var valid_service := str(npc.get("service", ""))
+    if not NPC_SCREEN.SERVICES.has(valid_service):
         return
     nearby_npc = npc.duplicate(true)
     _merchant_tab = "potions"
@@ -246,17 +261,17 @@ func open_npc(npc: Dictionary) -> void:
     _shop_qty = 1
     _market_category = "all"
     _smith_tab = "enhance"
-    match str(npc.get("service", "")):
-        "storage":
-            open_page("warehouse")
-        "merchant", "blackmarket":
-            open_page("shop")
-        "forge":
-            open_page("forge")
-        "auction":
-            open_page("auction")
-        _:
-            open_page("service")
+    # NEVER route an NPC through open_page("character"/"warehouse").
+    # Prevents the five-page hero interface from opening behind a shop.
+    if _native_web_ui != null and _web_open:
+        _native_web_ui.hideUi()
+    _web_open = false
+    if _character_screen != null:
+        _character_screen.visible = false
+    _panel.visible = false
+    _background.visible = false
+    current_page = "npc_" + valid_service
+    _npc_screen.open_npc(npc)
 
 func set_near_npc(npc: Dictionary) -> void:
     # Preserve the NPC whose shop is currently open, even if the player moves.
@@ -271,6 +286,8 @@ func set_near_npc(npc: Dictionary) -> void:
     _interact_button.text = "ПОГОВОРИТЬ" if new_id.is_empty() else "NPC · " + str(npc.get("name", ""))
 
 func open_page(page: String) -> void:
+    if _npc_screen != null and _npc_screen.is_open():
+        _npc_screen.close_npc()
     current_page = page
     if ["character", "bag", "runes", "skills"].has(page):
         _panel.visible = false
@@ -326,6 +343,8 @@ func _resize_active_panel() -> void:
         _tab_bar.visible = hero_page or warehouse_page
 
 func close_menu() -> void:
+    if _npc_screen != null:
+        _npc_screen.close_npc()
     if _native_web_ui != null and _web_open:
         _native_web_ui.hideUi()
         _web_open = false
@@ -581,17 +600,23 @@ func _show_shop() -> void:
         _line("Это не магазин PPA.", true)
 
 func _set_merchant_tab(tab: String) -> void:
+    if _npc_screen != null and _npc_screen.is_open() and _npc_screen.service == "merchant":
+        _npc_screen._select_tab(tab)
     _merchant_tab = tab
     _merchant_selected = ""
     _shop_qty = 1
     _refresh()
 
 func _select_merchant_item(id: String) -> void:
+    if _npc_screen != null and _npc_screen.is_open() and _npc_screen.service == "merchant":
+        _npc_screen._select_item(id)
     _merchant_selected = id
     _shop_qty = 1
     _refresh()
 
 func _adjust_merchant_quantity(change: int) -> void:
+    if _npc_screen != null and _npc_screen.is_open() and _npc_screen.service == "merchant":
+        _npc_screen._change_quantity(change)
     _shop_qty = clampi(_shop_qty + change, 1, 999)
     _refresh()
 
@@ -732,6 +757,8 @@ func _show_canonical_merchant() -> void:
     _notice.text = "ОРИГИНАЛЬНЫЕ 12 ТОВАРОВ И ЦЕНЫ PPA · ПОКУПКИ ВРЕМЕННО ЗАБЛОКИРОВАНЫ"
 
 func _set_market_category(key: String) -> void:
+    if _npc_screen != null and _npc_screen.is_open() and _npc_screen.service == "blackmarket":
+        _npc_screen._select_tab(key)
     _market_category = key
     _refresh()
 
@@ -805,6 +832,8 @@ func _show_canonical_black_market() -> void:
     _notice.text = "ОРИГИНАЛЬНАЯ СТРУКТУРА РЫНКА · НЕТ ФАЛЬШИВЫХ ЛОТОВ И ПОКУПОК"
 
 func _set_smith_tab(tab: String) -> void:
+    if _npc_screen != null and _npc_screen.is_open() and _npc_screen.service == "forge":
+        _npc_screen._select_tab(tab)
     _smith_tab = tab
     _refresh()
 
