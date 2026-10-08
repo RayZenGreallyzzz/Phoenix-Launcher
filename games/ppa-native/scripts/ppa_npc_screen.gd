@@ -407,6 +407,7 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
             break
     if item.is_empty():
         _message("ВЫБЕРИ ПРЕДМЕТ", "Нажми «Подробнее» на карточке, чтобы посмотреть описание и стоимость.")
+        _locked_action("КУПИТЬ")
         return
     _section("ПРЕДМЕТ · " + str(item.get("name", "")))
     if item.has("img"):
