@@ -6,7 +6,7 @@ error: DwarfCannon has local Y=24.171129 while dwarf bone translations occupy
 ~0.1-0.6. The cannon's offset expands the model bounds by >10x, so fitting a
 model by visible bounds shrinks the dwarf into a speck.
 
-Correct the static cannon child translation in original GLB coordinates.
+Restore the exact approved PPA hand-local cannon translation in original GLB coordinates.
 No mesh vertex, skeleton, material, skin or animation samples are modified.
 The cannon continues following the real left-hand bone in Idle/Run/Attack.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 import struct
 
 SOURCE_SHA = "8b31dcbfd66f3c88fc5429da0adc35345d8c1a80412558c5a2567d5124f8ea81"
-PATCHED_SHA = "0608fc70a602ebd0196f42ea2d19ef3779d7c129110e0d7dbc8104add340a747"
+PATCHED_SHA = "a9d895dc9f0d25180ff7252d6ed68f279037b9638c0a140942e9a169b108fb81"
 GLB_JSON = 0x4E4F534A
 
 
@@ -69,10 +69,16 @@ def main():
     if not {"idle", "run", "attack"}.issubset(clip_names):
         raise ValueError("Skinned rig animation set changed")
 
-    # Correct to hand-centred, original-GLB bone-local coordinates. X/Z, gun
-    # rotation, scale and bone attachment remain untouched.  -0.12 positions
-    # the long cannon within the model's foot-to-head extent in bind rest.
-    cannon["translation"][1] = -0.12
+    # Exact approved pose in deployed PPA player-3d-unified-runtime.js:
+    # pos [0.04,0.42,0.04], rot [-560,-10,40] XYZ, scale .70.
+    # The source GLB already carries correct X/Z, rotation and uniform scale;
+    # only its old Y translation is wrong. Preserve the LeftHand parent.
+    expected_xyz = (0.04, 0.42, 0.04)
+    assert abs(original[0] - expected_xyz[0]) < 0.001
+    assert abs(original[2] - expected_xyz[2]) < 0.001
+    approved_quat = [0.916718807, -0.349764089, -0.021490196, 0.191911132]
+    assert max(abs(a-b) for a,b in zip(cannon["rotation"], approved_quat)) < 0.0001
+    cannon["translation"][1] = expected_xyz[1]
     encoded = json.dumps(gltf, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     encoded += b" " * (-len(encoded) % 4)
     chunks[0] = (GLB_JSON, encoded)

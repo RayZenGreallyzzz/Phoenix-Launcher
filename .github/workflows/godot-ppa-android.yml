@@ -174,7 +174,7 @@ jobs:
           print('VERIFIED: approved dwarf mesh, skeleton, cannon, Idle/Run/Attack')
           PY
 
-      - name: Correct the Dwarf cannon's exported bone-local coordinates
+      - name: Restore exact approved PPA cannon grip pose in native GLB
         shell: bash
         run: |
           set -euo pipefail

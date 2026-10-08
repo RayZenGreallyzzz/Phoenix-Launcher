@@ -292,12 +292,12 @@ func _build_dwarf_preview() -> void:
 
     _preview_camera = Camera3D.new()
     _preview_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-    _preview_camera.size = 3.45
+    _preview_camera.size = 4.00
     _preview_camera.near = 0.05
     _preview_camera.far = 40.0
-    _preview_camera.position = Vector3(3.5, 2.55, 5.0)
+    _preview_camera.position = Vector3(4.0, 2.7, 6.0)
     stage.add_child(_preview_camera)
-    _preview_camera.look_at(Vector3(0, 1.2, 0), Vector3.UP)
+    _preview_camera.look_at(Vector3(0, 1.05, 0), Vector3.UP)
     _preview_camera.current = true
     _preview_host.texture = _preview_viewport.get_texture()
 
@@ -315,5 +315,5 @@ func _build_dwarf_preview() -> void:
                 return
 
 func _fit_preview_model(model: Node3D) -> void:
-    if not DWARF_FIT.fit(model, 2.45):
+    if not DWARF_FIT.fit(model, 2.10):
         push_error("[PPA-DWARF] Unable to fit 3D selection preview")

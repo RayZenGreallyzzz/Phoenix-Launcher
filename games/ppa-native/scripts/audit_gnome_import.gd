@@ -38,13 +38,13 @@ func _initialize() -> void:
         push_error("PPA DWARF TEST: invalid skeleton body height: " + str(rest))
         quit(1)
         return
-    if not DWARF_FIT.fit(dwarf_root, 3.20):
+    if not DWARF_FIT.fit(dwarf_root, 1.90):
         push_error("PPA DWARF TEST: normalization failed")
         quit(1)
         return
     var fitted_body_height := rest.size.y * dwarf_root.scale.y
     var foot_ground_y := rest.position.y * dwarf_root.scale.y + dwarf_root.position.y
-    if absf(fitted_body_height - 3.20) > 0.03 or absf(foot_ground_y) > 0.03:
+    if absf(fitted_body_height - 1.90) > 0.03 or absf(foot_ground_y) > 0.03:
         push_error("PPA DWARF TEST: invalid fitted height or foot position " +
             str(fitted_body_height) + " ground " + str(foot_ground_y))
         quit(1)

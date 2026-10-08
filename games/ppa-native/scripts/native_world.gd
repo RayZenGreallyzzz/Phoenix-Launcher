@@ -179,7 +179,7 @@ func _build_3d_overlay() -> void:
             var model := (model_resource as PackedScene).instantiate() as Node3D
             if model != null:
                 player_visual.add_child(model)
-                if DWARF_FIT.fit(model, 3.20):
+                if DWARF_FIT.fit(model, 1.90):
                     _find_model_animations(model)
                 else:
                     model.queue_free()
@@ -196,8 +196,8 @@ func _build_3d_overlay() -> void:
         _build_fallback_player()
 
     var shadow_mesh := CylinderMesh.new()
-    shadow_mesh.top_radius = 0.58
-    shadow_mesh.bottom_radius = 0.58
+    shadow_mesh.top_radius = 0.43
+    shadow_mesh.bottom_radius = 0.43
     shadow_mesh.height = 0.01
     var shadow := MeshInstance3D.new()
     shadow.mesh = shadow_mesh
@@ -531,7 +531,7 @@ func _viewport_size_i() -> Vector2i:
 # Scale exclusively from skeletal rest pose, never from unposed skinned mesh
 # bounds or the cannon's distant export translation.
 func _fit_gnome_model(model: Node3D) -> void:
-    if not DWARF_FIT.fit(model, 3.20):
+    if not DWARF_FIT.fit(model, 1.90):
         push_error("[PPA-DWARF] Unable to calibrate body scale from skeleton")
 
 func _find_model_animations(root: Node) -> void:
