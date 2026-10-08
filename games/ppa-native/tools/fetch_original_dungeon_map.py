@@ -112,6 +112,72 @@ def main() -> None:
         + 'const WALK_SHA256 := "%s"\n' % hashlib.sha256(bits).hexdigest(),
         encoding="utf-8"
     )
+    # ORIGINAL Telegram PPA spawn positions, twenty level branches and
+    # boss chamber are embedded as JSON constants in the public deployed
+    # client. This exports the EXACT already-built positions to a temporary
+    # Godot contract; no hand-authored corridors, levels, or fake mob spawns.
+    import json
+    def deployed_json_array(name: str):
+        m = re.search(
+            r"\bconst\s+" + re.escape(name) + r"\s*=\s*(\[[^\n;]*\])\s*;",
+            source, re.DOTALL
+        )
+        if m is None:
+            raise ValueError("Published dungeon spawn constant missing: " + name)
+        return json.loads(m.group(1))
+
+    spawn_rows = deployed_json_array("DG_ACTIVE_SPAWNS")
+    room_rows = deployed_json_array("DG_ROOM_META")
+    boss_match = re.search(
+        r"\bconst\s+DG_BOSS_IMG\s*=\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]\s*;",
+        source
+    )
+    if boss_match is None:
+        raise ValueError("Published dungeon boss room center missing")
+    boss_x, boss_y = map(int, boss_match.groups())
+    if len(room_rows) != 20 or sorted(r["level"] for r in room_rows) != list(range(1, 21)):
+        raise ValueError("Published original dungeon is no longer twenty distinct level branches")
+    if not (250 <= len(spawn_rows) <= 2500):
+        raise ValueError("Original published dungeon spawn density unexpectedly changed")
+    if not (0 <= boss_x < width and 0 <= boss_y < height and walk_at(boss_x, boss_y)):
+        raise ValueError("Published boss point outside authentic walk mask")
+    level_map = [int(row["level"]) for row in room_rows]
+    actual_per_branch = [0] * 20
+    for i, entry in enumerate(spawn_rows):
+        if (not isinstance(entry, list) or len(entry) < 4
+                or not all(isinstance(c, int) for c in entry[:4])):
+            raise ValueError("Malformed published dungeon spawn: " + str(i))
+        x, y, branch, ordinal = entry[:4]
+        if (not (0 <= x < width and 0 <= y < height)
+                or not (0 <= branch < 20) or ordinal < 0
+                or not walk_at(x, y)):
+            raise ValueError("Spawn outside original mask/branch: " + str(i))
+        actual_per_branch[branch] += 1
+    if any(actual_per_branch[i] != int(room_rows[i]["count"]) for i in range(20)):
+        raise ValueError("Mob counts disagree with published PPA room metadata")
+
+    entities_source = DEST.parent / "scripts/ppa_dungeon_entities_generated.gd"
+    # Array-only JSON is valid inside a Godot string. Parse it once on dungeon
+    # entry; static main-scene code stays tiny, test APK never mutates server.
+    spawn_json = json.dumps(spawn_rows, separators=(",", ":"))
+    entities_source.write_text(
+        "extends RefCounted\n"
+        + 'const SPAWNS_JSON := "' + spawn_json + '"\n'
+        + "const ROOM_LEVELS := " + json.dumps(level_map) + "\n"
+        + "const ROOM_COUNTS := " + json.dumps(actual_per_branch) + "\n"
+        + "const BOSS_IMG := Vector2i(%d, %d)\n" % (boss_x, boss_y)
+        + "const ORIGINAL_MASK_SIZE := Vector2i(%d, %d)\n" % (width, height)
+        + 'const SPAWNS_SHA256 := "%s"\n' % hashlib.sha256(spawn_json.encode()).hexdigest(),
+        encoding="utf-8"
+    )
+    print("PPA_ORIGINAL_DUNGEON_ENTITIES_OK",
+          "spawn_count=" + str(len(spawn_rows)),
+          "branches=20",
+          "per_branch=" + ",".join(map(str, actual_per_branch)),
+          "boss_mask=%s,%s" % (boss_x, boss_y),
+          "sha256=" + hashlib.sha256(spawn_json.encode()).hexdigest(),
+          "server_writes=0", flush=True)
+
     (DEST / "dungeon_walk_mask.png").write_bytes(mask)
     (DEST / "dungeon_layout.webp").write_bytes(floor)
     print("PPA_ORIGINAL_DUNGEON_ASSETS_OK",

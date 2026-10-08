@@ -116,9 +116,60 @@ func _check() -> void:
         _fail("no test-only label warning of missing live combat")
         return
     # The preview must never create server mobs or dungeon NPCs.
-    if scene.city_world.get_child_count() != 3:
-        _fail("dungeon must contain aligned floor, hidden mask and diagnostic ground-footprint marker")
+    if scene.city_world.get_child_count() != 4:
+        _fail("dungeon should contain floor, mask, ground marker and local enemy preview layer")
         return
+    var enemies := scene.city_world.find_child("PPAOriginalDungeonEnemyTestLayer", true, false) as Node2D
+    if enemies == null or scene._enemy_spawns.size() < 250 or scene._enemy_spawns.size() > 2500:
+        _fail("missing authentic published mob spawn list")
+        return
+    if scene._enemy_spawns.size() != scene._enemy_branch.size():
+        _fail("original dungeon spawn coordinates and branch indices drifted")
+        return
+    if enemies.get_child_count() > scene.PREVIEW_CAP + 1:
+        _fail("too many visible enemy preview nodes; tablet FPS risk")
+        return
+    if not scene._can_walk(scene._boss_home):
+        _fail("published boss chamber is outside the genuine shifted mask")
+        return
+    if scene._mob_preview_level(0) != int(scene.ENEMY_CATALOG.ROOM_LEVELS[scene._enemy_branch[0]]):
+        _fail("default mob levels do not match the original 1–20 branch mapping")
+        return
+    var branch_counts: Array[int] = []
+    branch_counts.resize(20)
+    branch_counts.fill(0)
+    for i in range(scene._enemy_spawns.size()):
+        var branch: int = scene._enemy_branch[i]
+        if branch < 0 or branch >= 20 or not scene._can_walk(scene._enemy_spawns[i]):
+            _fail("mob spawned in wall or invalid original level room: " + str(i))
+            return
+        branch_counts[branch] += 1
+    for branch in range(20):
+        if branch_counts[branch] != int(scene.ENEMY_CATALOG.ROOM_COUNTS[branch]):
+            _fail("published original mob count differs from source branch " + str(branch))
+            return
+    if scene._preview_mode != 0 or scene._preview_boss_id() != "phoenix":
+        _fail("original 1–20 Phoenix preview missing")
+        return
+    var selector := scene.find_child("DungeonPreviewDepthSelector", true, false) as Button
+    if selector == null:
+        _fail("missing preview 1–20/21–40/41–60 level switcher")
+        return
+    selector.pressed.emit()
+    if scene._preview_mode != 1 or scene._preview_boss_id() != "lord" or scene._mob_preview_level(0) > 40:
+        _fail("21–40 Lord preview branch didn't switch")
+        return
+    selector.pressed.emit()
+    if scene._preview_mode != 2 or scene._preview_boss_id() != "dragon" or scene._mob_preview_level(0) < 41:
+        _fail("41–60 Dragon preview branch didn't switch")
+        return
+    selector.pressed.emit()
+    if scene._preview_mode != 0 or scene._preview_boss_id() != "phoenix":
+        _fail("test mode cannot return to original 1–20 branch")
+        return
+    print("PPA_DUNGEON_ENEMIES_TEST_OK authentic_spawn_points=",scene._enemy_spawns.size(),
+        " physical_level_branches=20 modes=3 bosses=3 nearby_cap=",scene.PREVIEW_CAP,
+        " wall_spawn=0 server_damage=0 inventory_writes=0")
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
     if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
@@ -209,6 +260,6 @@ func _check() -> void:
     print("PPA_DUNGEON_WALK_TEST_OK world=", world_size,
         " mask=", scene._mask_image.get_size(), " entrance=", scene._entrance,
         " collisions=8points+slide original_art=1 world_scale=", scene._render_to_world_scale,
-        " mask_offset_y=14 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=2 shadows=0 foot_grounded=1 wall_sweep=1 mobs=0 server_writes=0")
+        " mask_offset_y=14 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=2 shadows=0 foot_grounded=1 mobs_source=1 boss_source=1 server_writes=0")
     scene.queue_free()
     quit(0)
