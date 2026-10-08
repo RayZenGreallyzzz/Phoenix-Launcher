@@ -22,6 +22,13 @@ var _list: VBoxContainer
 var _interact_button: Button
 var _menu_button: Button
 var _notice: Label
+var _tab_bar: HBoxContainer
+var _merchant_tab := "potions"
+var _merchant_selected := ""
+var _shop_qty := 1
+var _market_category := "all"
+var _smith_tab := "enhance"
+var _page_notice_default := "PPA · ТЕСТОВЫЙ КЛИЕНТ · СЕРВЕРНЫЕ ПОКУПКИ ОТКЛЮЧЕНЫ"
 var _selected_item_index := -1
 var _selected_item_source := "bag"
 
@@ -131,12 +138,12 @@ func _build_window() -> void:
     close_button.pressed.connect(close_menu)
     header.add_child(close_button)
 
-    var tabs := HBoxContainer.new()
-    tabs.add_theme_constant_override("separation", 7)
-    column.add_child(tabs)
+    _tab_bar = HBoxContainer.new()
+    _tab_bar.add_theme_constant_override("separation", 4)
+    column.add_child(_tab_bar)
     for spec in [
-        ["character", "ПЕРСОНАЖ"],
-        ["bag", "ИНВЕНТАРЬ"],
+        ["character", "ГЕРОЙ"],
+        ["bag", "СУМКА"],
         ["runes", "РУНЫ"],
         ["skills", "НАВЫКИ"],
         ["warehouse", "СКЛАД"]
@@ -147,7 +154,7 @@ func _build_window() -> void:
         b.custom_minimum_size = Vector2(0.0, 38.0)
         b.add_theme_stylebox_override("normal", _button_style(Color("#2F3034")))
         b.pressed.connect(open_page.bind(str(spec[0])))
-        tabs.add_child(b)
+        _tab_bar.add_child(b)
 
     var scroll := ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -160,7 +167,7 @@ func _build_window() -> void:
     scroll.add_child(_list)
 
     _notice = Label.new()
-    _notice.text = "ТЕСТОВОЕ МЕНЮ · ПРЕДМЕТЫ НЕ СВЯЗАНЫ С БОЕВОЙ PPA"
+    _notice.text = _page_notice_default
     _notice.add_theme_color_override("font_color", Color("#C69B72"))
     _notice.add_theme_font_size_override("font_size", 11)
     column.add_child(_notice)
@@ -186,6 +193,11 @@ func open_npc(npc: Dictionary) -> void:
     if npc.is_empty():
         return
     nearby_npc = npc.duplicate(true)
+    _merchant_tab = "potions"
+    _merchant_selected = ""
+    _shop_qty = 1
+    _market_category = "all"
+    _smith_tab = "enhance"
     match str(npc.get("service", "")):
         "storage":
             open_page("warehouse")
@@ -214,7 +226,27 @@ func open_page(page: String) -> void:
     current_page = page
     _panel.visible = true
     _background.visible = true
+    _notice.text = _page_notice_default
+    _resize_active_panel()
     _refresh()
+
+func _resize_active_panel() -> void:
+    if _panel == null:
+        return
+    var hero_page := ["character", "bag", "runes", "skills", "item"].has(current_page)
+    var warehouse_page := current_page == "warehouse"
+    var width := 464.0 if hero_page else (1000.0 if warehouse_page else 1110.0)
+    var height := 620.0 if hero_page else 632.0
+    var max_width := maxf(340.0, size.x - 30.0)
+    var max_height := maxf(320.0, size.y - 28.0)
+    width = minf(width, max_width)
+    height = minf(height, max_height)
+    _panel.offset_left = -width * 0.5
+    _panel.offset_right = width * 0.5
+    _panel.offset_top = -height * 0.5
+    _panel.offset_bottom = height * 0.5
+    if _tab_bar != null:
+        _tab_bar.visible = hero_page or warehouse_page
 
 func close_menu() -> void:
     _panel.visible = false
@@ -299,7 +331,7 @@ func _show_character() -> void:
         var slot := str(entry.get("key", ""))
         var item: Dictionary = stash.equipment.get(slot, {})
         var button := Button.new()
-        button.custom_minimum_size = Vector2(242, 64)
+        button.custom_minimum_size = Vector2(128, 58)
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         button.text = str(entry.get("label", "")) + "\n" + (
             str(item.get("name", "ПУСТО")) +
@@ -350,7 +382,7 @@ func _show_items(source_name: String) -> void:
     _line("Все 8 классов используют одну локальную тестовую сумку и склад. Нажми на предмет.", true)
     _spacer()
     var grid := GridContainer.new()
-    grid.columns = 5
+    grid.columns = 3
     grid.add_theme_constant_override("h_separation", 7)
     grid.add_theme_constant_override("v_separation", 7)
     _list.add_child(grid)
@@ -396,8 +428,8 @@ func _show_item_details() -> void:
     if from_bag and not SHOP_CATALOG.equipment_slot(str(item.get("kind", ""))).is_empty():
         _action(actions, "НАДЕТЬ", _equip_selected)
     _action(actions, "В СКЛАД" if from_bag else "В СУМКУ", _transfer_selected)
-    if from_bag:
-        _action(actions, "ПРОДАТЬ", _sell_selected)
+    # Real PPA selling is intentionally unavailable until server inventory is
+    # connected. No imaginary payout or local pseudo-economy.
     var back := Button.new()
     back.text = "НАЗАД"
     back.custom_minimum_size = Vector2(0, 42)
@@ -415,11 +447,6 @@ func _transfer_selected() -> void:
 func _equip_selected() -> void:
     var message: String = stash.equip_test_item(_selected_item_index)
     open_page("character")
-    _notice.text = message
-
-func _sell_selected() -> void:
-    var message: String = stash.sell_test_item(_selected_item_index)
-    open_page("bag")
     _notice.text = message
 
 func _remove_equipment(slot: String) -> void:
