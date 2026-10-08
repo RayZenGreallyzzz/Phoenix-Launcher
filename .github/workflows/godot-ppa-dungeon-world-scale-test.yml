@@ -14,7 +14,7 @@ permissions:
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
   group: ppa-native-original-enemy-art-test-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-ppa-native:
