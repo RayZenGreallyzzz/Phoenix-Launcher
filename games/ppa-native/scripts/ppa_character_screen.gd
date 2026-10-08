@@ -53,6 +53,8 @@ var _mouse_scrolling := false
 var _book_overlay: ColorRect
 var _book_dialog: PanelContainer
 var _book_container: VBoxContainer
+var _book_scroll: ScrollContainer
+var _gesture_scroll: ScrollContainer
 var _original_skill_card_count := 0
 
 func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> void:
@@ -309,19 +311,22 @@ func is_open() -> bool:
 func _input(event: InputEvent) -> void:
     if not visible or _frame == null:
         return
-    if _book_overlay != null and _book_overlay.visible:
-        return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
         if touch.pressed:
-            if _touch_id < 0 and _scroll.get_global_rect().has_point(touch.position):
-                _touch_id = touch.index
-                _touch_origin = touch.position
-                _touch_previous = touch.position
-                _gesture_axis = ""
+            if _touch_id < 0:
+                var target: ScrollContainer = _book_scroll if _book_overlay != null and _book_overlay.visible else _scroll
+                var bounds: Rect2 = _book_dialog.get_global_rect() if target == _book_scroll else _scroll.get_global_rect()
+                if target != null and bounds.has_point(touch.position):
+                    _gesture_scroll = target
+                    _touch_id = touch.index
+                    _touch_origin = touch.position
+                    _touch_previous = touch.position
+                    _gesture_axis = ""
         elif touch.index == _touch_id:
             _touch_id = -1
             _gesture_axis = ""
+            _gesture_scroll = null
         return
     if event is InputEventScreenDrag:
         var drag := event as InputEventScreenDrag
@@ -336,20 +341,24 @@ func _input(event: InputEvent) -> void:
         if mb.button_index != MOUSE_BUTTON_LEFT or _touch_id >= 0:
             return
         if mb.pressed:
-            _mouse_scrolling = _scroll.get_global_rect().has_point(mb.position)
+            var mouse_target: ScrollContainer = _book_scroll if _book_overlay != null and _book_overlay.visible else _scroll
+            var mouse_bounds: Rect2 = _book_dialog.get_global_rect() if mouse_target == _book_scroll else _scroll.get_global_rect()
+            _mouse_scrolling = mouse_target != null and mouse_bounds.has_point(mb.position)
+            _gesture_scroll = mouse_target if _mouse_scrolling else null
             _mouse_origin = mb.position
             _mouse_previous = mb.position
             _gesture_axis = ""
         else:
             _mouse_scrolling = false
             _gesture_axis = ""
+            _gesture_scroll = null
     elif event is InputEventMouseMotion and _mouse_scrolling and _touch_id < 0:
         var motion := event as InputEventMouseMotion
         _move_gesture(motion.position, _mouse_origin, _mouse_previous, false)
         _mouse_previous = motion.position
 
 func _move_gesture(point: Vector2, origin: Vector2, previous: Vector2, touch: bool) -> void:
-    if _scroll == null:
+    if _gesture_scroll == null:
         return
     var total := point - origin
     if _gesture_axis.is_empty() and total.length() >= 12.0:
@@ -357,14 +366,15 @@ func _move_gesture(point: Vector2, origin: Vector2, previous: Vector2, touch: bo
     if _gesture_axis == "vertical":
         var dy := point.y - previous.y
         # A finger moving UP has negative dy, thus increases vertical scroll.
-        var max_scroll := maxi(0, int(ceilf(_scroll.get_v_scroll_bar().max_value - _scroll.get_v_scroll_bar().page)))
-        _scroll.scroll_vertical = clampi(_scroll.scroll_vertical - int(roundf(dy)), 0, max_scroll)
+        var max_scroll := maxi(0, int(ceilf(_gesture_scroll.get_v_scroll_bar().max_value - _gesture_scroll.get_v_scroll_bar().page)))
+        _gesture_scroll.scroll_vertical = clampi(_gesture_scroll.scroll_vertical - int(roundf(dy)), 0, max_scroll)
         get_viewport().set_input_as_handled()
-    elif _gesture_axis == "horizontal" and absf(total.x) >= 42.0 and absf(total.x) >= absf(total.y) * 1.15:
+    elif _gesture_axis == "horizontal" and _gesture_scroll == _scroll and absf(total.x) >= 42.0 and absf(total.x) >= absf(total.y) * 1.15:
         var step := 1 if total.x < 0.0 else -1
         _touch_id = -1
         _mouse_scrolling = false
         _gesture_axis = ""
+        _gesture_scroll = null
         open_index(_page + step)
         get_viewport().set_input_as_handled()
 
@@ -713,16 +723,16 @@ func _create_book_overlay() -> void:
     for side in ["margin_top", "margin_bottom"]:
         book_margin.add_theme_constant_override(side, 9)
     _book_dialog.add_child(book_margin)
-    var book_scroll := ScrollContainer.new()
-    book_scroll.name = "OriginalPPABookDetailsScroll"
-    book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    book_scroll.scroll_deadzone = 100000
-    book_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    book_margin.add_child(book_scroll)
+    _book_scroll = ScrollContainer.new()
+    _book_scroll.name = "OriginalPPABookDetailsScroll"
+    _book_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    _book_scroll.scroll_deadzone = 100000
+    _book_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    book_margin.add_child(_book_scroll)
     _book_container = VBoxContainer.new()
     _book_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _book_container.add_theme_constant_override("separation", 7)
-    book_scroll.add_child(_book_container)
+    _book_scroll.add_child(_book_container)
 
 func _open_grimoire_popup(skill: Dictionary, passive: bool, class_title: String) -> void:
     if _book_overlay == null:
@@ -778,6 +788,7 @@ func _open_grimoire_popup(skill: Dictionary, passive: bool, class_title: String)
     act.add_theme_stylebox_override("disabled", _style_box(Color("#151219"), Color("#493459"), 5))
     _book_container.add_child(act)
     _book_overlay.visible = true
+    _book_scroll.scroll_vertical = 0
 
 func _draw_runes() -> void:
     _section("РУНЫ")
