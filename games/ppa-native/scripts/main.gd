@@ -291,6 +291,12 @@ func _enter_native_world() -> void:
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
     get_tree().set_meta("phoenix_account", account.duplicate(true))
+    # Expose the game SESSION in process memory to the read-only native
+    # save adapter. Never pass launcher credentials or Telegram ID as auth.
+    if session_token.is_empty():
+        _show_error("Игровая сессия Phoenix истекла. Нужна новая авторизация.")
+        return
+    get_tree().set_meta("ppa_native_game_session", session_token)
     var err := get_tree().change_scene_to_file("res://world.tscn")
     if err != OK:
         _show_error("Не удалось открыть native world: %s" % error_string(err))
