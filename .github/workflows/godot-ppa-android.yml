@@ -8,6 +8,9 @@ on:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-android.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build-ppa-native:
     runs-on: ubuntu-latest
@@ -103,6 +106,18 @@ jobs:
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
 
+      - name: Stamp monotonic native version for in-launcher updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.1.${GITHUB_RUN_NUMBER}-native"
+          sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
+          sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
+          echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "PPA_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "Building PPA APK version ${VERSION_NAME} / code ${VERSION_CODE}"
+
       - name: Fetch and verify exact deployed PPA Peace City map
         shell: bash
         run: |
@@ -195,6 +210,51 @@ jobs:
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
           "$APKSIGNER" verify --verbose build/PhoenixPixArena-native-debug.apk
 
+      - name: Publish signed PPA APK to the launcher update channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp build/PhoenixPixArena-native-debug.apk build/PhoenixPixArena-native.apk
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          apk=Path('build/PhoenixPixArena-native.apk')
+          manifest={
+              "schema":1,
+              "gameId":"phoenix-pix-arena",
+              "packageName":"com.phoenixgames.ppa",
+              "versionCode":int(os.environ['PPA_VERSION_CODE']),
+              "versionName":os.environ['PPA_VERSION_NAME'],
+              "sha256":hashlib.sha256(apk.read_bytes()).hexdigest(),
+              "sizeBytes":apk.stat().st_size
+          }
+          Path('build/ppa-native-release.json').write_text(json.dumps(manifest,separators=(',',':')))
+          print('Release metadata',manifest)
+          PY
+          TAG="ppa-native-stable"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "PPA Native Android (Beta)" \
+              --notes '{"status":"initializing"}' \
+              --latest=false
+          fi
+          gh release upload "$TAG" build/PhoenixPixArena-native.apk --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes-file build/ppa-native-release.json \
+            --title "PPA Native ${PPA_VERSION_NAME}" \
+            --latest=false
+
+      - name: Verify public update manifest and APK link
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/ppa-native-stable" \
+            --jq '{tag: .tag_name, manifest: .body, assets: [.assets[] | {name, size, url: .browser_download_url}]}'
       - uses: actions/upload-artifact@v4
         with:
           name: PhoenixPixArena-native-debug

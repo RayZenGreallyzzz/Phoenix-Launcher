@@ -527,13 +527,16 @@ func _viewport_size_i() -> Vector2i:
 # Scale the imported model by visible mesh bounds. The live WebGL client
 # normalizes each GLB to a canonical class height rather than trusting Blender
 # authoring units; do the same here once, not every rendered frame.
+# Canonical native on-screen size is intentionally larger than the initial
+# web-proportional size for touch-tablet gameplay; scale the single imported
+# GLB root so the cannon and skinned dwarf remain locked together.
 func _fit_gnome_model(model: Node3D) -> void:
     var bounds: AABB = _model_mesh_bounds(model)
     if bounds.size.y <= 0.00001:
         push_warning("[PPA-NATIVE] Unable to measure dwarf bounds; keeping original scale")
         model.scale = Vector3.ONE * 0.88
         return
-    const TARGET_GNOME_HEIGHT := 1.68 * 0.88
+    const TARGET_GNOME_HEIGHT := 3.20
     var factor: float = TARGET_GNOME_HEIGHT / bounds.size.y
     model.scale = Vector3.ONE * factor
     model.position = Vector3(
