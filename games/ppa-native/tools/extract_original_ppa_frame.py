@@ -45,7 +45,7 @@ def main() -> None:
     source = parser.matches[0]
     required = [
         "<!DOCTYPE html>", 'id="box"', 'id="viewport"', 'id="activeSkills"',
-        'id="passiveSkills"', 'id="runeSockets"', "charReady", "closeChar",
+        'id="passiveSkills"', 'id="runeSlotsGrid"', "charReady", "closeChar",
         "renderSkills(", "renderRunes(", "parent.postMessage(", "touch-action:pan-y",
     ]
     missing = [item for item in required if item not in source]
