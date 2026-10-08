@@ -1,5 +1,7 @@
 extends Control
 
+const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
+
 # Native Phoenix Pix Arena selection screen. Only authoritative Phoenix/PPA
 # account heroes may be played. Empty slots are visual placeholders until the
 # existing one-character server schema is migrated to true per-slot saves.
@@ -313,36 +315,5 @@ func _build_dwarf_preview() -> void:
                 return
 
 func _fit_preview_model(model: Node3D) -> void:
-    var meshes = model.find_children("*", "MeshInstance3D", true, false)
-    var box := AABB()
-    var found := false
-    var inverse := model.global_transform.affine_inverse()
-    for node in meshes:
-        var part := node as MeshInstance3D
-        if part == null or part.mesh == null:
-            continue
-        var aabb := part.get_aabb()
-        var xform := inverse * part.global_transform
-        for i in range(8):
-            var corner := Vector3(
-                aabb.position.x + (aabb.size.x if (i & 1) != 0 else 0.0),
-                aabb.position.y + (aabb.size.y if (i & 2) != 0 else 0.0),
-                aabb.position.z + (aabb.size.z if (i & 4) != 0 else 0.0)
-            )
-            var point := xform * corner
-            if not found:
-                box = AABB(point, Vector3.ZERO)
-                found = true
-            else:
-                box = box.expand(point)
-    if not found or box.size.y < 0.0001:
-        return
-
-    # One uniform root scale includes the cannon and skin, never separate parts.
-    var scale_factor: float = 2.40 / box.size.y
-    model.scale = Vector3.ONE * scale_factor
-    model.position = -Vector3(
-        box.position.x + box.size.x * 0.5,
-        box.position.y,
-        box.position.z + box.size.z * 0.5
-    ) * scale_factor
+    if not DWARF_FIT.fit(model, 2.45):
+        push_error("[PPA-DWARF] Unable to fit 3D selection preview")

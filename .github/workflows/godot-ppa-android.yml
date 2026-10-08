@@ -174,6 +174,12 @@ jobs:
           print('VERIFIED: approved dwarf mesh, skeleton, cannon, Idle/Run/Attack')
           PY
 
+      - name: Correct the Dwarf cannon's exported bone-local coordinates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/normalize_native_dwarf.py games/ppa-native/assets/Dwarf.glb
+
       - name: Prepare branded PNG engine splash
         shell: bash
         run: |
@@ -228,6 +234,7 @@ jobs:
           fi
           grep -q 'path=' "$SPLASH_IMPORT"
           godot --headless --path games/ppa-native --script res://scripts/audit_gnome_import.gd 2>&1 | tee /tmp/ppa-dwarf-import-audit.log
+          grep -q "PPA_DWARF_GEOMETRY_OK" /tmp/ppa-dwarf-import-audit.log
           grep -q "PPA_DWARF_IMPORT_OK" /tmp/ppa-dwarf-import-audit.log
 
       - name: Build native PPA APK

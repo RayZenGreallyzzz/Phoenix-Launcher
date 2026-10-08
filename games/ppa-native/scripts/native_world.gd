@@ -14,6 +14,7 @@ const MOVE_SPEED_PX := 165.0
 const PX_PER_3D_UNIT := 34.0
 
 const JOYSTICK_SCRIPT = preload("res://scripts/virtual_joystick.gd")
+const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -178,8 +179,11 @@ func _build_3d_overlay() -> void:
             var model := (model_resource as PackedScene).instantiate() as Node3D
             if model != null:
                 player_visual.add_child(model)
-                _fit_gnome_model(model)
-                _find_model_animations(model)
+                if DWARF_FIT.fit(model, 3.20):
+                    _find_model_animations(model)
+                else:
+                    model.queue_free()
+                    _build_fallback_player()
                 print("[PPA-NATIVE] Loaded live Dwarf.glb with idle=", _idle_animation, " run=", _run_animation)
             else:
                 push_warning("[PPA-NATIVE] Dwarf.glb root is not Node3D")
@@ -524,51 +528,11 @@ func _screen_to_ground(screen_position: Vector2) -> Vector3:
 func _viewport_size_i() -> Vector2i:
     return Vector2i(maxi(2, int(round(size.x))), maxi(2, int(round(size.y))))
 
-# Scale the imported model by visible mesh bounds. The live WebGL client
-# normalizes each GLB to a canonical class height rather than trusting Blender
-# authoring units; do the same here once, not every rendered frame.
-# Canonical native on-screen size is intentionally larger than the initial
-# web-proportional size for touch-tablet gameplay; scale the single imported
-# GLB root so the cannon and skinned dwarf remain locked together.
+# Scale exclusively from skeletal rest pose, never from unposed skinned mesh
+# bounds or the cannon's distant export translation.
 func _fit_gnome_model(model: Node3D) -> void:
-    var bounds: AABB = _model_mesh_bounds(model)
-    if bounds.size.y <= 0.00001:
-        push_warning("[PPA-NATIVE] Unable to measure dwarf bounds; keeping original scale")
-        model.scale = Vector3.ONE * 0.88
-        return
-    const TARGET_GNOME_HEIGHT := 3.20
-    var factor: float = TARGET_GNOME_HEIGHT / bounds.size.y
-    model.scale = Vector3.ONE * factor
-    model.position = Vector3(
-        -(bounds.position.x + bounds.size.x * 0.5) * factor,
-        -bounds.position.y * factor,
-        -(bounds.position.z + bounds.size.z * 0.5) * factor
-    )
-    print("[PPA-NATIVE] Dwarf original height=", bounds.size.y, " factor=", factor, " target=", TARGET_GNOME_HEIGHT)
-
-func _model_mesh_bounds(model: Node3D) -> AABB:
-    var meshes := model.find_children("*", "MeshInstance3D", true, false)
-    var combined := AABB()
-    var initialized := false
-    for entry in meshes:
-        var part := entry as MeshInstance3D
-        if part == null or part.mesh == null:
-            continue
-        var bounds: AABB = part.get_aabb()
-        var xform: Transform3D = model.global_transform.affine_inverse() * part.global_transform
-        for i in range(8):
-            var corner := Vector3(
-                bounds.position.x + (bounds.size.x if (i & 1) != 0 else 0.0),
-                bounds.position.y + (bounds.size.y if (i & 2) != 0 else 0.0),
-                bounds.position.z + (bounds.size.z if (i & 4) != 0 else 0.0)
-            )
-            var pos: Vector3 = xform * corner
-            if not initialized:
-                combined = AABB(pos, Vector3.ZERO)
-                initialized = true
-            else:
-                combined = combined.expand(pos)
-    return combined
+    if not DWARF_FIT.fit(model, 3.20):
+        push_error("[PPA-DWARF] Unable to calibrate body scale from skeleton")
 
 func _find_model_animations(root: Node) -> void:
     var players := root.find_children("*", "AnimationPlayer", true, false)
