@@ -36,7 +36,7 @@ var _frame: PanelContainer
 var _page_container: VBoxContainer
 var _caption: Label
 var _scroll: ScrollContainer
-var _dots: Array[Button] = []
+var _dots: Array[PanelContainer] = []
 var _mono: SystemFont
 var _touch_origin := Vector2.ZERO
 var _touch_tracking := false
@@ -100,12 +100,43 @@ func _create_frame() -> void:
     _frame.add_theme_stylebox_override("panel", _style_box(Color("#101418"), EDGE, 13, 2))
     add_child(_frame)
 
+    # Original #box CSS: dual vertical/radial gradients in the INSIDE of
+    # the same original PPA frame. No second menu, canvas or WebView layer.
+    var fill := ColorRect.new()
+    fill.name = "OriginalPPABackgroundGradient"
+    fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var fill_shader := Shader.new()
+    fill_shader.code = "shader_type canvas_item; void fragment() { vec3 topc = vec3(0.0941, 0.1098, 0.1216); vec3 bottomc = vec3(0.0314,0.0431,0.0510); vec3 bg = mix(topc,bottomc,UV.y); float d = length(vec2((UV.x-0.5)*1.2,UV.y*2.2)); float glow = (1.0 - smoothstep(0.0,0.36,d))*0.16; bg = mix(bg,vec3(0.678,0.255,0.094),glow); COLOR=vec4(bg,1.0); }"
+    var bg_material := ShaderMaterial.new()
+    bg_material.shader = fill_shader
+    fill.material = bg_material
+    _frame.add_child(fill)
+
     var padding := MarginContainer.new()
     padding.add_theme_constant_override("margin_left", 5)
     padding.add_theme_constant_override("margin_right", 5)
     padding.add_theme_constant_override("margin_top", 5)
     padding.add_theme_constant_override("margin_bottom", 5)
     _frame.add_child(padding)
+    # Exact 1px decorative bands from #box:before / #box:after.
+    # They are passive decoration within this ONE window.
+    for top_line in [true, false]:
+        var line := ColorRect.new()
+        line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        line.color = Color("#C87927")
+        line.z_index = 3
+        line.anchor_right = 1.0
+        line.offset_left = 12.0
+        line.offset_right = -12.0
+        if top_line:
+            line.offset_top = 43.0
+            line.offset_bottom = 44.0
+        else:
+            line.anchor_top = 1.0
+            line.anchor_bottom = 1.0
+            line.offset_top = -8.0
+            line.offset_bottom = -7.0
+        _frame.add_child(line)
     var content := VBoxContainer.new()
     content.add_theme_constant_override("separation", 0)
     padding.add_child(content)
@@ -162,13 +193,20 @@ func _create_frame() -> void:
     dot_row.add_theme_constant_override("separation", 7)
     nav.add_child(dot_row)
     for i in range(5):
-        var dot := _button("", 6)
-        dot.custom_minimum_size = Vector2(7, 7)
-        dot.add_theme_stylebox_override("normal", _style_box(Color("#5A5B5C"), Color("#252525"), 4))
-        dot.add_theme_stylebox_override("hover", _style_box(Color("#DFA648"), Color("#A86B26"), 4))
-        dot.add_theme_stylebox_override("pressed", _style_box(Color("#FFB843"), Color("#E9AD3D"), 4))
-        dot.pressed.connect(open_index.bind(i))
-        dot_row.add_child(dot)
+        # Godot Button has a built-in font minimum height; using Button for
+        # the tiny HTML .dot stretched it into a 27px pill on Android.
+        # A 7x7 Panel inside a 15x27 input hit-area stays exactly circular.
+        var target := CenterContainer.new()
+        target.custom_minimum_size = Vector2(15.0, 27.0)
+        target.mouse_filter = Control.MOUSE_FILTER_STOP
+        target.gui_input.connect(_dot_input.bind(i))
+        dot_row.add_child(target)
+        var dot := PanelContainer.new()
+        dot.name = "OriginalPPAPageDot"
+        dot.custom_minimum_size = Vector2(7.0, 7.0)
+        dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        dot.add_theme_stylebox_override("panel", _style_box(Color("#5A5B5C"), Color("#252525"), 4))
+        target.add_child(dot)
         _dots.append(dot)
     var right := _button("›", 20)
     right.custom_minimum_size = Vector2(31, 27)
@@ -193,6 +231,13 @@ func _create_frame() -> void:
     _scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     _scroll.mouse_filter = Control.MOUSE_FILTER_STOP
     content.add_child(_scroll)
+    # The web PPA uses a thin amber 5px scroll thumb, not Godot's default
+    # wide grey mobile scrollbar.
+    var vbar := _scroll.get_v_scroll_bar()
+    vbar.custom_minimum_size.x = 5.0
+    vbar.add_theme_stylebox_override("scroll", _style_box(Color("#101214"), Color.TRANSPARENT, 0, 0))
+    for state in ["grabber", "grabber_highlight", "grabber_pressed"]:
+        vbar.add_theme_stylebox_override(state, _style_box(Color("#8B5A24"), Color.TRANSPARENT, 4, 0))
     var inner := MarginContainer.new()
     inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     for side in ["margin_left", "margin_right"]:
@@ -254,6 +299,16 @@ func _input(event: InputEvent) -> void:
             elif _touch_tracking:
                 _swipe(mouse.position)
 
+func _dot_input(event: InputEvent, index: int) -> void:
+    if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+        open_index(index)
+        accept_event()
+    elif event is InputEventMouseButton:
+        var mouse := event as InputEventMouseButton
+        if mouse.button_index == MOUSE_BUTTON_LEFT and mouse.pressed:
+            open_index(index)
+            accept_event()
+
 func _swipe(finish: Vector2) -> void:
     _touch_tracking = false
     var delta := finish - _touch_origin
@@ -272,7 +327,7 @@ func _draw_page() -> void:
     _caption.text = CAPTIONS[_page]
     for i in range(_dots.size()):
         var active := i == _page
-        _dots[i].add_theme_stylebox_override("normal", _style_box(
+        _dots[i].add_theme_stylebox_override("panel", _style_box(
             Color("#FFB843") if active else Color("#5A5B5C"),
             Color("#FFCF63") if active else Color("#252525"), 4
         ))
@@ -387,13 +442,19 @@ func _draw_inventory() -> void:
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var unlocked := i < 50
         var item: Dictionary = stash.bag[i] if i < stash.bag.size() else {}
-        slot.disabled = not unlocked and item.is_empty()
-        slot.modulate.a = 1.0 if unlocked or not item.is_empty() else 0.28
+        var locked := not unlocked and item.is_empty()
+        slot.disabled = locked
+        slot.modulate.a = 1.0 if not locked else 0.40
         var edge := Color("#5D431F") if unlocked else Color("#282A2B")
         if not item.is_empty():
             edge = RARITIES.get(str(item.get("rarity", "common")), edge)
             slot.text = str(item.get("short", "◆")) + "\n×" + str(item.get("qty", 1))
-        slot.add_theme_stylebox_override("normal", _style_box(Color("#0B0E11"), edge, 4))
+        var slot_style := _style_box(Color("#0B0E11"), edge, 4)
+        slot.add_theme_stylebox_override("normal", slot_style)
+        # Without this override, Godot draws the 50 disabled, locked
+        # inventory slots as fully transparent. The entire bottom half
+        # looks like an empty broken scroll page in the user's 0.1.60 video.
+        slot.add_theme_stylebox_override("disabled", slot_style)
         slot.pressed.connect(func(): select_item_requested.emit("bag", i))
         grid.add_child(slot)
     var info := PanelContainer.new()
