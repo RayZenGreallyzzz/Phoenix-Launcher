@@ -124,6 +124,30 @@ jobs:
           print('Verified live PPA Peace City',len(data),'bytes', '1254x1254',actual)
           PY
 
+      - name: Fetch approved live PPA dwarf and validate GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 2 --max-time 100 \
+            --silent --show-error \
+            --output games/ppa-native/assets/Dwarf.glb \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/game/Dwarf.glb?v=20261002u2"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,struct,json
+          b=Path('games/ppa-native/assets/Dwarf.glb').read_bytes()
+          expected='8b31dcbfd66f3c88fc5429da0adc35345d8c1a80412558c5a2567d5124f8ea81'
+          assert hashlib.sha256(b).hexdigest()==expected, 'Unexpected gnome GLB: live model changed'
+          assert b[:4]==b'glTF' and struct.unpack_from('<II',b,4)==(2,len(b)), 'Invalid GLB header'
+          chunk_len,chunk_type=struct.unpack_from('<II',b,12)
+          assert chunk_type==0x4e4f534a, 'Missing glTF JSON'
+          j=json.loads(b[20:20+chunk_len])
+          names={str(a.get('name','')).lower() for a in j.get('animations',[])}
+          assert {'idle','run','attack'}<=names, f'Approved clips missing: {names}'
+          assert len(j.get('skins',[]))>0 and len(j.get('meshes',[]))>=2, 'Approved dwarf rig/weapon missing'
+          print('VERIFIED: approved dwarf mesh, skeleton, cannon, Idle/Run/Attack')
+          PY
+
       - name: Import native PPA project
         shell: bash
         run: |
@@ -141,6 +165,16 @@ jobs:
             exit 1
           fi
           grep -q 'path=' "$MAP_IMPORT"
+          MODEL_IMPORT="games/ppa-native/assets/Dwarf.glb.import"
+          test -s "$MODEL_IMPORT"
+          if grep -q 'valid=false' "$MODEL_IMPORT"; then
+            echo "Imported native Dwarf.glb is invalid."
+            cat "$MODEL_IMPORT"
+            exit 1
+          fi
+          grep -q 'path=' "$MODEL_IMPORT"
+          godot --headless --path games/ppa-native --script res://scripts/audit_gnome_import.gd 2>&1 | tee /tmp/ppa-dwarf-import-audit.log
+          grep -q "PPA_DWARF_IMPORT_OK" /tmp/ppa-dwarf-import-audit.log
 
       - name: Build native PPA APK
         shell: bash

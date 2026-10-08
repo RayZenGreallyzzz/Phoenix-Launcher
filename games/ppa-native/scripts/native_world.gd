@@ -170,16 +170,25 @@ func _build_3d_overlay() -> void:
     player_visual = Node3D.new()
     player_3d.add_child(player_visual)
 
+    # The live PPA dwarf has a skinned body, a cannon and Idle/Run/Attack.
+    # Keep the capsule fallback strictly for broken/missing resources in dev.
     if ResourceLoader.exists("res://assets/Dwarf.glb"):
         var model_resource = load("res://assets/Dwarf.glb")
         if model_resource is PackedScene:
-            var model := (model_resource as PackedScene).instantiate()
-            model.scale = Vector3.ONE * 0.88
-            player_visual.add_child(model)
-            _find_model_animations(model)
+            var model := (model_resource as PackedScene).instantiate() as Node3D
+            if model != null:
+                player_visual.add_child(model)
+                _fit_gnome_model(model)
+                _find_model_animations(model)
+                print("[PPA-NATIVE] Loaded live Dwarf.glb with idle=", _idle_animation, " run=", _run_animation)
+            else:
+                push_warning("[PPA-NATIVE] Dwarf.glb root is not Node3D")
+                _build_fallback_player()
         else:
+            push_warning("[PPA-NATIVE] Dwarf.glb is not a PackedScene")
             _build_fallback_player()
     else:
+        push_warning("[PPA-NATIVE] Dwarf.glb missing from build")
         _build_fallback_player()
 
     var shadow_mesh := CylinderMesh.new()
@@ -515,24 +524,83 @@ func _screen_to_ground(screen_position: Vector2) -> Vector3:
 func _viewport_size_i() -> Vector2i:
     return Vector2i(maxi(2, int(round(size.x))), maxi(2, int(round(size.y))))
 
+# Scale the imported model by visible mesh bounds. The live WebGL client
+# normalizes each GLB to a canonical class height rather than trusting Blender
+# authoring units; do the same here once, not every rendered frame.
+func _fit_gnome_model(model: Node3D) -> void:
+    var bounds: AABB = _model_mesh_bounds(model)
+    if bounds.size.y <= 0.00001:
+        push_warning("[PPA-NATIVE] Unable to measure dwarf bounds; keeping original scale")
+        model.scale = Vector3.ONE * 0.88
+        return
+    const TARGET_GNOME_HEIGHT := 1.68 * 0.88
+    var factor: float = TARGET_GNOME_HEIGHT / bounds.size.y
+    model.scale = Vector3.ONE * factor
+    model.position = Vector3(
+        -(bounds.position.x + bounds.size.x * 0.5) * factor,
+        -bounds.position.y * factor,
+        -(bounds.position.z + bounds.size.z * 0.5) * factor
+    )
+    print("[PPA-NATIVE] Dwarf original height=", bounds.size.y, " factor=", factor, " target=", TARGET_GNOME_HEIGHT)
+
+func _model_mesh_bounds(model: Node3D) -> AABB:
+    var meshes := model.find_children("*", "MeshInstance3D", true, false)
+    var combined := AABB()
+    var initialized := false
+    for entry in meshes:
+        var part := entry as MeshInstance3D
+        if part == null or part.mesh == null:
+            continue
+        var bounds: AABB = part.get_aabb()
+        var xform: Transform3D = model.global_transform.affine_inverse() * part.global_transform
+        for i in range(8):
+            var corner := Vector3(
+                bounds.position.x + (bounds.size.x if (i & 1) != 0 else 0.0),
+                bounds.position.y + (bounds.size.y if (i & 2) != 0 else 0.0),
+                bounds.position.z + (bounds.size.z if (i & 4) != 0 else 0.0)
+            )
+            var pos: Vector3 = xform * corner
+            if not initialized:
+                combined = AABB(pos, Vector3.ZERO)
+                initialized = true
+            else:
+                combined = combined.expand(pos)
+    return combined
+
 func _find_model_animations(root: Node) -> void:
     var players := root.find_children("*", "AnimationPlayer", true, false)
-    if players.is_empty():
-        return
+    _animation_player = null
+    _idle_animation = ""
+    _run_animation = ""
+    _anim_state = ""
 
-    _animation_player = players[0] as AnimationPlayer
+    for candidate in players:
+        var player := candidate as AnimationPlayer
+        if player == null or player.get_animation_list().is_empty():
+            continue
+        _animation_player = player
+        for animation_name in player.get_animation_list():
+            var lower := str(animation_name).to_lower()
+            if _idle_animation.is_empty() and ("idle" in lower or "stand" in lower or "breath" in lower):
+                _idle_animation = str(animation_name)
+            if _run_animation.is_empty() and ("run" in lower or "jog" in lower or "walk" in lower):
+                _run_animation = str(animation_name)
+        if not _idle_animation.is_empty() and not _run_animation.is_empty():
+            break
+
     if _animation_player == null:
+        push_warning("[PPA-NATIVE] Dwarf has no AnimationPlayer")
         return
 
-    for animation_name in _animation_player.get_animation_list():
-        var lower := str(animation_name).to_lower()
-        if _idle_animation.is_empty() and ("idle" in lower or "stand" in lower or "breath" in lower):
-            _idle_animation = str(animation_name)
-        if _run_animation.is_empty() and ("run" in lower or "jog" in lower or "walk" in lower):
-            _run_animation = str(animation_name)
+    if _idle_animation.is_empty() or _run_animation.is_empty():
+        push_warning("[PPA-NATIVE] Missing Idle or Run imported clips")
+        return
 
-    if _idle_animation.is_empty() and not _animation_player.get_animation_list().is_empty():
-        _idle_animation = str(_animation_player.get_animation_list()[0])
+    # Godot GLB importer may not mark named clips as looping by default.
+    for anim_name in [_idle_animation, _run_animation]:
+        var clip := _animation_player.get_animation(anim_name)
+        if clip != null:
+            clip.loop_mode = Animation.LOOP_LINEAR
 
     _set_animation("idle")
 
