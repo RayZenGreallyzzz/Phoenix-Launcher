@@ -31,3 +31,8 @@ textures/default_filters/use_nearest_mipmap_filter=false
 
 [editor_plugins]
 enabled=PackedStringArray("res://addons/PPAOriginalWebUI/plugin.cfg")
+
+[ppa]
+# Godot-native five-page character UI is the Android default.
+# Opt in to the original Telegram HTML pilot only for a controlled comparison.
+ui/use_original_webview=false
