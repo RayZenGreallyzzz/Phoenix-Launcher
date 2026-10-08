@@ -75,6 +75,43 @@ def main() -> None:
     mask, ratio = collision_png(bits, width, height)
     if not 0.08 <= ratio <= 0.65:
         raise ValueError(f"Unexpected original dungeon walk coverage {ratio:.3f}")
+    # Derive a guaranteed-safe initial TEST position from published walk bits
+    # at build time. Avoid a brute-force mask search at every scene load.
+    def walk_at(x: int, y: int) -> bool:
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return False
+        i = y * width + x
+        return ((bits[i // 8] >> (7 - i % 8)) & 1) == 1
+
+    spawn = None
+    radius = 10
+    for x in range(max(20, int(width * 0.035)), max(24, int(width * 0.38)), 6):
+        if spawn:
+            break
+        for off in range(0, max(6, int(height * 0.33)), 6):
+            for direction in (1, -1):
+                y = int(height * 0.5) + direction * off
+                if all(walk_at(x + dx, y + dy) for dx,dy in
+                       ((0,0),(radius,0),(-radius,0),(0,radius),(0,-radius),
+                        (7,7),(-7,7),(7,-7),(-7,-7))):
+                    spawn = (x,y)
+                    break
+            if spawn:
+                break
+    if not spawn:
+        raise ValueError("Published mask contains no safe dungeon entrance corridor")
+    # This is a normal generated Godot source constant, not a server spawn.
+    # World-relative position remains correct if the final floor height differs
+    # by one pixel due to texture rounding.
+    generated = DEST.parent / "scripts/ppa_dungeon_spawn_generated.gd"
+    generated.write_text(
+        "extends RefCounted\\n"
+        + "const UV := Vector2(%.9f, %.9f)\\n" % (
+            (spawn[0] + 0.5) / float(width), (spawn[1] + 0.5) / float(height))
+        + "const MASK_DIMS := Vector2i(%d, %d)\\n" % (width, height)
+        + "const WALK_SHA256 := \\"%s\\"\\n" % hashlib.sha256(bits).hexdigest(),
+        encoding="utf-8"
+    )
     (DEST / "dungeon_walk_mask.png").write_bytes(mask)
     (DEST / "dungeon_layout.webp").write_bytes(floor)
     print("PPA_ORIGINAL_DUNGEON_ASSETS_OK",
@@ -82,6 +119,7 @@ def main() -> None:
           "walk_ratio=%.4f" % ratio,
           "walk_sha256=" + hashlib.sha256(bits).hexdigest(),
           "floor_sha256=" + hashlib.sha256(floor).hexdigest(),
+          "spawn_mask=%s,%s" % spawn,
           "source=live_PPA_no_private_repo_access", flush=True)
 
 if __name__ == "__main__":
