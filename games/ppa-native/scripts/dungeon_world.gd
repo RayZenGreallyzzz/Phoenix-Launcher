@@ -10,6 +10,17 @@ const MASK_R := 112.0 / 255.0
 const MASK_A := 48.0 / 255.0
 const WALL_RADIUS := 14.0
 
+# Same logical dungeon units as original PPA build.mjs:
+# DG_ART_W=2048; DG_SCALE=(1852*5.1435)/2048;
+# DG_W=round(DG_ART_W*DG_SCALE) ~= 9526, NOT 4096 render pixels.
+# The old native build confused high-resolution export pixels with world
+# coordinates, making stones tiny relative to the unscaled 3D hero.
+const ORIGINAL_PPA_ART_W := 2048.0
+const ORIGINAL_PPA_SCALE := (1852.0 * 5.1435) / ORIGINAL_PPA_ART_W
+
+var _render_to_world_scale := 1.0
+var _walk_overlay: TextureRect
+
 var _floor_texture: Texture2D
 var _mask_image: Image
 var _dungeon_bounds := Vector2(4096.0, 2048.0)
@@ -52,8 +63,18 @@ func _build_city_2d() -> void:
     if _floor_texture == null or mask_texture == null:
         return
     _mask_image = mask_texture.get_image()
-    _dungeon_bounds = Vector2(_floor_texture.get_width(), _floor_texture.get_height())
-    if _mask_image.is_empty() or _dungeon_bounds.x < 1024.0 or _dungeon_bounds.y < 300.0:
+    if _mask_image.is_empty() or _mask_image.get_width() != int(ORIGINAL_PPA_ART_W):
+        _mask_image = null
+        return
+    # The original art/mask are composed at one UV origin in Telegram.
+    # Keep the same UV-to-world transform for BOTH render and collisions.
+    # PPA's 4096px WebP is an art export, not the gameplay world width.
+    var mw := float(_mask_image.get_width())
+    var mh := float(_mask_image.get_height())
+    _dungeon_bounds = Vector2(roundf(mw * ORIGINAL_PPA_SCALE), roundf(mh * ORIGINAL_PPA_SCALE))
+    _render_to_world_scale = _dungeon_bounds.x / float(_floor_texture.get_width())
+    if _floor_texture.get_width() != _mask_image.get_width() * 2 or _floor_texture.get_height() != _mask_image.get_height() * 2:
+        push_error("PPA_DUNGEON_MAP_MISMATCH: floor and collision mask proportions changed")
         _mask_image = null
         return
 
@@ -67,6 +88,23 @@ func _build_city_2d() -> void:
     tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.add_child(tile)
 
+    # TEST-ONLY diagnostic: paint exactly the walkable mask over the same
+    # world-aligned rectangle. Initially hidden: zero overdraw in normal play.
+    # This lets us verify any apparent vertical offset visually, WITHOUT
+    # moving the collision map independently or breaking room entrances.
+    _walk_overlay = TextureRect.new()
+    _walk_overlay.name = "DungeonWalkMaskAlignmentOverlay"
+    _walk_overlay.texture = mask_texture
+    _walk_overlay.position = Vector2.ZERO
+    _walk_overlay.size = _dungeon_bounds
+    _walk_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    _walk_overlay.stretch_mode = TextureRect.STRETCH_SCALE
+    _walk_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    _walk_overlay.modulate = Color(0.25, 0.95, 0.38, 0.32)
+    _walk_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _walk_overlay.visible = false
+    city_world.add_child(_walk_overlay)
+
 func _build_city_npcs() -> void:
     # Dungeon mobs are server-authoritative. Do NOT copy city NPCs or invent
     # spawns, level stats, HP or rewards just to fill the scene.
@@ -75,13 +113,26 @@ func _build_city_npcs() -> void:
 func _map_world_size() -> Vector2:
     return _dungeon_bounds
 
+func _movement_speed_px() -> float:
+    # Preserve movement relative to the rendered tiles when the same
+    # original texture is displayed at PPA's larger logical world size.
+    return MOVE_SPEED_PX * _render_to_world_scale
+
+func _world_to_mask_uv(world: Vector2) -> Vector2:
+    if _dungeon_bounds.x <= 0.0 or _dungeon_bounds.y <= 0.0:
+        return Vector2.ZERO
+    # A SINGLE coordinate transform for every collision check and overlay.
+    # No guessed independent Y-offset: both input images share source origin.
+    return Vector2(world.x / _dungeon_bounds.x, world.y / _dungeon_bounds.y)
+
 func _walk_sample(pos: Vector2) -> bool:
     if _mask_image == null:
         return false
     if pos.x <= 0.0 or pos.y <= 0.0 or pos.x >= _dungeon_bounds.x or pos.y >= _dungeon_bounds.y:
         return false
-    var cell_x := clampi(int(pos.x * float(_mask_image.get_width()) / _dungeon_bounds.x), 0, _mask_image.get_width() - 1)
-    var cell_y := clampi(int(pos.y * float(_mask_image.get_height()) / _dungeon_bounds.y), 0, _mask_image.get_height() - 1)
+    var uv := _world_to_mask_uv(pos)
+    var cell_x := clampi(int(uv.x * float(_mask_image.get_width())), 0, _mask_image.get_width() - 1)
+    var cell_y := clampi(int(uv.y * float(_mask_image.get_height())), 0, _mask_image.get_height() - 1)
     var pixel := _mask_image.get_pixel(cell_x, cell_y)
     # Same strict red/alpha thresholds as the approved PPA build.mjs walk mask.
     return pixel.r >= MASK_R and pixel.a >= MASK_A
@@ -168,6 +219,25 @@ func _add_dungeon_hud() -> void:
     back.add_theme_font_size_override("font_size", 14)
     back.pressed.connect(_back_to_city)
     add_child(back)
+
+    var alignment := Button.new()
+    alignment.name = "DungeonMaskAlignmentToggle"
+    alignment.text = "ПОКАЗАТЬ МАСКУ"
+    alignment.anchor_left = 0.0
+    alignment.anchor_right = 0.0
+    alignment.offset_left = 16.0
+    alignment.offset_right = 190.0
+    alignment.offset_top = 130.0
+    alignment.offset_bottom = 166.0
+    alignment.z_index = 70
+    alignment.add_theme_font_size_override("font_size", 11)
+    alignment.pressed.connect(func() -> void:
+        if _walk_overlay == null:
+            return
+        _walk_overlay.visible = not _walk_overlay.visible
+        alignment.text = "СКРЫТЬ МАСКУ" if _walk_overlay.visible else "ПОКАЗАТЬ МАСКУ"
+    )
+    add_child(alignment)
 
 func _back_to_city() -> void:
     if is_inside_tree():
