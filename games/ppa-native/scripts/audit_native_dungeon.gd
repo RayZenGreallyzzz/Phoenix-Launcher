@@ -4,6 +4,7 @@ extends SceneTree
 # Never simulates server state, drops, mob kills, entry tickets or account saves.
 const DUNGEON = preload("res://scripts/dungeon_world.gd")
 const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
+const MODERN_DUNGEON_MOBS = preload("res://scripts/ppa_dungeon_modern_mob_catalog.gd")
 
 func _initialize() -> void:
     call_deferred("_check")
@@ -119,6 +120,18 @@ func _check() -> void:
     if scene.city_world.get_child_count() != 4:
         _fail("dungeon should contain floor, mask, ground marker and local enemy preview layer")
         return
+    # The approved new artwork is a separate rat/spider/beetle bestiary,
+    # not the deprecated deployed PPA mob sprites or Fart-zone enemies.
+    if MODERN_DUNGEON_MOBS.NAME_BY_ATLAS_INDEX.size() != 20:
+        _fail("new PPA dungeon bestiary must have twenty index entries")
+        return
+    if MODERN_DUNGEON_MOBS.get_art_name(0) != "Пепельная крыса" or MODERN_DUNGEON_MOBS.get_art_name(1) != "Пещерный паук" or MODERN_DUNGEON_MOBS.get_art_name(2) != "Обугленный жук":
+        _fail("wrong dungeon bestiary: expected rat / spider / beetle")
+        return
+    if MODERN_DUNGEON_MOBS.is_ready():
+        _fail("composite source poster mistakenly marked as ready-to-render sprites")
+        return
+    print("PPA_DUNGEON_MODERN_BESTIARY_OK names=20 first=rat,spider,beetle published_old=0")
     # Critical: old 20 PNGs from the deployed 2026 PPA are explicitly
     # disallowed; the approved replacement art remains unpublished.
     if scene.APPROVED_DUNGEON_ENEMY_ART_READY:
