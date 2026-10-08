@@ -1,0 +1,65 @@
+name: Audit remaining PPA 3D character GLBs
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/audit-ppa-heroes.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download and inspect official PPA GLBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/heroes
+          python3 - <<'PY'
+          import json,urllib.request,hashlib,struct, pathlib
+          host='https://ppa-phoenixpixarena.1988stella1988.workers.dev/game/'
+          models={
+            'tank':'Tank_Mobile_Shield_Hammer_Final.glb',
+            'barbarian':'Berserker_Final.glb',
+            'paladin':'Paladin_Final.glb',
+            'archer':'Ranger_Mobile_Bow_Z90.glb',
+            'mage':'Mage_Final.glb',
+            'assassin':'Assassin.glb',
+            'priest':'Priest_Final_GitHub.glb',
+          }
+          def walk(n, nodes, p=None):
+            if p is None:p=[]
+            p.append(n)
+            for c in nodes[n].get('children',[]):walk(c,nodes,p)
+            return p
+          for key,name in models.items():
+            req=urllib.request.Request(host+name+'?v=20261002u2',headers={'User-Agent':'PPA-Native-GLB-Validation'})
+            with urllib.request.urlopen(req,timeout=100) as res: data=res.read()
+            if data[:4]!=b'glTF':raise ValueError('Not GLB '+name)
+            version,size=struct.unpack_from('<II',data,4)
+            if version!=2 or size!=len(data):raise ValueError('GLB header '+name)
+            size0,kind0=struct.unpack_from('<II',data,12)
+            gltf=json.loads(data[20:20+size0])
+            clips=[x.get('name','') for x in gltf.get('animations',[])]
+            nodes=gltf.get('nodes',[])
+            parents={}
+            for i,n in enumerate(nodes):
+              for child in n.get('children',[]):parents[child]=i
+            weapons=[]
+            for i,n in enumerate(nodes):
+              if any(x in (n.get('name') or '').lower() for x in ('sword','shield','dagger','bow','hammer','cleaver','scepter','weapon','cannon')):
+                weapons.append({'id':i,'name':n.get('name'), 'pos':n.get('translation'), 'rot':n.get('rotation'),'scale':n.get('scale'),'parent':nodes[parents[i]].get('name') if i in parents else None})
+            metric={'class':key,'file':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),
+                    'scenes':len(gltf.get('scenes',[])),'nodes':len(nodes),'skins':len(gltf.get('skins',[])),
+                    'meshes':len(gltf.get('meshes',[])),'clips':clips,'weapons':weapons}
+            pathlib.Path('/tmp/heroes/'+key+'.json').write_text(json.dumps(metric,indent=2))
+            print('PPA_HERO_AUDIT '+json.dumps(metric,separators=(',',':')),flush=True)
+            if not gltf.get('meshes') or not gltf.get('skins'):raise ValueError('No rigged mesh: '+key)
+            if not any('idle' in c.lower() for c in clips):raise ValueError('No idle: '+key)
+          print('PPA_HERO_AUDIT_OK: 7 models')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-ppa-remaining-hero-glb-audit
+          path: /tmp/heroes/*.json
+          retention-days: 7
