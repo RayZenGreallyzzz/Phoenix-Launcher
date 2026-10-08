@@ -9,6 +9,7 @@ signal authoritative_state_requested(service: String)
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
+const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 const GOLD := Color("#F6C66F")
 const TEXT := Color("#E5E4DE")
@@ -24,7 +25,6 @@ var selected_id := ""
 var quantity := 1
 var _auction_category := "all"
 var _quest_tier := "21-30"
-var _storage_pages: Dictionary = {"inventory":0, "personal":0, "clan":0, "premium":0}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
@@ -233,7 +233,6 @@ func open_npc(source: Dictionary) -> void:
     quantity = 1
     _auction_category = "all"
     _quest_tier = "21-30"
-    _storage_pages = {"inventory":0, "personal":0, "clan":0, "premium":0}
     authoritative.clear()
     has_verified_state = false
     visible = true
@@ -591,72 +590,48 @@ func _show_forge() -> void:
     _body.add_child(_label("Ни заточка, ни слияние, ни крафт не изменяют реальный аккаунт в этом тесте.", 11, SUB))
 
 
-func _storage_page(scope: String, offset: int) -> void:
-    var limit := STORAGE.pages(scope)
-    if limit <= 0:
-        return
-    _storage_pages[scope] = clampi(int(_storage_pages.get(scope, 0)) + offset, 0, limit - 1)
-    _render()
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
-    var cap: int = STORAGE.capacity(scope)
-    var count_pages: int = STORAGE.pages(scope)
-    var current: int = clampi(int(_storage_pages.get(scope, 0)), 0, count_pages - 1)
-    var first: int = STORAGE.first_slot(scope, current)
-    var visible_count: int = STORAGE.visible_slots(scope, current)
-    var area := VBoxContainer.new()
-    area.name = "NpcStoragePanel_" + scope
-    area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    area.add_theme_constant_override("separation", 5)
-    parent.add_child(area)
+    # No pagination or arrows. The user swipes a continuous square-cell
+    # grid; 100/200/500/50 total slots share a single drawing canvas.
+    var cap := STORAGE.capacity(scope)
+    var panel := VBoxContainer.new()
+    panel.name = "NpcStoragePanel_" + scope
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.add_theme_constant_override("separation", 5)
+    parent.add_child(panel)
     var heading := "ИНВЕНТАРЬ" if scope == "inventory" else (
         "ЛИЧНЫЙ СКЛАД" if scope == "personal" else (
         "КЛАНОВЫЙ СКЛАД" if scope == "clan" else "ПРЕМИУМ СКЛАД"))
-    area.add_child(_label(heading, 12, GOLD))
-    area.add_child(_label("— / " + str(cap) + " · содержимое с сервера", 10, SUB))
-    var grid := GridContainer.new()
-    grid.name = "NpcStorageGrid_" + scope
-    grid.columns = 4
-    grid.add_theme_constant_override("h_separation", 4)
-    grid.add_theme_constant_override("v_separation", 4)
-    area.add_child(grid)
-    var wide_screen := size.x >= 570.0
-    var side := clampf(((_frame.offset_right - _frame.offset_left) * (0.50 if wide_screen else 1.0) - 36.0) / 4.0 - 5.0, 29.0, 57.0)
-    for i in range(visible_count):
-        var cell := PanelContainer.new()
-        cell.name = "NpcStorageCell_" + scope + "_" + str(first + i)
-        cell.custom_minimum_size = Vector2(side, side)
-        cell.add_theme_stylebox_override("panel", _style(Color("#0E1418"), Color("#594735"), 4))
-        grid.add_child(cell)
-    var pager := HBoxContainer.new()
-    pager.add_theme_constant_override("separation", 5)
-    area.add_child(pager)
-    var prev := _button("‹")
-    prev.name = "NpcStoragePrev_" + scope
-    prev.custom_minimum_size.x = 40
-    prev.disabled = current <= 0
-    prev.pressed.connect(_storage_page.bind(scope, -1))
-    pager.add_child(prev)
-    var page_label := _label(str(first + 1) + "–" + str(first + visible_count) + " / " + str(cap) +
-        "  ·  " + str(current + 1) + "/" + str(count_pages), 10, TEXT)
-    page_label.name = "NpcStoragePage_" + scope
-    page_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    pager.add_child(page_label)
-    var next := _button("›")
-    next.name = "NpcStorageNext_" + scope
-    next.custom_minimum_size.x = 40
-    next.disabled = current >= count_pages - 1
-    next.pressed.connect(_storage_page.bind(scope, 1))
-    pager.add_child(next)
+    panel.add_child(_label(heading, 12, GOLD))
+    panel.add_child(_label("— / " + str(cap) + " · данные сервера", 10, SUB))
+    var shell := PanelContainer.new()
+    shell.name = "NpcStorageFrame_" + scope
+    shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    shell.add_theme_stylebox_override("panel", _style(Color("#0B1014"), Color("#5D4B35"), 8))
+    panel.add_child(shell)
+    var scrolling := ScrollContainer.new()
+    scrolling.name = "NpcStorageScroll_" + scope
+    scrolling.custom_minimum_size.y = 296.0 if size.x >= 570.0 else 240.0
+    scrolling.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scrolling.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scrolling.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    # Godot ScrollContainer owns touchscreen drag + kinetic scrolling.
+    # Child canvas is IGNORE to keep touch input exclusively with scroll.
+    shell.add_child(scrolling)
+    var grid := VIRTUAL_GRID.new()
+    grid.custom_minimum_size.x = maxf(150.0,
+        (_frame.offset_right - _frame.offset_left) / 2.0 - 56.0) if size.x >= 570.0 else maxf(150.0, _frame.offset_right - _frame.offset_left - 60.0)
+    scrolling.add_child(grid)
+    grid.configure(scope, scrolling, 5 if size.x >= 570.0 else 4)
 
 func _storage_pair(scope: String) -> void:
-    # Only 20 cells per panel exist in the node tree at any moment.
-    # Displaying 500 cells at once made the tablet scroll expensive.
+    # Two independent, smooth scrolls. The whole 500-slot area uses just
+    # one virtual-draw node and one ScrollContainer, not 500 child nodes.
     var narrow := size.x < 570.0
     var split: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
     split.name = "NpcStoragePair_" + scope
-    split.add_theme_constant_override("separation", 10)
+    split.add_theme_constant_override("separation", 9)
     _body.add_child(split)
     _storage_slot_panel(split, "inventory")
     _storage_slot_panel(split, scope)
@@ -724,7 +699,7 @@ func _show_clan() -> void:
             _message("УЧАСТНИКИ И ЗАЯВКИ", "Роли, онлайн, урон, управление, исключение и приглашения — по полномочиям.")
             _locked_action("УПРАВЛЕНИЕ СОСТАВОМ")
         "storage":
-            _message("ОБЩИЙ КЛАНОВЫЙ СКЛАД", "500 слотов, отдельные страницы и права; инвентарь 100 слотов.")
+            _message("ОБЩИЙ КЛАНОВЫЙ СКЛАД", "500 слотов с плавной прокруткой, без перелистывания; инвентарь 100 слотов.")
             _storage_pair("clan")
             _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
         "exchange":
