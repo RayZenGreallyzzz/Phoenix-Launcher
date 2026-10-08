@@ -1,0 +1,36 @@
+name: Inspect actual deployed PPA dungeon mob art (read-only)
+on:
+  push:
+    branches:
+      - fix/godot-qa-slime-not-bird-20261009
+    paths:
+      - games/ppa-native/tools/audit_live_dungeon_art.py
+      - .github/workflows/audit-deployed-ppa-monster-art.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-art-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect deployed PPA mob names and source images
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/ppa-native/tools/audit_live_dungeon_art.py
+          python3 games/ppa-native/tools/audit_live_dungeon_art.py \
+            --output audit-output/live-dungeon-art | tee /tmp/ppa-mob-art-audit.txt
+          grep -q 'PPA_LIVE_MOB_ART_AUDIT_OK' /tmp/ppa-mob-art-audit.txt
+          test "$(find audit-output/live-dungeon-art -maxdepth 1 -name 'level_*_runtime_slot.*' | wc -l)" -eq 20
+          test -s audit-output/live-dungeon-art/audit.json
+      - name: Preserve separate auditable 20-source-asset snapshot (NOT imported in game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPA-Deployed-Mob-Sprite-Audit-NOT-Approved
+          path: audit-output/live-dungeon-art/
+          retention-days: 5
+          if-no-files-found: error
