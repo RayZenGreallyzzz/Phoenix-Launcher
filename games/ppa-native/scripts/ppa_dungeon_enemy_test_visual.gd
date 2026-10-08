@@ -43,7 +43,7 @@ func setup(source_id: int, level: int, boss: bool, boss_id: String = "") -> void
         frame.region = Rect2(
             0.0, 0.0,
             floorf(float(tex.get_width()) / 4.0),
-            floorf(float(tex.get_height()) / 4.0)
+            floorf(float(tex.get_height()) / 2.0)
         )
         displayed_texture = frame
 
