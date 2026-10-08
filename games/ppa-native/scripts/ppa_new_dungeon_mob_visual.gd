@@ -56,6 +56,8 @@ const FRAME_MS := [115, 0, 105, 0, 110, 120, 165, 100, 125, 135, 145, 170, 190, 
 const DISPLAY_HEIGHT := [30, 30, 34, 25, 34, 52, 58, 44, 48, 56, 58, 68, 74, 78, 68, 54, 82, 50, 80, 72]
 const SLIME_WIDTHS := [0.88, 0.96, 1.04, 1.12]
 var image_sprite: Sprite2D
+var preview_name_label: Label
+var preview_hp_bar: ProgressBar
 var selected_level := 0
 var _direction_row := 1
 var _frame_clock := 0.0
@@ -170,6 +172,33 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
         # defaults to 120ms; all other delays are read from live MOB_ANIM_PACKS.
         _frame_delay = 0.12 if base_level == 2 else float(FRAME_MS[base_level - 1]) / 1000.0
     add_child(image_sprite)
+
+
+func set_preview_combat(name: String, hp: int, max_hp: int) -> void:
+    # Created once per visible mob. Never draw text via per-frame strokeText;
+    # no timers, texture rebuilds or font shadow work during the game loop.
+    if preview_name_label == null:
+        preview_name_label=Label.new()
+        preview_name_label.name="PPATestMobName"
+        preview_name_label.position=Vector2(-95.0,-94.0)
+        preview_name_label.size=Vector2(190.0,20.0)
+        preview_name_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+        preview_name_label.add_theme_font_size_override("font_size",11)
+        preview_name_label.add_theme_color_override("font_color",Color("#F3D7AE"))
+        preview_name_label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+        add_child(preview_name_label)
+        preview_hp_bar=ProgressBar.new()
+        preview_hp_bar.name="PPATestMobHP"
+        preview_hp_bar.position=Vector2(-49.0,-74.0)
+        preview_hp_bar.size=Vector2(98.0,8.0)
+        preview_hp_bar.show_percentage=false
+        preview_hp_bar.mouse_filter=Control.MOUSE_FILTER_IGNORE
+        add_child(preview_hp_bar)
+    if preview_name_label.text != name:
+        preview_name_label.text=name
+    if preview_hp_bar != null:
+        preview_hp_bar.max_value=maxi(1,max_hp)
+        preview_hp_bar.value=clampi(hp,0,max_hp)
 
 func set_motion(delta_pos: Vector2, moved: bool) -> void:
     _is_moving = moved
