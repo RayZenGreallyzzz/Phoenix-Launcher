@@ -37,11 +37,14 @@ def main() -> None:
     cli = argparse.ArgumentParser()
     cli.add_argument("--output", type=Path, default=Path("audit-output/deployed-real-animation-art"))
     cli.add_argument("--html-file")
+    cli.add_argument("--expect-source-sha256", help="Abort if deployed client differs from the reviewed snapshot")
     args = cli.parse_args()
     html = Path(args.html_file).read_bytes() if args.html_file else fetch(
         HOST + "/?godot_exact_runtime_animation_export=20261009", 11_000_000)
     source = html.decode("utf-8")
     source_sha = hashlib.sha256(html).hexdigest()
+    if args.expect_source_sha256 and source_sha != args.expect_source_sha256:
+        raise ValueError("Live PPA HTML SHA mismatch: do not silently import unreviewed sprites")
     # Honor current mob names, rather than old posters or archived ZIP.
     table = js_array(source, "MOB_TABLE")
     rows = {int(lv):name for lv, _, name in re.findall(
@@ -97,6 +100,9 @@ def main() -> None:
         fmt,w,h=image_properties(data)
         if fmt!="png" or (w,h)!=(fw*columns,fh*rows):
             raise ValueError(f"Bad animation dimensions {filename} expected={fw*columns}x{fh*rows}, actual={w}x{h}")
+        digest = hashlib.sha256(data).hexdigest()
+        if Path(urlparse(full).path).stem != digest[:16]:
+            raise ValueError("Deployed sprite URL is not its expected SHA256 content hash: " + filename)
         (output/filename).write_bytes(data)
         imported.append({
             "level":lv, "name":VIDEO_LEVELS[lv-1], "filename":filename,
