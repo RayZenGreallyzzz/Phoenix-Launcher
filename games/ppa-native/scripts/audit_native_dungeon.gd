@@ -139,11 +139,15 @@ func _check() -> void:
     if scene.ENEMY_VISUAL.art_index_for_spawn(21, 0) != -1:
         _fail("missing 21–60 new art must not silently reuse 1–20 art")
         return
-    if scene.ENEMY_VISUAL.available_count() != 0:
-        _fail("art unexpectedly present while this import-preparation build lacks the PNGs")
+    var new_count: int = scene.ENEMY_VISUAL.available_count()
+    if new_count != 0 and new_count != 20:
+        _fail("partial PNG import is unsafe for dungeon: " + str(new_count))
         return
-    if scene.APPROVED_DUNGEON_ENEMY_ART_READY or scene.APPROVED_DUNGEON_BOSS_ART_READY:
-        _fail("unverified dungeon mob/boss art unexpectedly enabled")
+    if scene.APPROVED_DUNGEON_ENEMY_ART_READY != (new_count == 20):
+        _fail("new sprite gate disagrees with actual imported files")
+        return
+    if scene.APPROVED_DUNGEON_BOSS_ART_READY:
+        _fail("unverified old dungeon boss art unexpectedly enabled")
         return
     print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK names=20 first=rat,spider,beetle png_loaded=0 legacy=0")
     if ResourceLoader.exists("res://scripts/ppa_dungeon_art_generated.gd"):
@@ -158,9 +162,19 @@ func _check() -> void:
     if scene._enemy_spawns.size() != scene._enemy_branch.size():
         _fail("original dungeon spawn coordinates and branch indices drifted")
         return
-    if enemies.get_child_count() != 0 or not scene._enemy_active.is_empty() or scene._boss_visual != null:
-        _fail("legacy mob/boss visuals appeared before new approved asset import")
-        return
+    if new_count == 0:
+        if enemies.get_child_count() != 0 or not scene._enemy_active.is_empty() or scene._boss_visual != null:
+            _fail("legacy mob/boss visuals appeared before new approved asset import")
+            return
+    else:
+        if enemies.get_child_count() > scene.PREVIEW_CAP or scene._boss_visual != null:
+            _fail("new dungeon art exceeded scene cap or spawned unapproved boss")
+            return
+        for state in scene._enemy_active.values():
+            var sprite := (state["node"] as Node2D).find_child("NewDungeonMob_*", true, false) as Sprite2D
+            if sprite == null or sprite.texture == null:
+                _fail("new monster preview visible without its original Library PNG")
+                return
     if not scene._can_walk(scene._boss_home):
         _fail("published boss chamber is outside the genuine shifted mask")
         return
