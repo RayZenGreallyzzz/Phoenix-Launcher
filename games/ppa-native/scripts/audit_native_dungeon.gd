@@ -121,9 +121,19 @@ func _check() -> void:
         return
     # Critical: old 20 PNGs from the deployed 2026 PPA are explicitly
     # disallowed; the approved replacement art remains unpublished.
-    if scene.APPROVED_DUNGEON_ENEMY_ART_READY:
-        _fail("unapproved dungeon art unexpectedly enabled")
+    if scene.ENEMY_VISUAL.NEW_MOBS.size() != 20:
+        _fail("new dungeon art contract must list 20 distinct PPA mobs")
         return
+    if scene.ENEMY_VISUAL.NEW_MOBS[0] != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.NEW_MOBS[1] != "mob_02_cave_spider.png" or scene.ENEMY_VISUAL.NEW_MOBS[2] != "mob_03_charred_beetle.png":
+        _fail("new rat/spider/beetle sprite roster does not match approved 1–20 atlas")
+        return
+    if scene.ENEMY_VISUAL.available_count() != 0:
+        _fail("art unexpectedly present while this import-preparation build lacks the PNGs")
+        return
+    if scene.APPROVED_DUNGEON_ENEMY_ART_READY or scene.APPROVED_DUNGEON_BOSS_ART_READY:
+        _fail("unverified dungeon mob/boss art unexpectedly enabled")
+        return
+    print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK names=20 first=rat,spider,beetle png_loaded=0 legacy=0")
     if ResourceLoader.exists("res://scripts/ppa_dungeon_art_generated.gd"):
         _fail("legacy original_dungeon_art_generated.gd was shipped in APK")
         return
