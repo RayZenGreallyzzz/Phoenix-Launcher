@@ -54,6 +54,10 @@ import com.phoenixgames.launcher.auth.PhoenixAuth
 import com.phoenixgames.launcher.data.GameCatalog
 import com.phoenixgames.launcher.model.GameManifest
 import com.phoenixgames.launcher.runtime.GameRuntime
+import com.phoenixgames.launcher.runtime.PpaUpdater
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.phoenixgames.launcher.ui.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -149,8 +153,15 @@ private fun PhoenixLauncherApp(
     var selectedGameId by rememberSaveable { mutableStateOf<String?>(null) }
     var downloadOpen by rememberSaveable { mutableStateOf(false) }
     var installed by rememberSaveable { mutableStateOf(GameRuntime.isPpaInstalled(context)) }
-    var downloading by rememberSaveable { mutableStateOf(false) }
-    var progress by rememberSaveable { mutableFloatStateOf(0f) }
+    var downloading by remember { mutableStateOf(false) }
+    var downloadBytes by remember { mutableLongStateOf(0L) }
+    var downloadTotal by remember { mutableLongStateOf(0L) }
+    var downloadStatus by remember { mutableStateOf("Проверка обновлений") }
+    var checkingUpdates by remember { mutableStateOf(false) }
+    var latestPpa by remember { mutableStateOf<PpaUpdater.Release?>(null) }
+    var updateCheckError by remember { mutableStateOf<String?>(null) }
+    var lifecycleRefresh by remember { mutableIntStateOf(0) }
+    var dismissedUpdateCode by rememberSaveable { mutableLongStateOf(0L) }
     var gameBusy by remember { mutableStateOf(false) }
     var gameError by remember { mutableStateOf<String?>(null) }
     var account by remember { mutableStateOf<PhoenixAccount?>(null) }
@@ -160,6 +171,36 @@ private fun PhoenixLauncherApp(
     val selectedGame = remember(selectedGameId) {
         selectedGameId?.let { id -> GameCatalog.games.firstOrNull { it.id == id } }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val ppaVersion = PpaUpdater.installedVersionCode(context)
+    val ppaUpdateAvailable = latestPpa?.let { it.versionCode > ppaVersion } ?: false
+    val ppaFileVerified = latestPpa?.let { PpaUpdater.hasVerifiedCache(context, it) } ?: false
+
+    DisposableEffect(lifecycleOwner) {
+        val listener = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                installed = GameRuntime.isPpaInstalled(context)
+                PpaUpdater.clearInstalledUpdate(context)
+                lifecycleRefresh++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(listener)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(listener) }
+    }
+
+    LaunchedEffect(stage, lifecycleRefresh) {
+        if (stage != Stage.Launcher) return@LaunchedEffect
+        checkingUpdates = true
+        try {
+            latestPpa = PpaUpdater.latestRelease()
+            updateCheckError = null
+        } catch (t: Throwable) {
+            updateCheckError = t.message ?: "Нет соединения с сервером обновлений"
+        } finally {
+            checkingUpdates = false
+        }
+    }
+
 
     LaunchedEffect(Unit) {
         delay(900)
@@ -250,12 +291,54 @@ private fun PhoenixLauncherApp(
             gameError = null
             try {
                 installed = GameRuntime.isPpaInstalled(context)
-                if (!installed) error("Phoenix Pix Arena ещё не установлена. Установи native PPA APK, затем вернись в Launcher.")
+                if (!installed) error("Phoenix Pix Arena ещё не установлена. Нажми «Скачать» в лаунчере.")
                 GameRuntime.launchPpa(context)
             } catch (t: Throwable) {
                 gameError = t.message ?: "Не удалось запустить Phoenix Pix Arena"
             } finally {
                 gameBusy = false
+            }
+        }
+    }
+
+    fun installOrDownloadPpa() {
+        if (downloading) return
+        scope.launch {
+            downloading = true
+            gameError = null
+            try {
+                downloadStatus = "Проверка версии на сервере"
+                val release = latestPpa ?: PpaUpdater.latestRelease().also { latestPpa = it }
+                installed = GameRuntime.isPpaInstalled(context)
+                if (installed && PpaUpdater.installedVersionCode(context) >= release.versionCode) {
+                    downloadOpen = false
+                    launchPpa()
+                    return@launch
+                }
+
+                downloadTotal = release.bytes
+                if (!PpaUpdater.hasVerifiedCache(context, release)) {
+                    downloadBytes = 0L
+                    downloadStatus = "Загрузка APK"
+                    PpaUpdater.download(context, release) { downloaded, total ->
+                        downloadBytes = downloaded
+                        downloadTotal = total
+                    }
+                } else {
+                    downloadBytes = release.bytes
+                }
+                downloadStatus = "SHA-256 проверен • APK готова"
+                val requested = PpaUpdater.openInstaller(context, release)
+                downloadStatus = if (requested) {
+                    "Подтверди установку в окне Android"
+                } else {
+                    "Разреши установку из Phoenix Launcher, затем нажми «Установить»"
+                }
+            } catch (t: Throwable) {
+                downloadStatus = "Не удалось обновить игру"
+                gameError = t.message ?: "Ошибка загрузки PPA"
+            } finally {
+                downloading = false
             }
         }
     }
@@ -300,19 +383,17 @@ private fun PhoenixLauncherApp(
                         )
                     } else when {
                         downloadOpen -> DownloadScreen(
-                            progress = progress,
+                            downloadedBytes = downloadBytes,
+                            totalBytes = latestPpa?.bytes ?: downloadTotal,
                             downloading = downloading,
                             installed = installed,
+                            updateAvailable = ppaUpdateAvailable,
+                            apkVerified = ppaFileVerified,
+                            checking = checkingUpdates,
+                            versionName = latestPpa?.versionName ?: GameCatalog.ppa.version,
+                            status = if (updateCheckError != null && latestPpa == null) updateCheckError!! else downloadStatus,
                             onBack = { downloadOpen = false },
-                            onStart = {
-                                installed = GameRuntime.isPpaInstalled(context)
-                                if (installed) {
-                                    downloadOpen = false
-                                    launchPpa()
-                                } else {
-                                    gameError = "Native PPA APK ещё не установлена. Сейчас собираю отдельный Godot-клиент для установки."
-                                }
-                            },
+                            onStart = ::installOrDownloadPpa,
                             onPlay = {
                                 downloadOpen = false
                                 launchPpa()
@@ -321,11 +402,13 @@ private fun PhoenixLauncherApp(
                         selectedGame != null -> GameDetails(
                             game = selectedGame!!,
                             installed = installed && selectedGame!!.id == GameCatalog.ppa.id,
+                            updateAvailable = ppaUpdateAvailable && selectedGame!!.id == GameCatalog.ppa.id,
                             onBack = { selectedGameId = null },
                             onPrimary = {
                                 if (selectedGame!!.id == GameCatalog.ppa.id) {
                                     installed = GameRuntime.isPpaInstalled(context)
-                                    if (installed) launchPpa() else downloadOpen = true
+                                    if (installed && !ppaUpdateAvailable) launchPpa()
+                                    else downloadOpen = true
                                 }
                             }
                         )
@@ -346,6 +429,30 @@ private fun PhoenixLauncherApp(
                 }
             }
         }
+    }
+
+    if (stage == Stage.Launcher && installed && ppaUpdateAvailable &&
+        !downloadOpen && dismissedUpdateCode != latestPpa?.versionCode
+    ) {
+        AlertDialog(
+            onDismissRequest = { dismissedUpdateCode = latestPpa?.versionCode ?: 0L },
+            containerColor = PhoenixCard,
+            title = { Text("Доступно обновление PPA") },
+            text = {
+                Text("Новая версия ${latestPpa?.versionName ?: ""} готова. Установим через лаунчер без ручного скачивания APK.", color = PhoenixMuted)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedGameId = null
+                    downloadOpen = true
+                }) { Text("Обновить", color = PhoenixOrange) }
+            },
+            dismissButton = {
+                TextButton(onClick = { dismissedUpdateCode = latestPpa?.versionCode ?: 0L }) {
+                    Text("Позже", color = PhoenixMuted)
+                }
+            }
+        )
     }
 
     if (gameError != null) {
@@ -1607,6 +1714,7 @@ private fun SettingsScreen() {
 private fun GameDetails(
     game: GameManifest,
     installed: Boolean,
+    updateAvailable: Boolean,
     onBack: () -> Unit,
     onPrimary: () -> Unit
 ) {
@@ -1658,7 +1766,7 @@ private fun GameDetails(
         item {
             Column(Modifier.padding(horizontal = sidePadding, vertical = 22.dp)) {
                 PrimaryButton(
-                    if (!game.released) "Скоро" else if (installed) "Играть" else "Скачать " + game.sizeLabel,
+                    if (!game.released) "Скоро" else if (updateAvailable) "Обновить PPA" else if (installed) "Играть" else "Скачать " + game.sizeLabel,
                     onPrimary,
                     enabled = game.released
                 )
@@ -1706,9 +1814,15 @@ private fun GameDetails(
 
 @Composable
 private fun DownloadScreen(
-    progress: Float,
+    downloadedBytes: Long,
+    totalBytes: Long,
     downloading: Boolean,
     installed: Boolean,
+    updateAvailable: Boolean,
+    apkVerified: Boolean,
+    checking: Boolean,
+    versionName: String,
+    status: String,
     onBack: () -> Unit,
     onStart: () -> Unit,
     onPlay: () -> Unit
@@ -1723,15 +1837,15 @@ private fun DownloadScreen(
         else -> 20.dp
     }
     val artRatio = if (isLandscape) 2.7f else 1.8f
-
-    val pct = if (installed) 100 else (progress * 100).toInt()
-    val stage = when {
-        pct >= 100 -> 3
-        pct >= 93 -> 2
-        pct >= 83 -> 1
-        else -> 0
-    }
-    val stages = listOf("Загрузка файлов игры", "Проверка файлов", "Установка модуля", "Готово к запуску")
+    val upToDate = installed && !updateAvailable
+    val effectiveReceived = if (apkVerified) totalBytes else downloadedBytes
+    val progress = if (upToDate || apkVerified) 1f else if (totalBytes > 0L) {
+        (effectiveReceived.toDouble() / totalBytes.toDouble()).toFloat().coerceIn(0f, 1f)
+    } else 0f
+    val pct = (progress * 100).toInt()
+    fun mb(value: Long): String = String.format(
+        java.util.Locale.ROOT, "%.1f МБ", value.toDouble() / (1024.0 * 1024.0)
+    )
 
     LazyColumn(
         Modifier.fillMaxSize().background(PhoenixBg),
@@ -1742,7 +1856,10 @@ private fun DownloadScreen(
                 Text("←  Назад", color = PhoenixText, fontSize = 12.sp)
             }
             Spacer(Modifier.height(14.dp))
-            Text(if (installed) "Игра установлена" else "Установка игры", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (upToDate) "Игра готова" else if (installed) "Обновление игры" else "Установка PPA",
+                fontSize = 25.sp, fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.height(22.dp))
             Image(
                 painter = painterResource(R.drawable.ppa_hero),
@@ -1753,72 +1870,63 @@ private fun DownloadScreen(
             Spacer(Modifier.height(22.dp))
             Text("Phoenix Pix Arena", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(5.dp))
-            Text("Версия 0.1.0  ·  380 МБ", color = PhoenixMuted, fontSize = 11.sp)
+            Text(
+                "Версия $versionName" +
+                    if (totalBytes > 0L) "  ·  ${mb(totalBytes)}" else "",
+                color = PhoenixMuted, fontSize = 11.sp
+            )
             Spacer(Modifier.height(26.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Text(
                     when {
-                        installed -> "Готово к запуску"
-                        pct >= 93 -> "Установка модуля"
-                        pct >= 83 -> "Проверка файлов"
-                        else -> "Загрузка файлов игры"
+                        upToDate -> "Актуальная версия установлена"
+                        downloading -> "Скачивание и проверка APK"
+                        apkVerified -> "APK проверена и готова к установке"
+                        checking -> "Проверка версии"
+                        else -> "Загрузка из официального канала PPA"
                     },
                     color = PhoenixText,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Text(pct.toString() + "%", color = PhoenixOrange, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                Text("$pct%", color = PhoenixOrange, fontSize = 34.sp, fontWeight = FontWeight.Black)
             }
             Spacer(Modifier.height(12.dp))
             LinearProgressIndicator(
-                progress = { if (installed) 1f else progress },
+                progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = PhoenixOrange,
                 trackColor = PhoenixSecondary
             )
             Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth()) {
-                Text(((380 * pct) / 100).toString() + " / 380 МБ", color = PhoenixMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                Text(
-                    if (installed) "Установка завершена" else "12,8 МБ/с · ~" + maxOf(1, (100 - pct + 2) / 3) + " сек",
-                    color = PhoenixMuted,
-                    fontSize = 10.sp
-                )
-            }
+            Text(
+                when {
+                    upToDate -> "Игра готова к запуску"
+                    totalBytes > 0L -> "${mb(effectiveReceived)} / ${mb(totalBytes)}"
+                    else -> "Размер APK появится после проверки сервера"
+                },
+                color = PhoenixMuted, fontSize = 11.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(status, color = PhoenixMuted, fontSize = 11.sp)
             Spacer(Modifier.height(24.dp))
             HorizontalDivider(color = PhoenixBorder)
-            stages.forEachIndexed { index, title ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val complete = installed || stage > index
-                    val current = !installed && stage == index
-                    Box(
-                        Modifier.size(24.dp).clip(CircleShape)
-                            .border(1.dp, if (complete) PhoenixGreen else if (current) PhoenixOrange else PhoenixBorder, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(if (complete) "✓" else if (current) "•" else "–", color = if (complete) PhoenixGreen else if (current) PhoenixOrange else PhoenixMuted, fontSize = 11.sp)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Text(title, color = if (complete) PhoenixGreen else if (current) PhoenixText else PhoenixMuted, fontSize = 12.sp)
-                }
-            }
-            HorizontalDivider(color = PhoenixBorder)
-            Spacer(Modifier.height(22.dp))
-            PrimaryButton(
-                if (installed) "Играть" else if (downloading) "Загрузка…" else "Начать загрузку",
-                if (installed) onPlay else onStart,
-                enabled = !downloading || installed
-            )
             Spacer(Modifier.height(18.dp))
             Text(
-                "Файлы проверяются системой Phoenix",
-                color = PhoenixMuted,
-                fontSize = 10.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                "Проверяем размер, SHA-256 и пакет Android. После установки временная APK удаляется из кэша лаунчера.",
+                color = PhoenixMuted, fontSize = 11.sp, lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(22.dp))
+            PrimaryButton(
+                when {
+                    upToDate -> "Играть"
+                    downloading -> "Загрузка…"
+                    apkVerified -> "Установить через Android"
+                    installed -> "Скачать обновление"
+                    else -> "Скачать и установить PPA"
+                },
+                if (upToDate) onPlay else onStart,
+                enabled = !downloading && !checking
             )
         }
     }
