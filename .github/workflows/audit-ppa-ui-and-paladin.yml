@@ -27,9 +27,23 @@ jobs:
               print('html HTTP',res.status,'size',len(html),'content-type',res.headers.get('content-type'),flush=True)
           assert b'<html' in html[:2000].lower()
           (d/'production-index.html').write_bytes(html)
-          req=urllib.request.Request(host+'/game/Paladin_Final.glb?v=20261002u2')
-          with urllib.request.urlopen(req,timeout=100) as res:
-              glb=res.read()
+          asset_urls=[
+              host+'/game/Paladin_Final.glb?v=20261002u2',
+              'https://raw.githubusercontent.com/RayZenGreallyzzz/ppa-phoenixpixarena/main/Paladin_Final.glb'
+          ]
+          glb=None
+          for url in asset_urls:
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'PPA-Native-Asset-CI/1'})
+                  with urllib.request.urlopen(req,timeout=100) as res:
+                      glb=res.read()
+                  if glb[:4] == b'glTF':
+                      print('Paladin source:',url,len(glb),flush=True)
+                      break
+              except Exception as e:
+                  print('Paladin source retry:',url,repr(e),flush=True)
+          if not glb or glb[:4] != b'glTF':
+              raise ValueError('Unable to download paladin GLB')
           assert glb[:4]==b'glTF'
           length,typ=struct.unpack_from('<II',glb,12)
           assert typ==0x4E4F534A
