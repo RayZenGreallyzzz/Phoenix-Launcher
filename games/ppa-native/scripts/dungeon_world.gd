@@ -7,6 +7,10 @@ const FLOOR := "res://assets/dungeon_layout.webp"
 const MASK := "res://assets/dungeon_walk_mask.png"
 const SAFE_ENTRY = preload("res://scripts/ppa_dungeon_spawn_generated.gd")
 const ENEMY_CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
+# DO NOT silently substitute 2026-09 legacy published PPA mob sprites.
+# User's replacement set is pre-deploy. Until those exact approved assets are
+# selected, preserve authentic spawn data but keep old enemy art OFF.
+const APPROVED_DUNGEON_ENEMY_ART_READY := false
 const ENEMY_VISUAL = preload("res://scripts/ppa_dungeon_enemy_test_visual.gd")
 const PREVIEW_CAP := 24
 const PREVIEW_RADIUS := 675.0
@@ -230,6 +234,8 @@ func _preview_boss_id() -> String:
     return ["phoenix", "lord", "dragon"][_preview_mode]
 
 func _spawn_preview_enemy(index: int) -> void:
+    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+        return
     if _enemy_active.has(index):
         return
     var home: Vector2 = _enemy_spawns[index]
@@ -248,6 +254,10 @@ func _spawn_preview_enemy(index: int) -> void:
     }
 
 func _refresh_preview_enemies() -> void:
+    # Absolute safety gate: neither regular mobs nor bosses may render with
+    # the old 20-species roster while the new illustrated roster is pending.
+    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+        return
     if _enemy_layer == null or _enemy_spawns.is_empty():
         return
     # Culling: at most 24 animated mobs exist in the Android scene.
@@ -288,6 +298,8 @@ func _refresh_preview_enemies() -> void:
         _boss_world = _boss_home
 
 func _animate_preview_enemies(dt: float) -> void:
+    if not APPROVED_DUNGEON_ENEMY_ART_READY:
+        return
     for key in _enemy_active.keys():
         var state: Dictionary = _enemy_active[key]
         var node := state["node"] as Node2D
