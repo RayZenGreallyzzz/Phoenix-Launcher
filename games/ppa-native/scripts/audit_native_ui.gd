@@ -65,6 +65,34 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: inventory item counter must never wrap vertically")
         quit(1)
         return
+    var locked_slot: Button = bag_grid.get_child(75) as Button
+    if locked_slot == null or not locked_slot.disabled or not locked_slot.has_theme_stylebox_override("disabled"):
+        push_error("PPA_UI_SMOKE: locked inventory slots disappear under Godot's default disabled Button style")
+        quit(1)
+        return
+    if locked_slot.modulate.a < 0.25:
+        push_error("PPA_UI_SMOKE: locked inventory cells must have the source-style visible dim border")
+        quit(1)
+        return
+    if original_char._dots.size() != 5:
+        push_error("PPA_UI_SMOKE: exact five page indicator dots are required")
+        quit(1)
+        return
+    for dot in original_char._dots:
+        if dot.custom_minimum_size != Vector2(7.0, 7.0):
+            push_error("PPA_UI_SMOKE: page indicators must remain 7x7 circles, not stretched buttons")
+            quit(1)
+            return
+    var scrollbar: VScrollBar = original_char._scroll.get_v_scroll_bar()
+    if scrollbar == null or not scrollbar.has_theme_stylebox_override("grabber"):
+        push_error("PPA_UI_SMOKE: original thin amber inventory scrollbar missing")
+        quit(1)
+        return
+    if original_char._frame.find_child("OriginalPPABackgroundGradient", true, false) == null:
+        push_error("PPA_UI_SMOKE: original character CSS radial gradient background missing")
+        quit(1)
+        return
+    print("PPA_CHARACTER_VISUAL_STRUCTURE_OK: unlocked=50 locked=50 circular_dots=5 thin_scrollbar=1 gradient=1")
     menu.open_page("bag")
     menu.open_page("warehouse")
     menu.open_page("runes")
