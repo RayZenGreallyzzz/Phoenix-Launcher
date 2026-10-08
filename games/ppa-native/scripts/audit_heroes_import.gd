@@ -3,6 +3,7 @@ extends SceneTree
 const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const RIG_FIT = preload("res://scripts/dwarf_model_fit.gd")
+const ORIGINAL_SHOPS = preload("res://scripts/test_shop_catalog.gd")
 
 func _initialize() -> void:
     var checked := 0
@@ -47,6 +48,13 @@ func _initialize() -> void:
             push_error("[PPA-HERO-AUDIT] Invalid skeleton bounds " + path)
             quit(1)
             return
+        if str(hero.get("key", "")) == "paladin":
+            var sword = model.find_child("Dawnblade", true, false)
+            if sword == null:
+                push_error("[PPA-PALADIN] Imported character is missing Dawnblade")
+                quit(1)
+                return
+            print("PPA_PALADIN_SWORD_IMPORTED name=", sword.name, " attachment=", sword.get_parent().name)
         print("PPA_HERO_IMPORT_OK ", hero.get("key"), " meshes=", meshes.size(), " bones=", bones.size(), " clips=", clips)
         model.free()
         checked += 1
@@ -60,6 +68,18 @@ func _initialize() -> void:
             return
         print("PPA_NPC_IMPORT_OK ", npc.get("id"), " size=", sprite.get_size())
         nc += 1
+    if ORIGINAL_SHOPS.MERCHANT.size() != 12:
+        push_error("[PPA-MERCHANT] Canonical source must have twelve products")
+        quit(1)
+        return
+    for p in ORIGINAL_SHOPS.MERCHANT:
+        var icon_path := str(p.get("img", ""))
+        var icon := load(icon_path) as Texture2D
+        if icon == null or icon.get_width() < 8 or icon.get_height() < 8:
+            push_error("[PPA-MERCHANT] Missing original store icon " + str(p.get("id")))
+            quit(1)
+            return
+    print("PPA_CANONICAL_MERCHANT_ICONS_OK count=12")
     if checked != 8 or nc != 9:
         push_error("[PPA-TEST] Unexpected hero/NPC counts")
         quit(1)

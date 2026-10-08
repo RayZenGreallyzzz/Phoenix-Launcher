@@ -252,6 +252,8 @@ jobs:
           done
           godot --headless --path games/ppa-native --script res://scripts/audit_heroes_import.gd 2>&1 | tee /tmp/ppa-test-hero-audit.log
           grep -q "PPA_ALL_TEST_ASSETS_OK" /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_PALADIN_SWORD_IMPORTED" /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_CANONICAL_MERCHANT_ICONS_OK" /tmp/ppa-test-hero-audit.log
           godot --headless --path games/ppa-native --script res://scripts/audit_native_ui.gd 2>&1 | tee /tmp/ppa-native-ui-smoke.log
           grep -q "PPA_NATIVE_UI_SMOKE_OK" /tmp/ppa-native-ui-smoke.log
           if grep -Eq "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-native-ui-smoke.log; then
