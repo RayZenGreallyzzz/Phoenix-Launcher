@@ -271,8 +271,7 @@ func _check() -> void:
         " physical_level_branches=20 modes=3 tiers=1-20,21-40,41-60",
         " 22_png_reused=1 60_levels_visible=1 preview_cap=",scene.PREVIEW_CAP,
         " preview_bosses=0 old_art_removed=1 wall_spawn=0 server_damage=0 inventory_writes=0")
-    print("PPA_DUNGEON_2160_REUSE_OK modes=3 all_60_levels=1 tier_names=1\n" +
-        "    original_22_pngs=1 green_red_blue=1 3_archetypes=1 preview_cap=24 bosses_gated=1")
+    print("PPA_DUNGEON_2160_REUSE_OK modes=3 all_60_levels=1 original_22_pngs=1 green_red_blue=1 archetypes=3 preview_cap=24 bosses_gated=1")
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
     if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
