@@ -136,7 +136,9 @@ func _create_frame() -> void:
             line.anchor_bottom = 1.0
             line.offset_top = -8.0
             line.offset_bottom = -7.0
-        _frame.add_child(line)
+        # Lines belong to the plain ColorRect, NOT to PanelContainer:
+        # the latter would stretch any direct child to the entire panel.
+        fill.add_child(line)
     var content := VBoxContainer.new()
     content.add_theme_constant_override("separation", 0)
     padding.add_child(content)
