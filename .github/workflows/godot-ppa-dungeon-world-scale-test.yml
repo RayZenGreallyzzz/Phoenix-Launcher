@@ -2,7 +2,7 @@ name: Test Godot Dungeon New Rats Spiders Beetles Import Gate
 
 on:
   push:
-    branches: [ "feature/godot-dungeon-new-mob-assets-1-20" ]
+    branches: [ "feature/godot-dungeon-new-mob-assets-1-20", "fix/godot-qa-slime-not-bird-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
@@ -123,7 +123,12 @@ jobs:
           set -euo pipefail
           # Higher than normal beta to allow signed upgrade without uninstall.
           VERSION_CODE=$((410000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="2.0.${GITHUB_RUN_NUMBER}-new-mob-contract"
+          VERSION_NAME="2.0.${GITHUB_RUN_NUMBER}-live-mobs-qa"
+          # Install side-by-side, never replace installed PPA!
+          sed -i 's|^package/unique_name="com.phoenixgames.ppa"$|package/unique_name="com.phoenixgames.ppa.mobsqa"|' games/ppa-native/export_presets.cfg
+          sed -i 's|^package/name="Phoenix Pix Arena"$|package/name="PPA Dungeon Mobs QA"|' games/ppa-native/export_presets.cfg
+          grep -q '^package/unique_name="com.phoenixgames.ppa.mobsqa"$' games/ppa-native/export_presets.cfg
+          grep -q '^package/name="PPA Dungeon Mobs QA"$' games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/code=[0-9]+$|version/code=${VERSION_CODE}|" games/ppa-native/export_presets.cfg
           sed -i -E "s|^version/name=.*$|version/name=\"${VERSION_NAME}\"|" games/ppa-native/export_presets.cfg
           echo "PPA_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
@@ -172,23 +177,20 @@ jobs:
           test "$(find games/ppa-native/assets -maxdepth 1 -name 'original_dungeon_boss_*' | wc -l)" -eq 0
           echo "PPA_LEGACY_DUNGEON_ENEMY_ART_REMOVED_OK"
 
-      - name: Install verified new PPA dungeon sprite bundle when provided
+      - name: Extract verified CURRENT PPA monster animation sheets (not ancient atlas)
         shell: bash
         run: |
           set -euo pipefail
-          # The 20 newly recovered user-Library PNGs are intentionally
-          # source-controlled as a base64 ZIP text asset. GitHub connector
-          # supports text writes; this unpack restores the exact binary files.
-          base64 --decode games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip.b64 \
-            > games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip
-          echo "b003a53e9244840e31d2b7e2f6d7d2b88b2e1a42b7ef875dce739cd622824e6a  games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip" | sha256sum --check
-          python3 games/ppa-native/tools/install_new_mobs_from_zip.py | tee /tmp/ppa-new-mobs.log
-          if [ -f games/ppa-native/source_art/PPA_New_Dungeon_Mobs_1-20_TEST.zip ]; then
-            grep -q "PPA_NEW_DUNGEON_ART_IMPORTED_OK" /tmp/ppa-new-mobs.log
-            test "$(find games/ppa-native/assets/dungeon_new_mobs -type f -name '*.png' | wc -l)" -eq 20
-          else
-            grep -q "PPA_NEW_DUNGEON_ART_PENDING" /tmp/ppa-new-mobs.log
-          fi
+          # Fixed source digest: no silent art changes if live PPA is redeployed.
+          # This build is QA only, never publishes to Telegram PPA or launcher.
+          python3 games/ppa-native/tools/export_live_runtime_monsters.py \
+            --expect-source-sha256 "3323076a3adb46677e8bf56036a93f6935817efd2b019a8c01d52368ce75bfce" \
+            --output games/ppa-native/assets/dungeon_new_mobs | tee /tmp/ppa-live-art.log
+          grep -q 'PPA_LIVE_REAL_RENDER_ART_OK assets=22 levels=20' /tmp/ppa-live-art.log
+          test "$(find games/ppa-native/assets/dungeon_new_mobs -maxdepth 1 -name 'mob_*.png' | wc -l)" -eq 22
+          test -s games/ppa-native/assets/dungeon_new_mobs/manifest.json
+          test ! -e games/ppa-native/assets/dungeon_new_mobs/mob_04_carrion_bird.png
+          grep -q 'NO_GAME_WRITES=1 NO_POSTER_ASSETS=1' /tmp/ppa-live-art.log
 
       - name: Fetch approved live PPA dwarf and validate GLB
         shell: bash
@@ -374,13 +376,16 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
           test -x "$AAPT"
           "$AAPT" dump xmltree build/PhoenixPixArena-native-debug.apk AndroidManifest.xml | grep -q "org.godotengine.plugin.v2.PPAOriginalWebUI"
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "package: name='com.phoenixgames.ppa.mobsqa'"
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "PPA Dungeon Mobs QA"
+          echo "PPA_STANDALONE_TEST_PACKAGE_OK id=com.phoenixgames.ppa.mobsqa"
           echo "PPA_ORIGINAL_WEBVIEW_APK_OK source_html=1 v2_plugin=1 signed=1"
 
 
       - name: Upload signed TEST APK only; never replace launcher release
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-New-Dungeon-Mobs-Contract-TEST
+          name: PhoenixPixArena-Live-22-Mobs-SideBySide-QA-TEST
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30

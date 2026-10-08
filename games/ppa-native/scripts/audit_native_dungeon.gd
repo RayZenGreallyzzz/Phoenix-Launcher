@@ -121,35 +121,56 @@ func _check() -> void:
         return
     # Critical: old 20 PNGs from the deployed 2026 PPA are explicitly
     # disallowed; the approved replacement art remains unpublished.
-    if scene.ENEMY_VISUAL.NEW_MOBS.size() != 20:
-        _fail("new dungeon art contract must list 20 distinct PPA mobs")
+    if scene.ENEMY_VISUAL.NEW_MOBS.size() != 20 or scene.ENEMY_VISUAL.LEVEL_NAMES.size() != 20:
+        _fail("20 distinct approved mob names and level IDs required")
         return
-    if scene.ENEMY_VISUAL.NEW_MOBS[0] != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.NEW_MOBS[1] != "mob_02_cave_spider.png" or scene.ENEMY_VISUAL.NEW_MOBS[2] != "mob_03_charred_beetle.png":
-        _fail("new rat/spider/beetle sprite roster does not match approved 1–20 atlas")
+    if scene.ENEMY_VISUAL.required_file_count() != 22 or scene.ENEMY_VISUAL.SLIME_VARIANTS.size() != 3:
+        _fail("20 level species and 3 colors of level-4 slime require 22 PNGs")
         return
-    if scene.ENEMY_VISUAL.art_index_for_spawn(1, 0) != 0 or scene.ENEMY_VISUAL.art_index_for_spawn(2, 1) != 1:
-        _fail("1–3 original dungeon mobs must start with rat/spider")
-        return
-    if scene.ENEMY_VISUAL.art_index_for_spawn(4, 0) != 2 or scene.ENEMY_VISUAL.art_index_for_spawn(4, 1) != 3:
-        _fail("4–5 dungeon mobs must use beetle/scavenger tier")
-        return
-    if scene.ENEMY_VISUAL.art_index_for_spawn(6, 0) != 5 or scene.ENEMY_VISUAL.art_index_for_spawn(11, 0) != 10 or scene.ENEMY_VISUAL.art_index_for_spawn(16, 0) != 15:
-        _fail("6–20 creature types must follow four published Phoenix Ashes brackets")
+    var approved_names := [
+        "Пепельная крыса", "Пещерный паук", "Обугленный жук",
+        "Слайм-падальщик", "Костяной грызун", "Гоблин-разведчик",
+        "Костяной воин", "Пепельный волк", "Грибная тварь",
+        "Гоблин-шаман", "Культист", "Проклятый рыцарь",
+        "Каменный голем", "Лавовый элементаль", "Пепельный страж",
+        "Адская гончая", "Огненный демон", "Пустотный наблюдатель",
+        "Элитный голем", "Пепельный палач"
+    ]
+    for level in range(1, 21):
+        if scene.ENEMY_VISUAL.LEVEL_NAMES[level - 1] != approved_names[level - 1]:
+            _fail("Mob level/name mapping has drifted: " + str(level))
+            return
+        for sample_id in range(4):
+            if scene.ENEMY_VISUAL.art_index_for_spawn(level, sample_id) != level - 1:
+                _fail("Cross-species mixed into room level " + str(level))
+                return
+            if level != 4 and scene.ENEMY_VISUAL.sprite_filename_for_spawn(level, sample_id) != scene.ENEMY_VISUAL.NEW_MOBS[level - 1]:
+                _fail("Wrong monster asset for level " + str(level))
+                return
+    var approved_slimes := [
+        "mob_04_slime_green.png", "mob_04_slime_red.png", "mob_04_slime_blue.png"
+    ]
+    for i in range(6):
+        if scene.ENEMY_VISUAL.sprite_filename_for_spawn(4, i) != approved_slimes[i % 3]:
+            _fail("Fourth level must mix only green/red/blue slime variants")
+            return
+    if scene.ENEMY_VISUAL.sprite_filename_for_spawn(1, 0) != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.sprite_filename_for_spawn(3, 0) != "mob_03_charred_beetle.png":
+        _fail("Approved rat/spider/beetle order changed")
         return
     if scene.ENEMY_VISUAL.art_index_for_spawn(21, 0) != -1:
         _fail("missing 21–60 new art must not silently reuse 1–20 art")
         return
     var new_count: int = scene.ENEMY_VISUAL.available_count()
-    if new_count != 0 and new_count != 20:
+    if new_count != 0 and new_count != 22:
         _fail("partial PNG import is unsafe for dungeon: " + str(new_count))
         return
-    if scene.APPROVED_DUNGEON_ENEMY_ART_READY != (new_count == 20):
+    if scene.APPROVED_DUNGEON_ENEMY_ART_READY != scene.ENEMY_VISUAL.artwork_complete():
         _fail("new sprite gate disagrees with actual imported files")
         return
     if scene.APPROVED_DUNGEON_BOSS_ART_READY:
         _fail("unverified old dungeon boss art unexpectedly enabled")
         return
-    print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK names=20 first=rat,spider,beetle png_loaded=0 legacy=0")
+    print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK levels=20 png_required=22 slimes=green,red,blue old_bird=0")
     if ResourceLoader.exists("res://scripts/ppa_dungeon_art_generated.gd"):
         _fail("legacy original_dungeon_art_generated.gd was shipped in APK")
         return

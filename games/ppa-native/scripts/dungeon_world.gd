@@ -76,7 +76,7 @@ func _ready() -> void:
         return
     world_pos_px = _entrance
     _load_original_enemy_spawns()
-    # Enabled only when ALL 20 newly recovered files are actually packed
+    # Enabled only when all 22 verified sprites (20 levels + 2 extra slime colors) are packed
     # into Godot; a missing image yields an intentionally empty dungeon.
     APPROVED_DUNGEON_ENEMY_ART_READY = ENEMY_VISUAL.artwork_complete()
     print("PPA_NEW_DUNGEON_ART_GATE sprites=", ENEMY_VISUAL.available_count(),
@@ -337,6 +337,9 @@ func _animate_preview_enemies(dt: float) -> void:
             proposed = pos
         state["pos"] = proposed
         node.position = proposed
+        # Reuse the authentic live 4x4 directional run sheet, with no per-frame
+        # texture decoding. The existing 24-visible-mob cap stays unchanged.
+        node.call("set_motion", proposed - pos, proposed.distance_squared_to(pos) > 0.01)
         node.call("set_aggro", aggro)
         node.call("set_attack", aggro and distance < 80.0)
         _enemy_active[key] = state
