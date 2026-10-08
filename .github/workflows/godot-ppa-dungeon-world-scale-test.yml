@@ -1,19 +1,19 @@
-name: Build Godot PPA 21-40 and 41-60 test APK (direct download)
+name: Verify Godot read-only server snapshot bridge (unreleased)
 
 on:
   push:
-    branches: [ "test/godot-dungeon-tiers-21-60-20261009" ]
+    branches: [ "feature/godot-server-readonly-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-direct-godot-personal-test
+  group: ppa-native-game-state-readonly-test
   cancel-in-progress: true
 
 jobs:
@@ -352,6 +352,12 @@ jobs:
           grep -q "PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
 
+      - name: Verify native protected save snapshot adapter (no server calls)
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_server_readonly.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-readonly.log
+          grep -q 'PPA_NATIVE_AUTH_READONLY_SMOKE_OK' /tmp/ppa-server-readonly.log
       - name: Build native PPA APK
         shell: bash
         run: |
@@ -415,39 +421,8 @@ jobs:
       - name: Upload signed test APK as backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Godot-21-60-Test-APK-ZIP
+          name: PhoenixPixArena-Server-State-ReadOnly-NOT-RELEASED
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct personal test APK under separate tag, NOT launcher update
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG='ppa-godot-direct-test'
-          APP='PhoenixPixArena-Godot-test.apk'
-          cp build/PhoenixPixArena-native-debug.apk "build/$APP"
-          sha256sum "build/$APP" > build/godot-test.sha256
-          SIZE="$(stat -c %s "build/$APP")"
-          DIGEST="$(sha256sum "build/$APP" | cut -d" " -f1)"
-          test "$SIZE" -gt 100000000
-          echo "Build ${PPA_VERSION_NAME} | code ${PPA_VERSION_CODE} | SHA256 $DIGEST | bytes $SIZE" > build/direct-test-notes.txt
-          echo "Separate visual QA with all three monster tiers (1-20, 21-40, 41-60). Installs over PPA, still no server sync." >> build/direct-test-notes.txt
-          echo "NOT an update for Phoenix Launcher, and NOT on ppa-native-stable." >> build/direct-test-notes.txt
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PPA Godot Direct Test" --notes-file build/direct-test-notes.txt --latest=false
-          fi
-          gh release upload "$TAG" "build/$APP" build/godot-test.sha256 --repo "$GITHUB_REPOSITORY" --clobber
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file build/direct-test-notes.txt --title "PPA Godot ${PPA_VERSION_NAME}" --latest=false
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > build/test-published.json
-          python3 - <<'PY'
-          import json,hashlib,os
-          from pathlib import Path
-          j=json.loads(Path('build/test-published.json').read_text())
-          p=Path('build/PhoenixPixArena-Godot-test.apk')
-          assert j['tag_name']=='ppa-godot-direct-test'
-          assert any(a['name']==p.name and a['size']==p.stat().st_size and a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest() for a in j['assets'])
-          print('PPA_DIRECT_INSTALL_TEST_RELEASE_OK package=com.phoenixgames.ppa bytes='+str(p.stat().st_size))
-          PY
