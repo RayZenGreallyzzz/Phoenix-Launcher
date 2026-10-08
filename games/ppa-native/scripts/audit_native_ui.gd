@@ -403,7 +403,7 @@ func _run() -> void:
         push_error("PPA_CLAN_STORAGE: last page (481–500) absent or page index exceeded")
         quit(1)
         return
-    var clan_next: Button = npc_ui.find_child("NpcStorageNext_clan", true, false)
+    var clan_next := npc_ui.find_child("NpcStorageNext_clan", true, false) as Button
     if clan_next == null or not clan_next.disabled:
         push_error("PPA_CLAN_STORAGE: next must be disabled on final page")
         quit(1)
@@ -439,7 +439,7 @@ func _run() -> void:
     var local_items: Array = []
     for i in range(251):
         local_items.append({"id":"ci_slot_" + str(i), "name":"Preview %s" % i})
-    if menu.stash._filter(local_items, menu.stash.MAX_BAG).size() != 100 or menu.stash._filter(local_items, menu.stash.MAX_WAREHOUSE).size() != 200:
+    if menu.stash._filter(local_items, STORAGE.INVENTORY).size() != 100 or menu.stash._filter(local_items, STORAGE.PERSONAL).size() != 200:
         push_error("PPA_TEST_STASH_CAPACITY: local 64-slot truncation remains")
         quit(1)
         return
