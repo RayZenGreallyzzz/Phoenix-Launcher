@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.library' version '8.10.1'
+}
+android {
+    namespace 'com.phoenixgames.ppa.webui'
+    compileSdk 35
+    defaultConfig { minSdk 24 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies {
+    // Godot Android library is already provided by the export template.
+    compileOnly 'org.godotengine:godot:4.6.stable'
+}
