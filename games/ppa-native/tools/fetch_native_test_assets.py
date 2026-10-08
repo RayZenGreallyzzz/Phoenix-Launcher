@@ -27,6 +27,12 @@ GLB_MODELS = {
 # Only translation is corrected because the GLBs already carry the approved
 # rotations and mesh scale. Parent links to hands must remain unmodified.
 WEAPON_POSES = {
+    # Production Three.js sets Dawnblade to [.31,.16,-.25] on RightHand.
+    # Source GLB incorrectly exported Y=6.01708698; fix the actual source node
+    # rather than adding a duplicate mesh or an overlay-time transform.
+    "paladin": {
+        "Dawnblade": ([0.31, 0.16, -0.25], "mixamorig:RightHand")
+    },
     "barbarian": {
         "Embercleaver_Right": ([0.22, 0.30, 0.06], "mixamorig:RightHand"),
         "Embercleaver_Left": ([-0.28, 0.30, 0.06], "mixamorig:LeftHand")
@@ -115,6 +121,16 @@ def patch_gltf(class_key: str, source: bytes) -> bytes:
             raise ValueError(f"No local weapon translation: {class_key}/{node_name}")
         if abs(old[0] - pos[0]) > .002 or abs(old[2] - pos[2]) > .002:
             raise ValueError(f"Unexpected XY/Z weapon coordinates: {class_key}/{node_name} {old}")
+        if class_key == "paladin" and node_name == "Dawnblade":
+            if abs(old[1] - 6.017086982727051) > 0.001:
+                raise ValueError("Unknown paladin sword source transform: refusing to patch")
+            expected_quat = (0.270598, 0.270598, 0.653282, 0.653281)
+            rotation = nodes[idx].get("rotation", [])
+            scale = nodes[idx].get("scale", [])
+            if len(rotation) != 4 or max(abs(x - y) for x, y in zip(rotation, expected_quat)) > 0.00005:
+                raise ValueError("Paladin sword rotation changed")
+            if len(scale) != 3 or max(abs(x - .60) for x in scale) > .002:
+                raise ValueError("Paladin sword scale changed")
         nodes[idx]["translation"] = pos[:]
         print("PPA_WEAPON_POSE_FIXED", class_key, node_name, old, "->", pos, flush=True)
 
