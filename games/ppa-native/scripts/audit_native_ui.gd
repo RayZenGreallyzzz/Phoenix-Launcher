@@ -37,17 +37,38 @@ func _run() -> void:
             return
         checked += 1
 
-    menu.open_npc(NPCS.NPCS[5])
-    var before_gold := int(menu.stash.coins)
-    var before_size: int = (menu.stash.bag as Array).size()
-    var product: Dictionary = CATALOG.MERCHANT[0]
-    menu._buy_demo_item(product)
-    if int(menu.stash.coins) != before_gold - int(product.get("price", 0)):
-        push_error("PPA_UI_SMOKE: shop purchase did not spend local demo currency")
+    # Canonical original PPA merchant has 12 products. These must NEVER
+    # spend fabricated coins or mutate local storage via a pretend shop.
+    if CATALOG.MERCHANT.size() != 12:
+        push_error("PPA_UI_SMOKE: not the original 12 PPA merchant products")
         quit(1)
         return
-    if (menu.stash.bag as Array).size() < before_size:
-        push_error("PPA_UI_SMOKE: demo shop item was lost")
+    if str(CATALOG.MERCHANT[0].get("id", "")) != "hp_small" or int(CATALOG.MERCHANT[0].get("price", 0)) != 100:
+        push_error("PPA_UI_SMOKE: real merchant prices changed")
+        quit(1)
+        return
+    var before_gold := int(menu.stash.coins)
+    var before_size: int = (menu.stash.bag as Array).size()
+    var native_panel_id := menu._panel.get_instance_id()
+    menu.open_npc(NPCS.NPCS[5])
+    menu._set_merchant_tab("boosters")
+    menu._select_merchant_item("magic_small")
+    menu._adjust_merchant_quantity(2)
+    if menu._shop_qty != 3:
+        push_error("PPA_UI_SMOKE: original merchant quantity selector broken")
+        quit(1)
+        return
+    menu.open_npc(NPCS.NPCS[6])
+    menu._set_market_category("materials")
+    menu.open_npc(NPCS.NPCS[0])
+    menu._set_smith_tab("legendary")
+    menu._set_smith_tab("accessories")
+    if menu._panel.get_instance_id() != native_panel_id:
+        push_error("PPA_UI_SMOKE: an NPC created a duplicate store panel")
+        quit(1)
+        return
+    if int(menu.stash.coins) != before_gold or (menu.stash.bag as Array).size() != before_size:
+        push_error("PPA_UI_SMOKE: NPC display unexpectedly changed test inventory or money")
         quit(1)
         return
 
@@ -57,6 +78,6 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: cannot close character menu")
         quit(1)
         return
-    print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 shop_purchases=1")
+    print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
     menu.queue_free()
     quit(0)
