@@ -124,14 +124,14 @@ func _check() -> void:
     if scene.ENEMY_VISUAL.NEW_MOBS.size() != 20:
         _fail("new dungeon art contract must list 20 distinct PPA mobs")
         return
-    if scene.ENEMY_VISUAL.NEW_MOBS[0] != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.NEW_MOBS[1] != "mob_02_cave_spider.png" or scene.ENEMY_VISUAL.NEW_MOBS[2] != "mob_03_charred_beetle.png":
-        _fail("new rat/spider/beetle sprite roster does not match approved 1–20 atlas")
+    if scene.ENEMY_VISUAL.NEW_MOBS[0] != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.NEW_MOBS[1] != "mob_02_cave_spider.png" or scene.ENEMY_VISUAL.NEW_MOBS[2] != "mob_03_charred_beetle.png" or scene.ENEMY_VISUAL.NEW_MOBS[3] != "mob_04_scavenger_slime.png":
+        _fail("new rat/spider/beetle/slime roster is outdated or uses the obsolete bird")
         return
     if scene.ENEMY_VISUAL.art_index_for_spawn(1, 0) != 0 or scene.ENEMY_VISUAL.art_index_for_spawn(2, 1) != 1:
         _fail("1–3 original dungeon mobs must start with rat/spider")
         return
     if scene.ENEMY_VISUAL.art_index_for_spawn(4, 0) != 2 or scene.ENEMY_VISUAL.art_index_for_spawn(4, 1) != 3:
-        _fail("4–5 dungeon mobs must use beetle/scavenger tier")
+        _fail("4–5 dungeon mobs must use beetle/approved-slime/bone-rodent tier")
         return
     if scene.ENEMY_VISUAL.art_index_for_spawn(6, 0) != 5 or scene.ENEMY_VISUAL.art_index_for_spawn(11, 0) != 10 or scene.ENEMY_VISUAL.art_index_for_spawn(16, 0) != 15:
         _fail("6–20 creature types must follow four published Phoenix Ashes brackets")
@@ -149,7 +149,7 @@ func _check() -> void:
     if scene.APPROVED_DUNGEON_BOSS_ART_READY:
         _fail("unverified old dungeon boss art unexpectedly enabled")
         return
-    print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK names=20 first=rat,spider,beetle png_loaded=0 legacy=0")
+    print("PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK names=20 first=rat,spider,beetle,slime legacy=0")
     if ResourceLoader.exists("res://scripts/ppa_dungeon_art_generated.gd"):
         _fail("legacy original_dungeon_art_generated.gd was shipped in APK")
         return
