@@ -20,6 +20,7 @@ const ORIGINAL_PPA_SCALE := (1852.0 * 5.1435) / ORIGINAL_PPA_ART_W
 
 var _render_to_world_scale := 1.0
 var _walk_overlay: TextureRect
+var _alignment_button: Button
 
 var _floor_texture: Texture2D
 var _mask_image: Image
@@ -100,7 +101,8 @@ func _build_city_2d() -> void:
     _walk_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     _walk_overlay.stretch_mode = TextureRect.STRETCH_SCALE
     _walk_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    _walk_overlay.modulate = Color(0.25, 0.95, 0.38, 0.32)
+    # Strong preview tint; transparent mask cells remain transparent.
+    _walk_overlay.modulate = Color(0.10, 1.0, 0.25, 0.72)
     _walk_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _walk_overlay.visible = false
     city_world.add_child(_walk_overlay)
@@ -177,6 +179,15 @@ func _resolve_city_collision(target: Vector2) -> Vector2:
         return slide_y
     return world_pos_px
 
+# NativeWorld listens in _input(), which is dispatched BEFORE GUI buttons.
+# Without this exclusion the smart joystick claims all left-screen touches
+# and marks them handled, so the mask diagnostic never receives 'pressed'.
+func _joy_point_allowed(point: Vector2) -> bool:
+    if _alignment_button != null and _alignment_button.is_visible_in_tree():
+        if _alignment_button.get_global_rect().has_point(point):
+            return false
+    return super._joy_point_allowed(point)
+
 func _try_world_tap(screen_position: Vector2) -> bool:
     if test_menu == null or test_menu.is_open() or camera_3d == null or player_3d == null:
         return false
@@ -226,9 +237,11 @@ func _add_dungeon_hud() -> void:
     alignment.anchor_left = 0.0
     alignment.anchor_right = 0.0
     alignment.offset_left = 16.0
-    alignment.offset_right = 190.0
-    alignment.offset_top = 130.0
-    alignment.offset_bottom = 166.0
+    alignment.offset_right = 222.0
+    alignment.offset_top = 132.0
+    alignment.offset_bottom = 184.0
+    alignment.mouse_filter = Control.MOUSE_FILTER_STOP
+    alignment.focus_mode = Control.FOCUS_ALL
     alignment.z_index = 70
     alignment.add_theme_font_size_override("font_size", 11)
     alignment.pressed.connect(func() -> void:
@@ -236,8 +249,10 @@ func _add_dungeon_hud() -> void:
             return
         _walk_overlay.visible = not _walk_overlay.visible
         alignment.text = "СКРЫТЬ МАСКУ" if _walk_overlay.visible else "ПОКАЗАТЬ МАСКУ"
+        print("PPA_DUNGEON_MASK_TOGGLE_OK visible=", _walk_overlay.visible)
     )
     add_child(alignment)
+    _alignment_button = alignment
 
 func _back_to_city() -> void:
     if is_inside_tree():
