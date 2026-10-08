@@ -10,6 +10,7 @@ signal authoritative_state_requested(service: String)
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
+const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 const GOLD := Color("#F6C66F")
 const TEXT := Color("#E5E4DE")
@@ -25,6 +26,13 @@ var selected_id := ""
 var quantity := 1
 var _auction_category := "all"
 var _quest_tier := "21-30"
+var preview_stash: RefCounted
+var _auction_item_key := ""
+var _asking_price := 1
+var _asking_quantity := 1
+var _asking_currency := "PPA"
+var _forge_filter := "equipment"
+var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
@@ -221,6 +229,10 @@ func _outside(event: InputEvent) -> void:
 func is_open() -> bool:
     return visible
 
+func set_preview_stash(storage: RefCounted) -> void:
+    # This private local stash is not Telegram or the game server.
+    preview_stash = storage
+
 func open_npc(source: Dictionary) -> void:
     var requested := str(source.get("service", ""))
     if not SERVICES.has(requested):
@@ -233,6 +245,12 @@ func open_npc(source: Dictionary) -> void:
     quantity = 1
     _auction_category = "all"
     _quest_tier = "21-30"
+    _auction_item_key = ""
+    _asking_price = 1
+    _asking_quantity = 1
+    _asking_currency = "PPA"
+    _forge_filter = "equipment"
+    _forge_keys = {"equipment":"", "stone":"", "rune":""}
     authoritative.clear()
     has_verified_state = false
     visible = true
@@ -559,37 +577,120 @@ func _show_blackmarket() -> void:
     _message("ТОВАР ИЗ-ПОД ПРИЛАВКА", "500 PPA · скрытое содержимое, 1 раз за обновление. Покупка отключена до серверной синхронизации.")
     _locked_action("КУПИТЬ / СКУПКА")
 
+
+func _inventory_items() -> Array:
+    if has_verified_state:
+        var from_server = authoritative.get("inventory", [])
+        return from_server if from_server is Array else []
+    if preview_stash != null:
+        return preview_stash.bag
+    return []
+
+func _worn_items() -> Dictionary:
+    if has_verified_state:
+        var equipped = authoritative.get("equipment", {})
+        return equipped if equipped is Dictionary else {}
+    if preview_stash != null:
+        return preview_stash.equipment
+    return {}
+
+func _chosen_item(key: String) -> Dictionary:
+    if key.begins_with("bag:"):
+        var position := int(key.trim_prefix("bag:"))
+        var inventory := _inventory_items()
+        for n in range(inventory.size()):
+            var entry = inventory[n]
+            if entry is Dictionary and int(entry.get("slot", n)) == position:
+                return entry
+    elif key.begins_with("equip:"):
+        return _worn_items().get(key.trim_prefix("equip:"), {})
+    return {}
+
+func _add_picker(mode: String, selected_key: String, destination: Callable) -> void:
+    var title := _label("ВЫБОР ИЗ ИНВЕНТАРЯ · 100 ЯЧЕЕК", 13, GOLD)
+    _body.add_child(title)
+    var picker = ITEM_PICKER.new()
+    picker.name = "NpcPicker_" + mode
+    _body.add_child(picker)
+    picker.item_chosen.connect(destination)
+    picker.configure(_inventory_items(), _worn_items(), mode, selected_key)
+    if not has_verified_state:
+        _body.add_child(_label("ЛОКАЛЬНЫЙ ТЕСТ · реальные предметы появятся после входа на сервер PPA.", 11, SUB))
+
+func _details(key: String) -> void:
+    var item := _chosen_item(key)
+    if item.is_empty():
+        _message("ПРЕДМЕТ НЕ ВЫБРАН", "Коснись вещи в инвентаре выше. Пустая ячейка недоступна.")
+        return
+    _section("ВЫБРАНО · " + str(item.get("name", "Предмет")))
+    _mini_row("Редкость", str(item.get("rarity", "—")))
+    _mini_row("Количество", str(item.get("qty", 1)))
+    if item.has("upgrade"):
+        _mini_row("Заточка", "+" + str(item["upgrade"]))
+    if item.has("attack"):
+        _mini_row("Атака", str(item["attack"]))
+    if item.has("defense"):
+        _mini_row("Защита", str(item["defense"]))
+    _mini_row("Источник", "Экипировка" if key.begins_with("equip:") else "Инвентарь")
+
+func _choose_auction(key: String) -> void:
+    _auction_item_key = key
+    _asking_quantity = 1
+    _render()
+
+func _choose_forge(key: String) -> void:
+    _forge_keys[_forge_filter] = key
+    _render()
+
+func _set_forge_filter(mode: String) -> void:
+    _forge_filter = mode
+    _render()
+
+func _set_asking_price(value: float) -> void:
+    _asking_price = maxi(1, int(value))
+
+func _set_asking_qty(value: float) -> void:
+    _asking_quantity = maxi(1, int(value))
+
+func _set_currency(index: int) -> void:
+    _asking_currency = "PPA" if index == 0 else "Gram"
+
 func _show_forge() -> void:
-    _section("КУЗНЕЦ · " + tab.to_upper(), "Экипировка и ресурсы поступят из серверного инвентаря PPA")
+    _section("КУЗНЕЦ · " + tab.to_upper(), "Точные вещи и компоненты будут получены из серверного инвентаря PPA.")
     if tab == "enhance":
-        _message("ЗАТОЧКА", "Выбирай вещь, камень и руну из подтверждённого инвентаря. Шанс и итог — только сервер.")
-        var row := HBoxContainer.new()
-        row.add_theme_constant_override("separation", 6)
-        _body.add_child(row)
-        for slot_name in ["ВЕЩЬ", "КАМЕНЬ", "РУНА"]:
-            var cell := PanelContainer.new()
-            cell.custom_minimum_size = Vector2(74.0 if _frame.size.x < 520 else 125.0, 89.0)
-            cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            cell.add_theme_stylebox_override("panel", _style(Color("#151A20"), EDGE))
-            row.add_child(cell)
-            cell.add_child(_label(slot_name + "\n◇", 13, GOLD))
-        _locked_action("ЗАТОЧИТЬ")
+        _section("ЗАТОЧКА · ВЫБОР ЭКИПИРОВКИ", "Вещь, заточка и руна выбираются отдельно. Надетые предметы тоже доступны.")
+        var chosen := HBoxContainer.new()
+        chosen.name = "NpcForgeSelectedSlots"
+        chosen.add_theme_constant_override("separation", 6)
+        _body.add_child(chosen)
+        for role in ["equipment", "stone", "rune"]:
+            var panel := PanelContainer.new()
+            panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            panel.add_theme_stylebox_override("panel", _style(Color("#141A20"), GOLD if role == _forge_filter else EDGE, 6))
+            chosen.add_child(panel)
+            var name_label := {"equipment":"ВЕЩЬ", "stone":"ЗАТОЧКА", "rune":"РУНА"}
+            var thing := _chosen_item(str(_forge_keys.get(role, "")))
+            panel.add_child(_label(str(name_label[role]) + "\n" +
+                (str(thing.get("name", "◇ пусто")).substr(0, 23)), 11, GOLD if not thing.is_empty() else SUB))
+        _choice_tiles([
+            {"key":"equipment","label":"ВЕЩИ"},
+            {"key":"stone","label":"ЗАТОЧКИ"},
+            {"key":"rune","label":"РУНЫ"}], _forge_filter, _set_forge_filter)
+        _add_picker(_forge_filter, str(_forge_keys.get(_forge_filter, "")), _choose_forge)
+        _details(str(_forge_keys.get(_forge_filter, "")))
+        _mini_row("Шанс успеха / ресурсы", "рассчитывает сервер")
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
     elif tab == "rune_fusion":
-        _message("СЛИЯНИЕ РУН", "Источник рун — отдельная сумка рун персонажа, не общий инвентарь экипировки.")
+        _message("СЛИЯНИЕ РУН", "Используется отдельная сумка рун. После подключения появится выбор двух рун.")
         _slot_grid(_body, 10, "runebag")
-        _mini_row("Выбранные руны", "0 / 2")
         _locked_action("СЛИТЬ РУНЫ")
     else:
         var names := {"equipment":"СНАРЯЖЕНИЕ", "legendary":"ЛЕГЕНДАРНОЕ",
             "accessories":"АКСЕССУАРЫ", "pets":"ПЕТЫ"}
-        _message(str(names.get(tab, "КРАФТ")), "Категории и рецепты как в Telegram PPA. Редкость, стоимость и компоненты появятся из проверенного каталога сервера.")
+        _message(str(names.get(tab, "КРАФТ")), "Рецепты и материалы придут из утверждённого каталога PPA.")
         _slot_grid(_body, 10, "forge")
-        _mini_row("Рецепт", "Ожидаем выбор предмета")
-        _mini_row("Ресурсы · Gold · Gram · PPA", "—")
         _locked_action("СОЗДАТЬ")
-    _body.add_child(_label("Ни заточка, ни слияние, ни крафт не изменяют реальный аккаунт в этом тесте.", 11, SUB))
-
-
+    _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
@@ -658,7 +759,7 @@ func _show_storage() -> void:
 
 func _show_auction() -> void:
     var captions := {"all":"КУПИТЬ", "mine":"МОИ ЛОТЫ", "sell":"ПРОДАТЬ"}
-    _section("АУКЦИОН · " + str(captions.get(tab, "")), "Предметы, цены и комиссия авторитетны только на сервере PPA")
+    _section("АУКЦИОН · " + str(captions.get(tab, "")), "Выбор вещи и параметры лота независимы от операций на сервере PPA.")
     if tab != "mine":
         _choice_tiles([
             {"key":"all","label":"ВСЕ"}, {"key":"weapon","label":"ОРУЖИЕ"},
@@ -667,16 +768,52 @@ func _show_auction() -> void:
             {"key":"books","label":"КНИГИ"}, {"key":"quest","label":"КВЕСТОВЫЕ"},
             {"key":"misc","label":"РАЗНОЕ"}], _auction_category, _auction_filter)
     if tab == "all":
-        _message("ТОРГОВЫЕ ПРЕДЛОЖЕНИЯ", "Поиск и категории открыты, реальные лоты появятся при подключении аукциона.")
+        _message("ТОРГОВЫЕ ПРЕДЛОЖЕНИЯ", "Реальные объявления появятся после подключения серверного аукциона.")
         _locked_action("КУПИТЬ")
     elif tab == "sell":
-        _message("ВЫБЕРИ ВЕЩЬ ИЗ ИНВЕНТАРЯ", "После авторизации доступны цена, количество, валюта PPA/Gram, срок и комиссия.")
-        _slot_grid(_body, 16, "auction_sell")
-        _mini_row("Свободные лоты", "— / —")
-        _mini_row("Комиссия", "Проверяет сервер")
+        _section("ЧТО ПРОДАЁМ", "Только вещи из инвентаря, подходящие по правилам PPA. Нажми на слот.")
+        _add_picker("sell", _auction_item_key, _choose_auction)
+        _details(_auction_item_key)
+        _section("УСЛОВИЯ ПРОДАЖИ", "Цена, количество и валюта выбираются до отправки лота.")
+        var selected := _chosen_item(_auction_item_key)
+        var settings := GridContainer.new()
+        settings.name = "NpcAuctionListingInputs"
+        settings.columns = 2
+        settings.add_theme_constant_override("h_separation", 10)
+        settings.add_theme_constant_override("v_separation", 8)
+        _body.add_child(settings)
+        settings.add_child(_label("Цена за единицу", 12, GOLD))
+        var price := SpinBox.new()
+        price.name = "NpcAuctionPrice"
+        price.min_value = 1
+        price.max_value = 999999999
+        price.step = 1
+        price.value = _asking_price
+        price.custom_minimum_size = Vector2(130, 38)
+        price.value_changed.connect(_set_asking_price)
+        settings.add_child(price)
+        settings.add_child(_label("Количество", 12, GOLD))
+        var amount := SpinBox.new()
+        amount.name = "NpcAuctionQuantity"
+        amount.min_value = 1
+        amount.max_value = maxi(1, int(selected.get("qty", 1)))
+        amount.value = mini(_asking_quantity, int(amount.max_value))
+        amount.custom_minimum_size = Vector2(130, 38)
+        amount.value_changed.connect(_set_asking_qty)
+        settings.add_child(amount)
+        settings.add_child(_label("Валюта", 12, GOLD))
+        var currency := OptionButton.new()
+        currency.name = "NpcAuctionCurrency"
+        currency.custom_minimum_size = Vector2(130, 38)
+        currency.add_item("PPA")
+        currency.add_item("Gram")
+        currency.select(0 if _asking_currency == "PPA" else 1)
+        currency.item_selected.connect(_set_currency)
+        settings.add_child(currency)
+        _mini_row("Комиссия / число свободных лотов", "рассчитает сервер")
         _locked_action("ВЫСТАВИТЬ ЛОТ")
     else:
-        _message("МОИ ЛОТЫ", "Только реальные объявления, зарегистрированные на сервере.")
+        _message("МОИ ЛОТЫ", "Только подтверждённые объявления из серверного аукциона.")
         _locked_action("СНЯТЬ С ПРОДАЖИ")
 
 func _show_clan() -> void:

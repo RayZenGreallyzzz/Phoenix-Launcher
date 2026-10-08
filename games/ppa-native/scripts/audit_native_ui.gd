@@ -490,6 +490,106 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: real merchant prices changed")
         quit(1)
         return
+    # Isolated fixture is fed only to the read-only UI, not written to
+    # user:// or a production server. Regression: full 100-slot selector
+    # and real selection workflow, not 16 decorative empty boxes.
+    var test_inventory := [
+        {"id":"test_blade","slot":3,"name":"Тестовый меч","short":"⚔","kind":"weapon","qty":1,"rarity":"rare","upgrade":2},
+        {"id":"test_stone","slot":18,"name":"Тестовая заточка","short":"◆","kind":"sharpening","qty":8},
+        {"id":"test_rune","slot":32,"name":"Тестовая руна","short":"ᚱ","kind":"rune","qty":3}
+    ]
+    menu.open_npc(NPCS.NPCS[2])
+    menu._npc_screen._select_tab("sell")
+    menu._npc_screen.apply_authoritative_snapshot({"service":"auction","data":{"inventory":test_inventory}})
+    var sell_grid = menu._npc_screen.find_child("NpcItemChoiceGrid", true, false)
+    if sell_grid == null or sell_grid.get_child_count() != 100:
+        push_error("PPA_AUCTION_PICKER: complete 100-slot bag missing")
+        quit(1)
+        return
+    var empty_slot = sell_grid.find_child("PickSlot_bag_0", false, false)
+    var sellable_slot = sell_grid.find_child("PickSlot_bag_3", false, false)
+    if empty_slot == null or sellable_slot == null or not empty_slot.disabled or sellable_slot.disabled:
+        push_error("PPA_AUCTION_PICKER: empty slot or selectable item broken")
+        quit(1)
+        return
+    menu._npc_screen._choose_auction("bag:3")
+    if menu._npc_screen._auction_item_key != "bag:3":
+        push_error("PPA_AUCTION_PICKER: selected slot not stored")
+        quit(1)
+        return
+    if menu._npc_screen._chosen_item("bag:3").get("name", "") != "Тестовый меч":
+        push_error("PPA_AUCTION_PICKER: chosen item details are wrong")
+        quit(1)
+        return
+    var price = menu._npc_screen.find_child("NpcAuctionPrice", true, false)
+    var qty = menu._npc_screen.find_child("NpcAuctionQuantity", true, false)
+    var currency = menu._npc_screen.find_child("NpcAuctionCurrency", true, false)
+    if price == null or qty == null or currency == null:
+        push_error("PPA_AUCTION_LISTING: price, quantity or currency controls missing")
+        quit(1)
+        return
+    price.value = 125
+    menu._npc_screen._set_asking_qty(1)
+    currency.select(1)
+    menu._npc_screen._set_currency(1)
+    if menu._npc_screen._asking_price != 125 or menu._npc_screen._asking_currency != "Gram":
+        push_error("PPA_AUCTION_LISTING: listing form edits not retained")
+        quit(1)
+        return
+    var auction_locked = menu._npc_screen.find_children("ServerActionLocked", "Button", true, false)
+    if auction_locked.is_empty() or not auction_locked[0].disabled:
+        push_error("PPA_AUCTION_LISTING: unverified listing action enabled")
+        quit(1)
+        return
+
+    menu.open_npc(NPCS.NPCS[0])
+    menu._npc_screen.apply_authoritative_snapshot({
+        "service":"forge", "data":{
+            "inventory":test_inventory,
+            "equipment":{"weapon":{"id":"test_worn","name":"Надетый молот","kind":"weapon","short":"⚒","upgrade":1}}
+        }})
+    var forge_grid = menu._npc_screen.find_child("NpcItemChoiceGrid", true, false)
+    if forge_grid == null or forge_grid.get_child_count() != 100:
+        push_error("PPA_FORGE_PICKER: full inventory grid missing")
+        quit(1)
+        return
+    var equipped = menu._npc_screen.find_child("NpcEquippedItemChoices", true, false)
+    if equipped == null or equipped.get_child_count() != 1:
+        push_error("PPA_FORGE_PICKER: worn gear cannot be chosen")
+        quit(1)
+        return
+    menu._npc_screen._choose_forge("equip:weapon")
+    if str(menu._npc_screen._forge_keys.get("equipment","")) != "equip:weapon":
+        push_error("PPA_FORGE_PICKER: equipped item was not selected")
+        quit(1)
+        return
+    menu._npc_screen._set_forge_filter("stone")
+    forge_grid = menu._npc_screen.find_child("NpcItemChoiceGrid", true, false)
+    var forge_stone = forge_grid.find_child("PickSlot_bag_18", false, false) if forge_grid != null else null
+    if forge_stone == null or forge_stone.disabled:
+        push_error("PPA_FORGE_PICKER: sharpening stones unavailable")
+        quit(1)
+        return
+    menu._npc_screen._choose_forge("bag:18")
+    menu._npc_screen._set_forge_filter("rune")
+    forge_grid = menu._npc_screen.find_child("NpcItemChoiceGrid", true, false)
+    var forge_rune = forge_grid.find_child("PickSlot_bag_32", false, false) if forge_grid != null else null
+    if forge_rune == null or forge_rune.disabled:
+        push_error("PPA_FORGE_PICKER: runes unavailable")
+        quit(1)
+        return
+    menu._npc_screen._choose_forge("bag:32")
+    if str(menu._npc_screen._forge_keys.get("equipment", "")) != "equip:weapon" or str(menu._npc_screen._forge_keys.get("stone", "")) != "bag:18" or str(menu._npc_screen._forge_keys.get("rune", "")) != "bag:32":
+        push_error("PPA_FORGE_PICKER: selected equipment/stone/rune did not persist")
+        quit(1)
+        return
+    var forge_locked = menu._npc_screen.find_children("ServerActionLocked", "Button", true, false)
+    if forge_locked.is_empty() or not forge_locked[0].disabled:
+        push_error("PPA_FORGE_PICKER: unauthorized enhance action enabled")
+        quit(1)
+        return
+    print("PPA_NPC_ITEM_PICKERS_OK auction_slots=100 forge_slots=100 worn_gear=1 stone=1 rune=1 transactions=0")
+
     var before_items := JSON.stringify({
         "bag": menu.stash.bag,
         "warehouse": menu.stash.warehouse,
