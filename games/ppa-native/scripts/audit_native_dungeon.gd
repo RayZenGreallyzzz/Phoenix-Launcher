@@ -127,6 +127,18 @@ func _check() -> void:
     if scene.ENEMY_VISUAL.NEW_MOBS[0] != "mob_01_ash_rat.png" or scene.ENEMY_VISUAL.NEW_MOBS[1] != "mob_02_cave_spider.png" or scene.ENEMY_VISUAL.NEW_MOBS[2] != "mob_03_charred_beetle.png":
         _fail("new rat/spider/beetle sprite roster does not match approved 1–20 atlas")
         return
+    if scene.ENEMY_VISUAL.art_index_for_spawn(1, 0) != 0 or scene.ENEMY_VISUAL.art_index_for_spawn(2, 1) != 1:
+        _fail("1–3 original dungeon mobs must start with rat/spider")
+        return
+    if scene.ENEMY_VISUAL.art_index_for_spawn(4, 0) != 2 or scene.ENEMY_VISUAL.art_index_for_spawn(4, 1) != 3:
+        _fail("4–5 dungeon mobs must use beetle/scavenger tier")
+        return
+    if scene.ENEMY_VISUAL.art_index_for_spawn(6, 0) != 5 or scene.ENEMY_VISUAL.art_index_for_spawn(11, 0) != 10 or scene.ENEMY_VISUAL.art_index_for_spawn(16, 0) != 15:
+        _fail("6–20 creature types must follow four published Phoenix Ashes brackets")
+        return
+    if scene.ENEMY_VISUAL.art_index_for_spawn(21, 0) != -1:
+        _fail("missing 21–60 new art must not silently reuse 1–20 art")
+        return
     if scene.ENEMY_VISUAL.available_count() != 0:
         _fail("art unexpectedly present while this import-preparation build lacks the PNGs")
         return
