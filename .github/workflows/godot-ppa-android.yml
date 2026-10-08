@@ -11,6 +11,11 @@ on:
 permissions:
   contents: write
 
+# One publisher at a time: do not let a slow old build replace a new APK.
+concurrency:
+  group: ppa-native-release
+  cancel-in-progress: false
+
 jobs:
   build-ppa-native:
     runs-on: ubuntu-latest
@@ -240,6 +245,15 @@ jobs:
           print('Release metadata',manifest)
           PY
           TAG="ppa-native-stable"
+          # A previous run must never downgrade the public launcher channel.
+          EXISTING_BODY="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' 2>/dev/null || true)"
+          if [ -n "$EXISTING_BODY" ]; then
+            CURRENT_CODE="$(printf '%s' "$EXISTING_BODY" | python3 -c 'import json,sys; print(int(json.load(sys.stdin).get("versionCode",0)))' 2>/dev/null || echo 0)"
+            if [ "$CURRENT_CODE" -ge "$PPA_VERSION_CODE" ]; then
+              echo "A newer or equal native PPA is already published ($CURRENT_CODE >= $PPA_VERSION_CODE). Skipping outdated release."
+              exit 0
+            fi
+          fi
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
