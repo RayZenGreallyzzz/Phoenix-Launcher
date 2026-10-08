@@ -722,7 +722,7 @@ func _run() -> void:
     menu.dungeon_visual_test_requested.connect(func(): dungeon_routes.append("walk"))
     menu.open_npc(NPCS.NPCS[7])
     var keeper_walk := menu._npc_screen.find_child("NpcDungeonWalkTest", true, false) as Button
-    var keeper_locks := menu._npc_screen.find_children("ServerActionLocked", "Button", true, false)
+    var keeper_locks: Array[Node] = menu._npc_screen.find_children("ServerActionLocked", "Button", true, false)
     if keeper_walk == null or keeper_walk.disabled or keeper_locks.is_empty():
         push_error("PPA_DUNGEON_KEEPER: missing offline preview or disabled live entry")
         quit(1)
