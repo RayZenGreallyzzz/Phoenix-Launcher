@@ -463,6 +463,20 @@ func _build_test_menu() -> void:
     add_child(test_menu)
     test_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     test_menu.change_class_requested.connect(_back_to_character_select)
+    test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
+
+func _open_dungeon_map_test() -> void:
+    # Native visual test only. Never writes scene, loot or entry permissions
+    # to the shared PPA server. Production entry remains locked in the hub.
+    if test_menu != null:
+        test_menu.close_menu()
+    if _joy_touch_id != -1 or _joy_mouse_active:
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+    var error := get_tree().change_scene_to_file("res://dungeon_test.tscn")
+    if error != OK:
+        push_error("PPA_DUNGEON_MAP_TEST_ENTRY_FAILED: " + error_string(error))
 
 # Native tap dispatch. GUI panels/buttons are handled by Godot first and
 # this method is never invoked while a menu is open. Clicking the character
