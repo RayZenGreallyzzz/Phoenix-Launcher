@@ -1,0 +1,47 @@
+name: Audit current PPA gnome model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/audit-live-ppa-dwarf.yml"
+
+jobs:
+  audit-gnome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download published canonical Dwarf GLB and inspect clips
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          curl --fail --location --retry 4 --retry-delay 2 \
+            --max-time 100 --silent --show-error \
+            --output artifact/Dwarf.glb \
+            "https://ppa-phoenixpixarena.1988stella1988.workers.dev/game/Dwarf.glb?v=20261002u2"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,struct,hashlib
+          p=Path("artifact/Dwarf.glb")
+          b=p.read_bytes()
+          assert b[:4]==b'glTF',f"not a GLB: {b[:32]!r}"
+          assert len(b)>200_000, f"too small {len(b)}"
+          magic,version,length=struct.unpack_from('<4sII',b)
+          assert version==2 and length==len(b),f"invalid GLB header {version} {length} {len(b)}"
+          jlen,jtype=struct.unpack_from('<II',b,12)
+          assert jtype==0x4e4f534a
+          gltf=json.loads(b[20:20+jlen])
+          print("FILE_SIZE",len(b),"SHA256",hashlib.sha256(b).hexdigest())
+          print("GLTF_SCENES",len(gltf.get("scenes",[])),"NODES",len(gltf.get("nodes",[])),"MESHES",len(gltf.get("meshes",[])),"SKINS",len(gltf.get("skins",[])))
+          print("CLIPS",len(gltf.get("animations",[])))
+          for a in gltf.get('animations',[]):print("CLIP",a.get("name"),"CHANNELS",len(a.get("channels",[])))
+          for i,n in enumerate(gltf.get('nodes',[])[:20]):print("NODE",i,n.get('name'),n.get('scale'),n.get('rotation'))
+          if not gltf.get('meshes'): raise SystemExit('no mesh')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-PPA-Dwarf-GLB
+          path: artifact/Dwarf.glb
+          if-no-files-found: error
+          retention-days: 5
