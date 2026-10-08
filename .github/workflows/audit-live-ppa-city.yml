@@ -70,8 +70,10 @@ jobs:
           else:
               raise SystemExit('unexpected image format')
           PY
+      - name: Include public deployed HTML for exact scene and collision port
+        run: cp /tmp/live_ppa_0.html artifact/live_ppa_index.html
       - uses: actions/upload-artifact@v4
         with:
           name: PPA-live-Peace-City-image
-          path: artifact/live_peace_city.*
+          path: artifact/*
           if-no-files-found: error
