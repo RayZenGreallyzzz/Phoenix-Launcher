@@ -4,6 +4,7 @@ on:
     branches: [ "test/godot-native-combat-hud-20261009" ]
     paths:
       - "games/ppa-native/tools/audit_live_combat_contract.py"
+      - "games/ppa-native/tools/fetch_live_dungeon_combat_contract.py"
       - ".github/workflows/audit-live-ppa-combat-20261009.yml"
   workflow_dispatch:
 permissions:
@@ -15,4 +16,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -euo pipefail
-          python3 games/ppa-native/tools/audit_live_combat_contract.py
+          python3 games/ppa-native/tools/audit_live_combat_contract.py > /tmp/ppa-combat-source.txt
+          python3 games/ppa-native/tools/fetch_live_dungeon_combat_contract.py | tee /tmp/ppa-contract.log
+          grep -q "PPA_DUNGEON_COMBAT_CONTRACT_OK" /tmp/ppa-contract.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PPA-authentic-static-combat-contract-TEST
+          path: games/ppa-native/scripts/ppa_dungeon_combat_catalog_generated.gd
+          retention-days: 3
