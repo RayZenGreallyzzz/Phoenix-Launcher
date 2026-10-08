@@ -111,11 +111,56 @@ def run(html: bytes, output: Path, allow_downloads: bool) -> dict:
     conflicts = [{"level": lv, "in_game_table": game_names.get(lv),
                   "video_name": VIDEO_LEVELS[lv - 1]}
                  for lv in range(1, 21) if game_names.get(lv) != VIDEO_LEVELS[lv - 1]]
+    # Capture dynamic art actually assigned AFTER the basic 20-slot array.
+    # This matters for level 4 (three slimes), level 2 (spider animation),
+    # and any per-mob animation sheet loaded by applyApprovedMobAnimation().
+    extra_images = {}
+    dynamic_sources = {}
+    for js_name in ("SLIME_SCAVENGER_SPRITES",):
+        try:
+            raw = js_array(source, js_name)
+        except ValueError:
+            dynamic_sources[js_name] = {"present": False}
+            continue
+        srcs = [v for _, v in re.findall(r"(['\"])(.*?)\1\s*,?", raw, re.S)]
+        dynamic_sources[js_name] = {"present": True, "sources": srcs}
+        for idx, asset in enumerate(srcs):
+            if allow_downloads:
+                full = urljoin(HOST + "/", asset)
+                if urlparse(full).netloc != same_origin:
+                    raise ValueError("Cross-origin runtime override sprite: " + full)
+                data = fetch(full, 15_000_000)
+                fmt, w, h = image_properties(data)
+                filename = f"{js_name.lower()}_{idx+1:02d}.{fmt}"
+                (output / filename).write_bytes(data)
+                extra_images[filename] = {"bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(), "width": w, "height": h,
+                    "src": asset}
+    code_fragments = {}
+    for marker in (
+        "function applyScavengerSlimeVariant(",
+        "function applyCaveSpiderVariant(",
+        "function applyApprovedMobAnimation(",
+        "CAVE_SPIDER_ATLAS",
+        "function mkMob(",
+        "const MOB_ANIM",
+        "const APPROVED_MOB",
+        "const SLIME_SCAVENGER_SPRITES",
+    ):
+        idx = source.find(marker)
+        if idx != -1:
+            code_fragments[marker] = source[max(0,idx-200):idx+5500]
+    (output / "runtime-sprite-code.txt").write_text(
+        "\n\n".join("====== "+k+" ======\n"+v for k,v in code_fragments.items()),
+        encoding="utf-8")
     report = {
         "warning": "Audit/export only. Static sprite table may be overridden by runtime code. Do not blindly install into Godot.",
         "source": HOST, "html_sha256": source_sha, "runtime_indexed_sprite_reference": runtime_uses_sheet,
         "video_names": VIDEO_LEVELS, "table_name_conflicts": conflicts,
         "static_images": entries,
+        "dynamic_sprite_sources": dynamic_sources,
+        "dynamic_exported_images": extra_images,
+        "runtime_code_markers": list(code_fragments),
         "dynamic_sprite_code": {
             "sprite_assignments": find_mentions(source, ".sprite="),
             "dungeon_mob_images_usages": find_mentions(source, "DUNGEON_MOB_IMAGES"),
@@ -132,6 +177,8 @@ def run(html: bytes, output: Path, allow_downloads: bool) -> dict:
         print(f"LEVEL {r['level']:02d} {r['video_name']}: {r.get('file', 'not_downloaded')} "
               f"sha={r.get('sha256', 'none')[:16]}")
     print("DYNAMIC_CODE_MENTIONS: " + json.dumps({k: len(v) for k, v in report["dynamic_sprite_code"].items()}))
+    print("EXTRA_DYNAMIC_IMAGES=" + str(len(extra_images)))
+    print("RUNTIME_MARKERS=" + ', '.join(code_fragments))
     print("PPA_ART_MAPPING_REQUIRES_RUNTIME_REVIEW=1")
     return report
 
