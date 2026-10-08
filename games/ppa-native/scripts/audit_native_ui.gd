@@ -406,8 +406,9 @@ func _run() -> void:
         quit(1)
         return
     var clan_range_start: Vector2i = clan_grid.range_at(0.0, 296.0)
-    var clan_range_end: Vector2i = clan_grid.range_at(999999.0, 296.0)
-    if clan_range_start.x != 0 or clan_range_start.y >= 500 or clan_range_end.y != 500:
+    var clan_last_offset: float = maxf(0.0, clan_grid.custom_minimum_size.y - clan_scroll.size.y)
+    var clan_range_end: Vector2i = clan_grid.range_at(clan_last_offset, clan_scroll.size.y)
+    if clan_range_start.x != 0 or clan_range_start.y >= 500 or clan_range_end.x >= 500 or clan_range_end.y != 500:
         push_error("PPA_CLAN_STORAGE: first/last slots unavailable in scroll range")
         quit(1)
         return
