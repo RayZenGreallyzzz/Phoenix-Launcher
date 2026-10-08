@@ -248,19 +248,9 @@ func _build_3d_overlay() -> void:
         push_warning("[PPA-NATIVE] Missing class GLB: " + path)
         _build_fallback_player()
 
-    var shadow_mesh := CylinderMesh.new()
-    shadow_mesh.top_radius = 0.43
-    shadow_mesh.bottom_radius = 0.43
-    shadow_mesh.height = 0.01
-    var shadow := MeshInstance3D.new()
-    shadow.mesh = shadow_mesh
-    shadow.position = Vector3(0.0, 0.012, 0.0)
-    var shadow_mat := StandardMaterial3D.new()
-    shadow_mat.albedo_color = Color(0.0, 0.0, 0.0, 0.30)
-    shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    shadow.material_override = shadow_mat
-    player_3d.add_child(shadow)
+    # NO fake ground shadows. The black cylinder used to float beneath the
+    # hero in the tilted 2.5D camera; original floor texture is unchanged.
+    # Both lights already have shadow_enabled=false.
 
     viewport_3d_rect = TextureRect.new()
     viewport_3d_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

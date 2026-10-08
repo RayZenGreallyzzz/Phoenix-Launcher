@@ -43,7 +43,10 @@ func _initialize() -> void:
         quit(1)
         return
     var fitted_body_height := rest.size.y * dwarf_root.scale.y
-    var foot_ground_y := rest.position.y * dwarf_root.scale.y + dwarf_root.position.y
+    # Compare the SAME anatomical foot contact used by the fitter.
+    # Old all-bone min can be a cannon/helper bone below the boots.
+    var foot_rest_y := DWARF_FIT.rest_foot_floor(dwarf_root, rest)
+    var foot_ground_y := foot_rest_y * dwarf_root.scale.y + dwarf_root.position.y
     if absf(fitted_body_height - 1.90) > 0.03 or absf(foot_ground_y) > 0.03:
         push_error("PPA DWARF TEST: invalid fitted height or foot position " +
             str(fitted_body_height) + " ground " + str(foot_ground_y))
