@@ -136,9 +136,23 @@ func _check() -> void:
     if scene._enemy_spawns.size() != scene._enemy_branch.size():
         _fail("original dungeon spawn coordinates and branch indices drifted")
         return
-    if enemies.get_child_count() != 0 or not scene._enemy_active.is_empty() or scene._boss_visual != null:
-        _fail("legacy mob/boss visuals appeared before new approved asset import")
+    # Public source repository NEVER contains unpublished user art; its
+    # headless build verifies fail-closed behavior. A separate private QA
+    # build may inject the atlas before import, enabling only test previews.
+    var qa_art := scene._new_candidate_preview_available()
+    if qa_art:
+        var qa_tex := load("res://assets/new_dungeon_candidate_qa.webp") as Texture2D
+        if qa_tex == null or qa_tex.get_width() != 7 * qa_tex.get_height():
+            _fail("candidate-only private atlas must contain seven square frames")
+            return
+        if enemies.get_child_count() > scene.PREVIEW_CAP + 1:
+            _fail("private candidate preview exceeds tablet enemy budget")
+            return
+    elif enemies.get_child_count() != 0 or not scene._enemy_active.is_empty() or scene._boss_visual != null:
+        _fail("preview objects appeared without the private approved candidate atlas")
         return
+    print("PPA_DUNGEON_NEW_CANDIDATE_QA_TEST_OK private_pack=", int(qa_art),
+        " old_published_png=0 original_spawns=", scene._enemy_spawns.size())
     if not scene._can_walk(scene._boss_home):
         _fail("published boss chamber is outside the genuine shifted mask")
         return
@@ -178,8 +192,9 @@ func _check() -> void:
         _fail("test mode cannot return to original 1–20 branch")
         return
     print("PPA_DUNGEON_ENEMIES_TEST_OK authentic_spawn_points=",scene._enemy_spawns.size(),
-        " physical_level_branches=20 modes=3 preview_mobs=0 preview_bosses=0",
-        " old_art_removed=1 wall_spawn=0 server_damage=0 inventory_writes=0")
+        " physical_level_branches=20 modes=3 preview_mobs=",scene._enemy_active.size(),
+        " old_art_removed=1 private_candidates=",int(qa_art),
+        " wall_spawn=0 server_damage=0 inventory_writes=0")
     var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
     if footprint == null or footprint.visible or scene.WALL_RADIUS != 2.0:
         _fail("initial collision radius or visibility is incorrect")
