@@ -489,17 +489,6 @@ func _try_world_tap(screen_position: Vector2) -> bool:
         if screen_position.y < 204.0 or screen_position.y > size.y - 175.0:
             return false
 
-    if camera_3d != null and player_3d != null:
-        var hero_center: Vector2 = camera_3d.unproject_position(
-            player_3d.to_global(Vector3(0.0, 0.95, 0.0))
-        )
-        if hero_center.distance_to(screen_position) <= 62.0:
-            _joy_touch_id = -1
-            _joy_mouse_active = false
-            _joy_end()
-            test_menu.open_page("character")
-            return true
-
     if city_world == null:
         return false
     var npc_hit: Dictionary = {}
@@ -522,6 +511,20 @@ func _try_world_tap(screen_position: Vector2) -> bool:
         _joy_end()
         test_menu.open_npc(npc_hit)
         return true
+
+    # Priority: a visible NPC tap MUST win over the nearby hero hitbox.
+    # Otherwise the old order wrongly opened the character window while
+    # interacting with an NPC standing close to the player.
+    if camera_3d != null and player_3d != null:
+        var hero_center: Vector2 = camera_3d.unproject_position(
+            player_3d.to_global(Vector3(0.0, 0.95, 0.0))
+        )
+        if hero_center.distance_to(screen_position) <= 62.0:
+            _joy_touch_id = -1
+            _joy_mouse_active = false
+            _joy_end()
+            test_menu.open_page("character")
+            return true
     return false
 
 func _probe_nearest_npc() -> void:
