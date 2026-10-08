@@ -105,11 +105,11 @@ def main() -> None:
     # by one pixel due to texture rounding.
     generated = DEST.parent / "scripts/ppa_dungeon_spawn_generated.gd"
     generated.write_text(
-        "extends RefCounted\\n"
-        + "const UV := Vector2(%.9f, %.9f)\\n" % (
+        "extends RefCounted\n"
+        + "const UV := Vector2(%.9f, %.9f)\n" % (
             (spawn[0] + 0.5) / float(width), (spawn[1] + 0.5) / float(height))
-        + "const MASK_DIMS := Vector2i(%d, %d)\\n" % (width, height)
-        + "const WALK_SHA256 := \\"%s\\"\\n" % hashlib.sha256(bits).hexdigest(),
+        + "const MASK_DIMS := Vector2i(%d, %d)\n" % (width, height)
+        + 'const WALK_SHA256 := "%s"\n' % hashlib.sha256(bits).hexdigest(),
         encoding="utf-8"
     )
     (DEST / "dungeon_walk_mask.png").write_bytes(mask)
