@@ -289,7 +289,7 @@ func _events() -> void:
         _section("КЛАНОВЫЕ СОБЫТИЯ", "В Telegram-центре событий пока нет отдельных событий этой категории.")
 
 func _locations() -> void:
-    _section("МИР PPA", "Карты и переходы — отдельные игровые сцены с серверной проверкой входа. Город уже существует; остальные карты ещё не перенесены в Native.")
+    _section("МИР PPA", "Тестовая карта подземелья уже доступна без сервера. Полный игровой вход с монстрами и наградами подключим позднее.")
     for item in [
         {"title":"МИРНЫЙ ГОРОД", "detail":"Текущая игровая сцена Godot. Отдельный вход не требуется."},
         {"title":"ПОДЗЕМЕЛЬЯ 1–60", "detail":"Оригинальная новая каменная карта и маска проходов теперь доступны для проверки в Godot. Мобы, боссы и награды пока не подключены."},
@@ -301,8 +301,12 @@ func _locations() -> void:
         {"title":"КРИСТАЛЬНЫЙ ТИТАН", "detail":"Мировой босс со своим серверным откатом."}
     ]:
         _section(str(item["title"]), str(item["detail"]))
-    var inspect := _button("ПРОЙТИ ПО КАРТЕ ДАНЖА · ТЕСТ (БЕЗ НАГРАД)", true)
-    inspect.name = "GlobalDungeonMapPreview"
-    inspect.pressed.connect(func(): dungeon_visual_test_requested.emit())
-    _body.add_child(inspect)
-    _locked("ПЕРЕЙТИ В ИГРОВУЮ ЛОКАЦИЮ")
+        if str(item["title"]) == "ПОДЗЕМЕЛЬЯ 1–60":
+            # Place the enabled preview DIRECTLY under dungeon entry, not at
+            # the end of the entire locations index beneath disabled actions.
+            var inspect := _button("ПРОЙТИ ПО КАРТЕ ДАНЖА · ТЕСТ БЕЗ СЕРВЕРА", true)
+            inspect.name = "GlobalDungeonMapPreview"
+            inspect.custom_minimum_size.y = 46.0
+            inspect.pressed.connect(func(): dungeon_visual_test_requested.emit())
+            _body.add_child(inspect)
+    _locked("РЕАЛЬНЫЙ ВХОД В ЛОКАЦИИ · НУЖЕН СЕРВЕР")

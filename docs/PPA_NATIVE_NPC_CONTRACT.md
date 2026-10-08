@@ -92,3 +92,9 @@ From **РАЗДЕЛЫ → ЛОКАЦИИ → ПРОЙТИ ПО КАРТЕ ДАН
 5. Repeat source-backed approach for Fart-zone and event arenas; no generic copy-pasted placeholder maps.
 
 CI tests the original deployed art and its exact public runtime walk grid, the 4096 world geometry, a safe spawn, nine-probe collision bounds and a functioning exit button. It does not claim production dungeon gameplay has been ported.
+
+## 2026-10-08 — Local dungeon entry and portrait menu clipping fixed
+
+- The native map walk test is intentionally **offline-only**. Both `ХРАНИТЕЛЬ ПОДЗЕМЕЛЬЯ → ПРОЙТИ ПО КАРТЕ · ТЕСТ БЕЗ СЕРВЕРА` and `РАЗДЕЛЫ → ЛОКАЦИИ → ПОДЗЕМЕЛЬЯ → ПРОЙТИ ПО КАРТЕ ДАНЖА · ТЕСТ БЕЗ СЕРВЕРА` emit the same `dungeon_visual_test_requested` signal through `test_world_menu` and native `change_scene_to_file("res://dungeon_test.tscn")`. This changes only the local Godot scene and never sends a server ticket or generates gameplay rewards. The server-authorized **real dungeon entry** remains disabled and clearly distinguished in the UI.
+- Portrait NPC windows previously capped their height at **690px** even at 1280px device height, with the three-row clan category bar only 123px tall. The portrait frame now uses up to 97.5% of available height, capped at 1460px, and the three-row bar gets 169px; landscape behavior is preserved. All NPC tab touch targets have at least 43px height.
+- CI regression verifies the 720×1280 portrait viewport produces a tall frame, final clan button fits inside the tab bar, both offline dungeon entry buttons emit the route, and server-locked actions stay disabled. Physical Android touch/rotation still require the tablet test.

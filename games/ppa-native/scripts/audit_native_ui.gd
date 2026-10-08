@@ -380,6 +380,20 @@ func _run() -> void:
         push_error("PPA_CLAN_TABS: sideways hidden tabs remain in portrait")
         quit(1)
         return
+    if frame_height < 1100.0 or npc_ui._tab_scroller.custom_minimum_size.y < 160.0:
+        push_error("PPA_NPC_PORTRAIT_HEIGHT: NPC frame/tabs still too short: " +
+            str(Vector2(frame_height, npc_ui._tab_scroller.custom_minimum_size.y)))
+        quit(1)
+        return
+    await process_frame
+    var bottom_tab := npc_ui._tabs.find_child("NpcTab_journal", false, false) as Button
+    if bottom_tab == null or bottom_tab.get_global_rect().end.y > npc_ui._tab_scroller.get_global_rect().end.y + 2.0:
+        push_error("PPA_NPC_PORTRAIT_HEIGHT: lower clan tab row is clipped")
+        quit(1)
+        return
+    print("PPA_NPC_PORTRAIT_TABS_OK height=", frame_height,
+        " tabstrip=", npc_ui._tab_scroller.size.y, " rows=3")
+
     if npc_ui._tabs.find_child("NpcTab_exchange", false, false) == null:
         push_error("PPA_CLAN_EXCHANGE: exchange tab is missing")
         quit(1)
@@ -701,7 +715,35 @@ func _run() -> void:
         push_error("PPA_GLOBAL_ISOLATION: NPC opened while global hub remained visible")
         quit(1)
         return
+    # Both entry points must be functional OFFLINE walk tests, while real
+    # dungeon travel remains server-locked. Emit signals rather than changing
+    # the actual scene in this independent menu smoke test.
+    var dungeon_routes: Array[String] = []
+    menu.dungeon_visual_test_requested.connect(func(): dungeon_routes.append("walk"))
+    menu.open_npc(NPCS.NPCS[7])
+    var keeper_walk := menu._npc_screen.find_child("NpcDungeonWalkTest", true, false) as Button
+    var keeper_locks: Array[Node] = menu._npc_screen.find_children("ServerActionLocked", "Button", true, false)
+    if keeper_walk == null or keeper_walk.disabled or keeper_locks.is_empty():
+        push_error("PPA_DUNGEON_KEEPER: missing offline preview or disabled live entry")
+        quit(1)
+        return
+    keeper_walk.pressed.emit()
+    if dungeon_routes.size() != 1:
+        push_error("PPA_DUNGEON_KEEPER: NPC preview doesn't route to Godot dungeon")
+        quit(1)
+        return
     menu.open_global_section("locations")
+    var global_walk := hub.find_child("GlobalDungeonMapPreview", true, false) as Button
+    if global_walk == null or global_walk.disabled:
+        push_error("PPA_DUNGEON_HUB: visible enabled map preview missing")
+        quit(1)
+        return
+    global_walk.pressed.emit()
+    if dungeon_routes.size() != 2:
+        push_error("PPA_DUNGEON_HUB: global preview doesn't route to Godot dungeon")
+        quit(1)
+        return
+    print("PPA_DUNGEON_OFFLINE_ENTRY_OK keeper=1 locations=1 live_entry_locked=1")
     menu.close_menu()
     if hub.is_open() or menu.is_open():
         push_error("PPA_GLOBAL_ISOLATION: close left global hub visible")

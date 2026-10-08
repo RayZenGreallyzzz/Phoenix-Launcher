@@ -83,6 +83,9 @@ func _ready() -> void:
     _npc_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _npc_screen.close_requested.connect(close_menu)
     _npc_screen.authoritative_state_requested.connect(func(service: String): npc_snapshot_requested.emit(service))
+    # Offline map preview uses the same scene route from the Keeper and Hub.
+    # Never asks for a server entry ticket or records any rewards.
+    _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     _global_hub = GLOBAL_HUB.new()
     _global_hub.z_index = 110
     add_child(_global_hub)
