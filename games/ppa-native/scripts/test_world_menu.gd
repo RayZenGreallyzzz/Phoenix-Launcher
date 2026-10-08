@@ -48,18 +48,20 @@ func _ready() -> void:
         stash = SHARED_STASH.new(account)
     _build_buttons()
     _build_window()
-    _character_screen = CANONICAL_CHARACTER.new()
-    _character_screen.configure(account, class_key, stash)
-    add_child(_character_screen)
-    # The existing single modal dimmer is z=90; this replaces, never overlays,
-    # the old z=95 native character panel while keeping exactly one window up.
-    _character_screen.z_index = 95
-    _character_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    _character_screen.close_requested.connect(close_menu)
-    _character_screen.select_item_requested.connect(_open_item)
-    _character_screen.unequip_requested.connect(_on_character_unequip)
+    # Only the desktop editor can instantiate the old preview character UI.
+    # Android must not allocate TWO complete character menus or duplicate
+    # listeners/containers underneath the original WebView.
+    if OS.get_name() != "Android":
+        _character_screen = CANONICAL_CHARACTER.new()
+        _character_screen.configure(account, class_key, stash)
+        add_child(_character_screen)
+        _character_screen.z_index = 95
+        _character_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        _character_screen.close_requested.connect(close_menu)
+        _character_screen.select_item_requested.connect(_open_item)
+        _character_screen.unequip_requested.connect(_on_character_unequip)
+        _character_screen.visible = false
     _panel.visible = false
-    _character_screen.visible = false
     _background.visible = false
     # Godot remains the 3D world. One Android WebView replaces its hand-built
     # character UI, using the untouched current Telegram charFrame srcdoc.
@@ -270,7 +272,8 @@ func open_page(page: String) -> void:
     current_page = page
     if ["character", "bag", "runes", "skills"].has(page):
         _panel.visible = false
-        _character_screen.visible = false
+        if _character_screen != null:
+            _character_screen.visible = false
         var source_page := 4 if page == "runes" else (2 if page == "skills" else 0)
         if _native_web_ui != null:
             # Only the Android WebView is visible. It renders the exact original
@@ -294,7 +297,8 @@ func open_page(page: String) -> void:
     if _native_web_ui != null and _web_open:
         _native_web_ui.hideUi()
         _web_open = false
-    _character_screen.visible = false
+    if _character_screen != null:
+        _character_screen.visible = false
     _background.visible = true
     _panel.visible = true
     _notice.text = _page_notice_default
