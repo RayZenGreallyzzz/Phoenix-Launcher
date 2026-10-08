@@ -687,6 +687,10 @@ func _draw_source_skill_card(skill: Dictionary, passive: bool) -> void:
     var rank := clampi(int(skill.get("rank", 0)), 0, 5) if has_skill else 0
     var card := PanelContainer.new()
     card.name = "OriginalPPARealSkillCard" if has_skill else "OriginalPPASkillPlaceholder"
+    # Godot may auto-rename repeated siblings (@PanelContainer@N). CI and
+    # runtime must identify source skill slots by metadata, not node names.
+    card.set_meta("ppa_skill_slot", true)
+    card.set_meta("ppa_skill_verified", has_skill)
     card.custom_minimum_size.y = 90.0
     card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     var bg := _style_box(Color("#17191B"), Color("#685235"), 7, 1)
