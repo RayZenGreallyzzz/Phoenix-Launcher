@@ -286,13 +286,57 @@ func _run() -> void:
     menu.open_page("runes")
     menu.open_page("skills")
     var checked := 0
+    var npc_screen_id := 0
     for npc in NPCS.NPCS:
+        # Exact regression of reported bug: NPC tap WHILE the hero screen
+        # is open must show only the requested service, never the hero.
+        menu.open_page("character")
+        if menu._character_screen == null or not menu._character_screen.is_open():
+            push_error("PPA_NPC_ISOLATION: failed to open hero before NPC")
+            quit(1)
+            return
         menu.open_npc(npc)
-        if not menu.is_open():
-            push_error("PPA_UI_SMOKE: NPC service failed: " + str(npc.get("id", "")))
+        if not menu.is_open() or menu._npc_screen == null or not menu._npc_screen.is_open():
+            push_error("PPA_NPC_ISOLATION: failed to open NPC " + str(npc.get("id", "")))
+            quit(1)
+            return
+        var screen = menu._npc_screen
+        if menu._panel.visible or menu._background.visible or menu._character_screen.visible or menu._web_open:
+            push_error("PPA_NPC_ISOLATION: hero or old window stayed active behind " + str(npc.get("id", "")))
+            quit(1)
+            return
+        if screen.service != str(npc.get("service", "")) or screen._heading.text != str(npc.get("name", "")):
+            push_error("PPA_NPC_ISOLATION: wrong NPC header/service")
+            quit(1)
+            return
+        if screen._tabs.get_child_count() == 0 or screen._body.get_child_count() == 0:
+            push_error("PPA_NPC_ISOLATION: NPC controls/content missing")
+            quit(1)
+            return
+        if npc_screen_id == 0:
+            npc_screen_id = screen.get_instance_id()
+        elif npc_screen_id != screen.get_instance_id():
+            push_error("PPA_NPC_ISOLATION: duplicate NPC windows created")
+            quit(1)
+            return
+        var locked_actions = screen.find_children("ServerActionLocked", "Button", true, false)
+        if locked_actions.is_empty():
+            push_error("PPA_NPC_AUTHORITY: server-side actions missing lock for " + screen.service)
+            quit(1)
+            return
+        for action in locked_actions:
+            if not action.disabled:
+                push_error("PPA_NPC_AUTHORITY: unsafe enabled action at " + screen.service)
+                quit(1)
+                return
+        var specifications: Array = screen._tab_specs()
+        screen._select_tab(str(specifications[specifications.size()-1].get("key", "")))
+        if screen._body.get_child_count() == 0:
+            push_error("PPA_NPC_TABS: last tab failed to render for " + screen.service)
             quit(1)
             return
         checked += 1
+    print("PPA_NPC_ISOLATION_OK npc_services=", checked, " windows=1 hero_overlap=0 disabled_transactions=1")
 
     # Canonical original PPA merchant has 12 products. These must NEVER
     # spend fabricated coins or mutate local storage via a pretend shop.
@@ -314,17 +358,30 @@ func _run() -> void:
     menu._set_merchant_tab("boosters")
     menu._select_merchant_item("magic_small")
     menu._adjust_merchant_quantity(2)
-    if menu._shop_qty != 3:
-        push_error("PPA_UI_SMOKE: original merchant quantity selector broken")
+    if menu._shop_qty != 3 or menu._npc_screen.quantity != 3 or menu._npc_screen.selected_id != "magic_small":
+        push_error("PPA_NPC_SHOP: merchant tabs, selection or quantity broken")
+        quit(1)
+        return
+    var product_cards = menu._npc_screen.find_children("NpcProduct_*", "PanelContainer", true, false)
+    if product_cards.size() < 4:
+        push_error("PPA_NPC_SHOP: merchant cards not rendered")
         quit(1)
         return
     menu.open_npc(NPCS.NPCS[6])
     menu._set_market_category("materials")
+    if menu._npc_screen.tab != "materials":
+        push_error("PPA_NPC_MARKET: categories broken")
+        quit(1)
+        return
     menu.open_npc(NPCS.NPCS[0])
     menu._set_smith_tab("legendary")
     menu._set_smith_tab("accessories")
-    if menu._panel.get_instance_id() != native_panel_id:
-        push_error("PPA_UI_SMOKE: an NPC created a duplicate store panel")
+    if menu._npc_screen.tab != "accessories":
+        push_error("PPA_NPC_FORGE: category switching broken")
+        quit(1)
+        return
+    if menu._panel.get_instance_id() != native_panel_id or menu._npc_screen.get_instance_id() != npc_screen_id:
+        push_error("PPA_NPC_ISOLATION: duplicate store UI created")
         quit(1)
         return
     var after_items := JSON.stringify({
@@ -337,7 +394,16 @@ func _run() -> void:
         quit(1)
         return
 
+    menu.close_menu()
+    if menu._npc_screen.is_open() or menu.is_open():
+        push_error("PPA_NPC_ISOLATION: closing NPC left a visible modal")
+        quit(1)
+        return
     menu.open_page("character")
+    if not menu._character_screen.is_open() or menu._npc_screen.is_open():
+        push_error("PPA_NPC_ISOLATION: hero cannot reopen after closing NPC")
+        quit(1)
+        return
     menu.close_menu()
     if menu.is_open():
         push_error("PPA_UI_SMOKE: cannot close character menu")
