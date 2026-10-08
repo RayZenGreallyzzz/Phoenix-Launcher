@@ -20,3 +20,14 @@ out(r"imgDungeon21Boss\.src",8)
 out(r"dungeon21BossCol",5)
 
 # Standalone fast audit: not part of live PPA gameplay.
+
+# Smoke-test the exact approved CDN art reference without modifying PPA.
+ref=re.search(r"""const\s+BG_PHOENIX\s*=\s*['"](https://[^'"]+/phoenix-boss\.png)['"]""",s)
+if ref:
+    url=ref.group(1)
+    try:
+        with urlopen(Request(url,headers={"User-Agent":"PPA-OriginalPhoenix-Art-Audit"}),timeout=25) as response:
+            img=response.read(8_000_001)
+        print("PPA_PHOENIX_ORIGINAL_CDN_OK",len(img),img[:8].hex(),flush=True)
+    except Exception as exc:
+        print("PPA_PHOENIX_ORIGINAL_CDN_UNAVAILABLE",type(exc).__name__,str(exc)[:160],flush=True)
