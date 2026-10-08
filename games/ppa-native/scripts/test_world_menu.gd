@@ -238,7 +238,7 @@ func _refresh() -> void:
             _line("Раздел пока недоступен в native beta.")
 
 func _show_character() -> void:
-    var hero: Dictionary = HERO_CATALOG.get_class(class_key)
+    var hero: Dictionary = HERO_CATALOG.hero_info(class_key)
     var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
     var server_class := str(account.get("classKey", ""))
     _line("Ник: " + nickname, false, true)

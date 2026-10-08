@@ -249,7 +249,7 @@ func _choose_class(key: String) -> void:
     if not HERO_CATALOG.valid_key(key):
         return
     _selected_class_key = key
-    var hero: Dictionary = HERO_CATALOG.get_class(key)
+    var hero: Dictionary = HERO_CATALOG.hero_info(key)
     var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
     _name_label.text = nickname
     _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
@@ -275,7 +275,7 @@ func _confirm_preview() -> void:
 func _load_preview() -> void:
     if not is_inside_tree():
         return
-    var hero: Dictionary = HERO_CATALOG.get_class(_selected_class_key)
+    var hero: Dictionary = HERO_CATALOG.hero_info(_selected_class_key)
     var scene_path := str(hero.get("model", ""))
     if not ResourceLoader.exists(scene_path):
         _status_label.text = "3D-МОДЕЛЬ ЕЩЁ НЕ УСТАНОВЛЕНА"

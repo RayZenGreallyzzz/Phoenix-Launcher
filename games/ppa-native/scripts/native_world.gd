@@ -222,7 +222,7 @@ func _build_3d_overlay() -> void:
 
     # The chosen native class is a *test preview*. It does not alter the
     # authoritative server class or inventory. Only local player is 3D.
-    var hero: Dictionary = HERO_CATALOG.get_class(selected_visual_class)
+    var hero: Dictionary = HERO_CATALOG.hero_info(selected_visual_class)
     var path := str(hero.get("model", ""))
     if ResourceLoader.exists(path):
         var model_resource = load(path)
@@ -302,7 +302,7 @@ func _build_hud() -> void:
     add_child(name_label)
 
     var class_label := Label.new()
-    var preview_name := str(HERO_CATALOG.get_class(selected_visual_class).get("name", selected_visual_class))
+    var preview_name := str(HERO_CATALOG.hero_info(selected_visual_class).get("name", selected_visual_class))
     class_label.text = "МИРНЫЙ ГОРОД · ТЕСТ %s" % preview_name
     class_label.position = Vector2(30.0, 51.0)
     class_label.add_theme_font_size_override("font_size", 12)

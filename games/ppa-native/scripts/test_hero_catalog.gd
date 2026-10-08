@@ -13,7 +13,7 @@ const CLASSES = [
     {"key":"priest","name":"ЖРЕЦ","role":"Поддержка · магия","description":"Помогает союзникам лечением и защитными способностями.","model":"res://assets/hero_priest.glb","height":2.25}
 ]
 
-static func get_class(key: String) -> Dictionary:
+static func hero_info(key: String) -> Dictionary:
     for info in CLASSES:
         if str(info.get("key", "")) == key:
             return info
