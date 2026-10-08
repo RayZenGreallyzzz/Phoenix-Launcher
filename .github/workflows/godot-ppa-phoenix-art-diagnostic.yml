@@ -1,0 +1,17 @@
+name: Probe PPA Original Phoenix Art (diagnostic)
+on:
+  push:
+    branches: ["feature/godot-dungeon-real-monster-sprites"]
+    paths:
+      - "games/ppa-native/tools/probe_original_phoenix_art.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public PPA Phoenix and Lord art references
+        run: python3 games/ppa-native/tools/probe_original_phoenix_art.py
