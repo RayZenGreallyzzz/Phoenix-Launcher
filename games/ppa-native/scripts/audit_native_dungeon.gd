@@ -31,8 +31,19 @@ func _check() -> void:
         _fail("original 4096px floor is not shown at the correct 9526px scale")
         return
     var overlay := scene.city_world.find_child("DungeonWalkMaskAlignmentOverlay", true, false) as TextureRect
-    if overlay == null or overlay.size != floor_art.size or overlay.position != floor_art.position or overlay.visible:
-        _fail("collision alignment overlay missing, offset or enabled in normal play")
+    # New requested calibration: only the overlay and mask collision shift.
+    # The stone floor/3D character/map world origin must remain unchanged.
+    if floor_art.position != Vector2.ZERO or scene.MASK_Y_OFFSET_PX != 6.0:
+        _fail("floor moved or the requested 6px calibration is absent")
+        return
+    if overlay == null or overlay.size != floor_art.size or overlay.position != Vector2(0.0, 6.0) or overlay.visible:
+        _fail("mask overlay is not aligned to the 6px collision shift")
+        return
+    if scene._world_to_mask_uv(Vector2(0, scene.MASK_Y_OFFSET_PX)) != Vector2.ZERO:
+        _fail("collision sampling ignores visual Y-offset")
+        return
+    if scene._walk_sample(Vector2(500.0, 3.0)):
+        _fail("above-shifted mask must remain a wall, not clamp to image row zero")
         return
     var toggle := scene.find_child("DungeonMaskAlignmentToggle", true, false) as Button
     if toggle == null:
@@ -172,15 +183,20 @@ func _check() -> void:
         if absf(model.position.y + foot_floor * model.scale.y) > 0.035:
             _fail("3D foot bones are not resting on the y=0 ground plane")
             return
-    # Numeric checks across map: a world-space point maps to the exact
-    # matching floor and mask normalized coordinates, without any Y drift.
+    # Collision and translucent overlay must use identical world-to-mask
+    # transforms everywhere, including the Y=6 origin and upper/lower rooms.
     for uv in [Vector2(0.10, 0.15), Vector2(0.50, 0.50),
         Vector2(0.80, 0.85), Vector2(0.95, 0.90)]:
-        var world_point: Vector2 = uv * world_size
-        var actual: Vector2 = scene._world_to_mask_uv(world_point)
+        var shifted_world_point: Vector2 = uv * world_size + scene.MASK_WORLD_OFFSET
+        var actual: Vector2 = scene._world_to_mask_uv(shifted_world_point)
         if actual.distance_to(uv) > 0.00002:
-            _fail("map-to-mask world transform drift at " + str(uv))
+            _fail("6px overlay/collision transform mismatch at " + str(uv))
             return
+    var legacy_spawn := Vector2(scene.SAFE_ENTRY.UV.x * world_size.x,
+        scene.SAFE_ENTRY.UV.y * world_size.y)
+    if scene._entrance.distance_to(legacy_spawn + Vector2(0.0, 6.0)) > 0.001:
+        _fail("spawn is still anchored to unshifted walk-mask origin")
+        return
     # Portrait change and camera bounds must retain logical world size.
     scene.size = Vector2(720, 1280)
     scene._sync_world_visuals()
@@ -193,6 +209,6 @@ func _check() -> void:
     print("PPA_DUNGEON_WALK_TEST_OK world=", world_size,
         " mask=", scene._mask_image.get_size(), " entrance=", scene._entrance,
         " collisions=8points+slide original_art=1 world_scale=", scene._render_to_world_scale,
-        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=2 shadows=0 foot_grounded=1 wall_sweep=1 mobs=0 server_writes=0")
+        " mask_offset_y=6 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=2 shadows=0 foot_grounded=1 wall_sweep=1 mobs=0 server_writes=0")
     scene.queue_free()
     quit(0)
