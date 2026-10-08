@@ -43,10 +43,16 @@ jobs:
         run: |
           set -euo pipefail
           echo "ANDROID_HOME=$ANDROID_HOME"
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -1)"
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" "build-tools;35.0.0"
+          # GitHub Ubuntu image already carries signed Android build-tools.
+          # Do not block APK releases on a redundant slow SDK network install.
+          if [ -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            echo "Using preinstalled Android build-tools 35.0.0"
+          else
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -1)"
+            test -x "$SDKMANAGER"
+            timeout 180 "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" "build-tools;35.0.0"
+          fi
+          find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -3
 
       - name: Cache stable PPA debug signing key
         uses: actions/cache@v4
