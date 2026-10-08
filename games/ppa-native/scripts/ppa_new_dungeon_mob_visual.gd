@@ -75,7 +75,7 @@ func setup(_index: int, level: int, boss: bool, _boss_kind: String = "") -> void
     if kind < 0:
         visible = false
         return
-    var resource_path := ART_DIR + NEW_MOBS[kind]
+    var resource_path: String = ART_DIR + str(NEW_MOBS[kind])
     if not ResourceLoader.exists(resource_path):
         push_error("PPA_NEW_DUNGEON_MOB_PNG_MISSING: " + resource_path)
         visible = false
