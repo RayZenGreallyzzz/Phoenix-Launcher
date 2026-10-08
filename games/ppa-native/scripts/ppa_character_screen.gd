@@ -10,6 +10,8 @@ signal close_requested
 signal select_item_requested(source_name: String, index: int)
 signal unequip_requested(slot: String)
 
+const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
+
 const CAPTIONS := [
     "1. ИНВЕНТАРЬ",
     "2. ХАРАКТЕРИСТИКИ",
@@ -38,8 +40,20 @@ var _caption: Label
 var _scroll: ScrollContainer
 var _dots: Array[PanelContainer] = []
 var _mono: SystemFont
+# One gesture owner for content. Godot's native ScrollContainer touch
+# inertia was racing with the old _input swipe code on Android (reversed and
+# one-way scrolling). Explicit scroll uses one signed delta and no inertia.
 var _touch_origin := Vector2.ZERO
-var _touch_tracking := false
+var _touch_previous := Vector2.ZERO
+var _touch_id := -1
+var _gesture_axis := ""
+var _mouse_origin := Vector2.ZERO
+var _mouse_previous := Vector2.ZERO
+var _mouse_scrolling := false
+var _book_overlay: ColorRect
+var _book_dialog: PanelContainer
+var _book_container: VBoxContainer
+var _original_skill_card_count := 0
 
 func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> void:
     account = profile.duplicate(true)
@@ -232,6 +246,8 @@ func _create_frame() -> void:
     _scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     _scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+    _scroll.scroll_deadzone = 100000
+    _scroll.follow_focus = false
     content.add_child(_scroll)
     # The web PPA uses a thin amber 5px scroll thumb, not Godot's default
     # wide grey mobile scrollbar.
@@ -282,24 +298,72 @@ func open_index(index: int) -> void:
 func is_open() -> bool:
     return visible
 
+# PPA production gesture rules:
+#   vertical up   => content moves up (scroll_vertical increases)
+#   vertical down => content moves down (scroll_vertical decreases)
+#   horizontal    => previous / next of five pages
+# Godot's native touch scroll deadzone is set high to avoid *double* scrolling.
 func _input(event: InputEvent) -> void:
     if not visible or _frame == null:
+        return
+    if _book_overlay != null and _book_overlay.visible:
         return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
         if touch.pressed:
-            _touch_origin = touch.position
-            _touch_tracking = _frame.get_global_rect().has_point(touch.position)
-        elif _touch_tracking:
-            _swipe(touch.position)
-    elif event is InputEventMouseButton:
-        var mouse := event as InputEventMouseButton
-        if mouse.button_index == MOUSE_BUTTON_LEFT:
-            if mouse.pressed:
-                _touch_origin = mouse.position
-                _touch_tracking = _frame.get_global_rect().has_point(mouse.position)
-            elif _touch_tracking:
-                _swipe(mouse.position)
+            if _touch_id < 0 and _scroll.get_global_rect().has_point(touch.position):
+                _touch_id = touch.index
+                _touch_origin = touch.position
+                _touch_previous = touch.position
+                _gesture_axis = ""
+        elif touch.index == _touch_id:
+            _touch_id = -1
+            _gesture_axis = ""
+        return
+    if event is InputEventScreenDrag:
+        var drag := event as InputEventScreenDrag
+        if drag.index == _touch_id:
+            _move_gesture(drag.position, _touch_origin, _touch_previous, true)
+            _touch_previous = drag.position
+        return
+    # Desktop mouse and stylus fallback. Android touch also emits synthetic
+    # mouse events, so ignore those while the real ScreenTouch owns the drag.
+    if event is InputEventMouseButton:
+        var mb := event as InputEventMouseButton
+        if mb.button_index != MOUSE_BUTTON_LEFT or _touch_id >= 0:
+            return
+        if mb.pressed:
+            _mouse_scrolling = _scroll.get_global_rect().has_point(mb.position)
+            _mouse_origin = mb.position
+            _mouse_previous = mb.position
+            _gesture_axis = ""
+        else:
+            _mouse_scrolling = false
+            _gesture_axis = ""
+    elif event is InputEventMouseMotion and _mouse_scrolling and _touch_id < 0:
+        var motion := event as InputEventMouseMotion
+        _move_gesture(motion.position, _mouse_origin, _mouse_previous, false)
+        _mouse_previous = motion.position
+
+func _move_gesture(point: Vector2, origin: Vector2, previous: Vector2, touch: bool) -> void:
+    if _scroll == null:
+        return
+    var total := point - origin
+    if _gesture_axis.is_empty() and total.length() >= 12.0:
+        _gesture_axis = "vertical" if absf(total.y) >= absf(total.x) * 1.05 else "horizontal"
+    if _gesture_axis == "vertical":
+        var dy := point.y - previous.y
+        # A finger moving UP has negative dy, thus increases vertical scroll.
+        var max_scroll := maxi(0, int(ceilf(_scroll.get_v_scroll_bar().max_value - _scroll.get_v_scroll_bar().page)))
+        _scroll.scroll_vertical = clampi(_scroll.scroll_vertical - int(roundf(dy)), 0, max_scroll)
+        get_viewport().set_input_as_handled()
+    elif _gesture_axis == "horizontal" and absf(total.x) >= 42.0 and absf(total.x) >= absf(total.y) * 1.15:
+        var step := 1 if total.x < 0.0 else -1
+        _touch_id = -1
+        _mouse_scrolling = false
+        _gesture_axis = ""
+        open_index(_page + step)
+        get_viewport().set_input_as_handled()
 
 func _dot_input(event: InputEvent, index: int) -> void:
     if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
@@ -310,12 +374,6 @@ func _dot_input(event: InputEvent, index: int) -> void:
         if mouse.button_index == MOUSE_BUTTON_LEFT and mouse.pressed:
             open_index(index)
             accept_event()
-
-func _swipe(finish: Vector2) -> void:
-    _touch_tracking = false
-    var delta := finish - _touch_origin
-    if absf(delta.x) > 38.0 and absf(delta.x) > absf(delta.y) * 1.15:
-        open_index(_page + (1 if delta.x < 0.0 else -1))
 
 func _clear_page() -> void:
     for child in _page_container.get_children():
