@@ -72,6 +72,8 @@ func _ready() -> void:
     # NPC windows are independent of BOTH the character UI and the old
     # general purpose test panel. Exactly one NPC screen is instantiated.
     _npc_screen = NPC_SCREEN.new()
+    # Private local test bag is display-only. Do not pretend it is server PPA.
+    _npc_screen.set_preview_stash(stash)
     _npc_screen.z_index = 105
     add_child(_npc_screen)
     _npc_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
