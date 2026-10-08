@@ -18,3 +18,5 @@ out(r"PHOENIX_(?:IMG|SRC|ART|SPRITE|ASSET)",10)
 out(r"phoenix\.(?:png|webp|jpg)",10)
 out(r"imgDungeon21Boss\.src",8)
 out(r"dungeon21BossCol",5)
+
+# Standalone fast audit: not part of live PPA gameplay.
