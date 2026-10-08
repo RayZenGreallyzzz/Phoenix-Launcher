@@ -104,16 +104,46 @@ func _check() -> void:
         _fail("no test-only label warning of missing live combat")
         return
     # The preview must never create server mobs or dungeon NPCs.
-    if scene.city_world.get_child_count() != 2:
-        _fail("dungeon must contain only aligned floor and hidden collision overlay")
+    if scene.city_world.get_child_count() != 3:
+        _fail("dungeon must contain aligned floor, hidden mask and diagnostic ground-footprint marker")
+        return
+    var footprint := scene.city_world.find_child("DungeonActualGroundCollider", true, false) as Node2D
+    if footprint == null or footprint.visible or scene.WALL_RADIUS != 9.0:
+        _fail("initial collision radius or visibility is incorrect")
         return
     toggle.pressed.emit()
+    if not overlay.visible or not footprint.visible or footprint.position.distance_to(scene.world_pos_px) > 0.01:
+        _fail("mask toggle didn't show the exact ground collider and aligned overlay")
+        return
+    var circle := footprint.find_child("DungeonFootprintRadius", true, false) as Line2D
+    if circle == null or circle.points.size() != 25 or absf(circle.points[0].length() - 9.0) > 0.1:
+        _fail("the visible yellow circle does not match the 9px collider footprint")
+        return
     if not overlay.visible:
         _fail("mask alignment overlay toggle doesn't show geometry")
         return
     toggle.pressed.emit()
-    if overlay.visible:
+    if overlay.visible or footprint.visible:
         _fail("mask alignment overlay toggle cannot hide geometry")
+        return
+    # Along the downward corridor, a nine-direction footprint should reach
+    # within about a cell or two of the lower green/solid mask boundary.
+    var entrance: Vector2 = scene.world_pos_px
+    var reached_edge := false
+    for step in range(1, 1350):
+        var candidate := entrance + Vector2(0, float(step))
+        if not scene._walk_sample(candidate):
+            reached_edge = true
+            var last_safe_y := float(step - 1)
+            while last_safe_y > 0 and not scene._can_walk(entrance + Vector2(0, last_safe_y)):
+                last_safe_y -= 1.0
+            if last_safe_y < 1.0 or float(step) - last_safe_y > scene.WALL_RADIUS + 9.0:
+                _fail("ground collider prevents approaching lower green edge: boundary=" +
+                    str(step) + " last_safe=" + str(last_safe_y))
+                return
+            break
+    if not reached_edge:
+        _fail("no lower mask edge found from dungeon entrance")
         return
     # Numeric checks across map: a world-space point maps to the exact
     # matching floor and mask normalized coordinates, without any Y drift.
@@ -136,6 +166,6 @@ func _check() -> void:
     print("PPA_DUNGEON_WALK_TEST_OK world=", world_size,
         " mask=", scene._mask_image.get_size(), " entrance=", scene._entrance,
         " collisions=8points+slide original_art=1 world_scale=", scene._render_to_world_scale,
-        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 mobs=0 server_writes=0")
+        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 footprint_radius=9 lower_edge=1 mobs=0 server_writes=0")
     scene.queue_free()
     quit(0)
