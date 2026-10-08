@@ -86,6 +86,7 @@ var _joy_touch_id := -1
 var _joy_mouse_active := false
 var _joy_center := Vector2.ZERO
 var _fps_clock := 0.0
+var _modal_world_frozen := false
 
 var _animation_player: AnimationPlayer
 var _run_animation := ""
@@ -547,10 +548,22 @@ func _physics_process(delta: float) -> void:
             _joy_touch_id = -1
             _joy_mouse_active = false
             _joy_end()
-        if not move_input.is_zero_approx():
-            move_input = Vector2.ZERO
-        _set_animation("idle")
+        move_input = Vector2.ZERO
+        if not _modal_world_frozen:
+            _modal_world_frozen = true
+            _set_animation("idle")
+            # Freeze the last 3D frame while the original HTML WebView is
+            # active. Render one final idle frame, then stop updating this
+            # dedicated hero viewport. Godot world data is never unloaded.
+            if viewport_3d != null:
+                viewport_3d.render_target_update_mode = SubViewport.UPDATE_ONCE
+            print("PPA_NATIVE_MODAL_RENDER_PAUSED")
         return
+    if _modal_world_frozen:
+        _modal_world_frozen = false
+        if viewport_3d != null:
+            viewport_3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+        print("PPA_NATIVE_MODAL_RENDER_RESUMED")
     var keyboard := Vector2.ZERO
     if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
         keyboard.x -= 1.0
