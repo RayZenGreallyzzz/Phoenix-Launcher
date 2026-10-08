@@ -29,15 +29,40 @@ func _run() -> void:
         quit(1)
         return
     var original_char = menu._character_screen
+    var iframe_width: float = float(original_char._frame.offset_right - original_char._frame.offset_left)
+    var iframe_height: float = float(original_char._frame.offset_bottom - original_char._frame.offset_top)
+    if absf(iframe_width - 430.0) > 1.0 or absf(iframe_height - 655.2) > 1.0:
+        push_error("PPA_UI_SMOKE: character frame must use live PPA landscape CSS geometry: " + str(Vector2(iframe_width, iframe_height)))
+        quit(1)
+        return
     for page in range(5):
         original_char.open_index(page)
         if str(original_char._caption.text) != str(original_char.CAPTIONS[page]):
             push_error("PPA_UI_SMOKE: PPA character page caption mismatch: " + str(page))
             quit(1)
             return
+        if page == 2 and original_char._page_container.get_child_count() != 5:
+            push_error("PPA_UI_SMOKE: expected 4 original active skill placeholders")
+            quit(1)
+            return
+        if page == 3 and original_char._page_container.get_child_count() != 6:
+            push_error("PPA_UI_SMOKE: expected 5 original passive skill placeholders")
+            quit(1)
+            return
     original_char.open_index(0)
-    if original_char._page_container.get_child_count() < 5:
-        push_error("PPA_UI_SMOKE: missing PPA equipment/portrait/bag sections")
+    var bag_grid = original_char._page_container.find_child("OriginalPPABagGrid", true, false)
+    if bag_grid == null or bag_grid.get_child_count() != 100:
+        push_error("PPA_UI_SMOKE: original 100 inventory slots missing")
+        quit(1)
+        return
+    var first_slot: Control = bag_grid.get_child(0) as Control
+    if first_slot == null or absf(first_slot.custom_minimum_size.x - first_slot.custom_minimum_size.y) > 0.1:
+        push_error("PPA_UI_SMOKE: inventory slots must be square, matching original PPA CSS")
+        quit(1)
+        return
+    var bag_count = original_char._page_container.find_child("OriginalPPABagCount", true, false)
+    if bag_count == null or bag_count.autowrap_mode != TextServer.AUTOWRAP_OFF:
+        push_error("PPA_UI_SMOKE: inventory item counter must never wrap vertically")
         quit(1)
         return
     menu.open_page("bag")
