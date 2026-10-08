@@ -14,11 +14,11 @@ const MASK_A := 48.0 / 255.0
 const WALL_RADIUS := 2.0
 const COLLISION_SUBSTEP := 2.0
 
-# Requested tablet calibration: shift the WALK MASK downward by 6 native
+# Requested tablet calibration: shift the WALK MASK downward by 14 native
 # world/screen pixels. The decorative floor remains at its original position.
 # Both collision sampling and its translucent debug overlay use this offset.
 # Test branch only: revert this single value to 0 if upper walls look wrong.
-const MASK_Y_OFFSET_PX := 6.0
+const MASK_Y_OFFSET_PX := 14.0
 const MASK_WORLD_OFFSET := Vector2(0.0, MASK_Y_OFFSET_PX)
 
 # Same logical dungeon units as original PPA build.mjs:
