@@ -6,6 +6,8 @@ extends Control
 # authenticated Phoenix/PPA service adapter is implemented and verified.
 signal close_requested
 signal authoritative_state_requested(service: String)
+# Local offline dungeon visual test, explicitly separate from server entry.
+signal dungeon_visual_test_requested
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
@@ -196,8 +198,12 @@ func _fit() -> void:
     if _frame == null or size.x <= 2 or size.y <= 2:
         return
     var landscape := size.x > size.y
-    var w := minf(size.x * (0.92 if landscape else 0.94), 980.0)
-    var h := minf(size.y * (0.94 if landscape else 0.91), 690.0)
+    var w := minf(size.x * (0.92 if landscape else 0.96), 980.0)
+    # Old portrait maximum of 690 px cut the lower NPC tab row on phones
+    # and wasted almost half of a portrait tablet. Use nearly all available
+    # height in portrait, while preserving the landscape dimensions.
+    var h := minf(size.y * (0.94 if landscape else 0.975),
+        690.0 if landscape else 1460.0)
     _frame.offset_left = -w / 2.0
     _frame.offset_right = w / 2.0
     _frame.offset_top = -h / 2.0
@@ -215,7 +221,9 @@ func _layout_tabs() -> void:
     var columns := (5 if size.x > size.y else 3) if clan_grid else maxi(1, _tab_specs().size())
     _tabs.columns = columns
     _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if clan_grid else ScrollContainer.SCROLL_MODE_AUTO
-    _tab_scroller.custom_minimum_size.y = 123.0 if (clan_grid and columns == 3) else (84.0 if clan_grid else 45.0)
+    # The final clan row used to be clipped: 123px is less than three
+    # touch-sized rows plus gap, margins and theme padding.
+    _tab_scroller.custom_minimum_size.y = 169.0 if (clan_grid and columns == 3) else (112.0 if clan_grid else 54.0)
     _last_clan_layout = clan_grid
 
 func _outside(event: InputEvent) -> void:
@@ -352,6 +360,7 @@ func _render() -> void:
         var id := str(entry.get("key", ""))
         var b := _button(str(entry.get("label", "")))
         b.name = "NpcTab_" + id
+        b.custom_minimum_size.y = 43.0
         if service == "clan":
             var available := _frame.offset_right - _frame.offset_left - 43.0
             var slot_width := floorf(available / float(_tabs.columns)) - 5.0
@@ -877,7 +886,16 @@ func _show_arena() -> void:
             _message("ИСТОРИЯ БОЁВ", "Исходы матчей и награды по подтверждённым серверным записям.")
 
 func _show_dungeon() -> void:
-    _section("ХРАНИТЕЛЬ ПОДЗЕМЕЛЬЯ", "Вход по уровню и задания из Telegram PPA")
+    _section("ХРАНИТЕЛЬ ПОДЗЕМЕЛЬЯ", "Реальный серверный вход пока не подключён. Но карту уже можно проверить в Godot!")
+    # Keep test access prominent on every Keeper page, rather than hiding
+    # it under quests or behind the disabled live-entry button.
+    var preview := _button("ПРОЙТИ ПО КАРТЕ · ТЕСТ БЕЗ СЕРВЕРА")
+    preview.name = "NpcDungeonWalkTest"
+    preview.custom_minimum_size.y = 46.0
+    preview.add_theme_stylebox_override("normal", _style(Color("#3A2917"), GOLD, 7, 2))
+    preview.pressed.connect(func(): dungeon_visual_test_requested.emit())
+    _body.add_child(preview)
+    _body.add_child(_label("Только прогулка по оригинальной карте. Без мобов, дропа и изменения аккаунта.", 11, SUB))
     match tab:
         "floors":
             for floor_range in ["1–20", "21–40", "41–60"]:
