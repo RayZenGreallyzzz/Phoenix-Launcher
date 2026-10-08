@@ -61,10 +61,10 @@ jobs:
           import hashlib,struct
           p=Path('artifact/live_peace_city.bin');d=p.read_bytes()
           print('IMAGE_SIZE',len(d),'SHA256',hashlib.sha256(d).hexdigest())
-          if d[:8]==b'\\x89PNG\\r\\n\\x1a\\n':
+          if d[:8]==bytes.fromhex('89504e470d0a1a0a'):
               print('PNG_DIMS',*struct.unpack('>II',d[16:24]))
               p.rename('artifact/live_peace_city.png')
-          elif d[:2]==b'\\xff\\xd8':
+          elif d[:2]==bytes.fromhex('ffd8'):
               print('JPEG_FILE')
               p.rename('artifact/live_peace_city.jpg')
           else:
