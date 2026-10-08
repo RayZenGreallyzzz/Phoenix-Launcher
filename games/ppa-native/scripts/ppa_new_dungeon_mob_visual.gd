@@ -8,7 +8,7 @@ const NEW_MOBS := [
     "mob_01_ash_rat.png",
     "mob_02_cave_spider.png",
     "mob_03_charred_beetle.png",
-    "mob_04_carrion_bird.png",
+    "mob_04_scavenger_slime.png",
     "mob_05_bone_rodent.png",
     "mob_06_goblin_scout.png",
     "mob_07_bone_warrior.png",
@@ -39,7 +39,7 @@ static func available_count() -> int:
     return count
 
 static func artwork_complete() -> bool:
-    return available_count() == NEW_MOBS.size()
+    return available_count() == NEW_MOBS.size() and not ResourceLoader.exists(ART_DIR + "mob_04_carrion_bird.png")
 
 # The atlas has 20 CREATURE TYPES, not "one unique species per
 # experience level". The separate Phoenix Ashes bestiary establishes tiers.
@@ -48,7 +48,7 @@ static func art_index_for_spawn(level: int, spawn_id: int) -> int:
     if level >= 1 and level <= 3:
         species = [0, 1] # rat, cave spider
     elif level <= 5:
-        species = [2, 3, 4] # beetle, scavenger, bone rodent
+        species = [2, 3, 4] # charred beetle, approved scavenger slime, bone rodent
     elif level <= 10:
         species = [5, 6, 7, 8, 9]
     elif level <= 15:
