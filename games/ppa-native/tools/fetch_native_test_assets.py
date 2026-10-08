@@ -169,7 +169,35 @@ def main() -> None:
         print("PPA_NPC_SPRITE_OK", key, width, height,
               hashlib.sha256(raw).hexdigest(), flush=True)
 
-    print("PPA_NATIVE_TEST_ASSETS_OK: 7 GLBs + 9 original 2D NPC art")
+    # Exact 12 merchant icon assets from production merchantFrame PRODUCTS.
+    # No invented stock art: original hashed PNGs in live PPA /assets/.
+    merchant_icons = {
+        "hp_small": "a7616001c81c7b2a.png",
+        "hp_medium": "3ead73ed35a31dbe.png",
+        "hp_large": "5f26be941ad98049.png",
+        "mp_small": "350f8d7330191080.png",
+        "mp_medium": "ab3f519b4b0c8866.png",
+        "mp_large": "47eda61e7ba0e4b8.png",
+        "magic_small": "83b9f41262511bde.png",
+        "atk_speed_small": "ca495b7a51e4a93e.png",
+        "run_speed_small": "67ad5574901487d8.png",
+        "phys_small": "64ce724d9678352c.png",
+        "xp_scroll": "4b927f4034e34dc9.png",
+        "portal_scroll": "01697b96fcd7c995.png",
+    }
+    for key, hashed_name in merchant_icons.items():
+        raw = download(BASE + "/assets/" + hashed_name)
+        if raw[:8] != bytes.fromhex("89504e470d0a1a0a"):
+            raise ValueError(f"Merchant icon not a PNG: {key}")
+        width, height = struct.unpack(">II", raw[16:24])
+        if not (8 <= width <= 2048 and 8 <= height <= 2048):
+            raise ValueError(f"Merchant icon size changed {key}: {width}x{height}")
+        dest = ROOT / f"merchant_{key}.png"
+        dest.write_bytes(raw)
+        print("PPA_MERCHANT_ICON_OK", key, width, height,
+              hashlib.sha256(raw).hexdigest(), flush=True)
+
+    print("PPA_NATIVE_TEST_ASSETS_OK: 7 GLBs + 9 original 2D NPC art + 12 canonical shop icons")
 
 
 if __name__ == "__main__":
