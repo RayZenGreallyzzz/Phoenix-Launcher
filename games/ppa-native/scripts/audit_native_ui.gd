@@ -390,22 +390,29 @@ func _run() -> void:
         quit(1)
         return
     npc_ui._select_tab("storage")
-    if npc_ui._body.find_child("NpcStorageGrid_clan", true, false) == null:
-        push_error("PPA_CLAN_STORAGE: 500-slot clan storage page not displayed")
+    await process_frame
+    var clan_grid = npc_ui.find_child("NpcStorageGrid_clan", true, false)
+    if clan_grid == null or clan_grid.capacity != 500:
+        push_error("PPA_CLAN_STORAGE: virtual 500-slot canvas missing")
         quit(1)
         return
-    if npc_ui.find_children("NpcStorageCell_clan_*", "PanelContainer", true, false).size() != STORAGE.PAGE_SIZE:
-        push_error("PPA_CLAN_STORAGE: must render only 20 slots on each page")
+    if clan_grid.get_child_count() != 0:
+        push_error("PPA_CLAN_STORAGE: allocating hundreds of slot nodes instead of drawing visible cells")
         quit(1)
         return
-    npc_ui._storage_page("clan", 99)
-    if int(npc_ui._storage_pages["clan"]) != 24 or npc_ui.find_child("NpcStorageCell_clan_499", true, false) == null:
-        push_error("PPA_CLAN_STORAGE: last page (481–500) absent or page index exceeded")
+    var clan_scroll = npc_ui.find_child("NpcStorageScroll_clan", true, false)
+    if clan_scroll == null or clan_scroll.get_v_scroll_bar().max_value <= clan_scroll.size.y:
+        push_error("PPA_CLAN_STORAGE: continuous vertical scroll is unavailable")
         quit(1)
         return
-    var clan_next := npc_ui.find_child("NpcStorageNext_clan", true, false) as Button
-    if clan_next == null or not clan_next.disabled:
-        push_error("PPA_CLAN_STORAGE: next must be disabled on final page")
+    var clan_range_start: Vector2i = clan_grid.range_at(0.0, 296.0)
+    var clan_range_end: Vector2i = clan_grid.range_at(999999.0, 296.0)
+    if clan_range_start.x != 0 or clan_range_start.y >= 500 or clan_range_end.y != 500:
+        push_error("PPA_CLAN_STORAGE: first/last slots unavailable in scroll range")
+        quit(1)
+        return
+    if npc_ui.find_child("NpcStorageNext_clan", true, false) != null or npc_ui.find_child("NpcStoragePrev_clan", true, false) != null:
+        push_error("PPA_CLAN_STORAGE: ancient paging buttons still exist")
         quit(1)
         return
     menu.open_npc(NPCS.NPCS[1])
@@ -417,23 +424,40 @@ func _run() -> void:
             return
     for scope in ["personal", "clan", "premium"]:
         npc_ui._select_tab(scope)
-        if npc_ui.find_child("NpcStorageGrid_inventory", true, false) == null or npc_ui.find_child("NpcStorageGrid_" + scope, true, false) == null:
-            push_error("PPA_STORAGE_UI: inventory or warehouse grid missing in " + scope)
+        await process_frame
+        var inv_grid = npc_ui.find_child("NpcStorageGrid_inventory", true, false)
+        var grid = npc_ui.find_child("NpcStorageGrid_" + scope, true, false)
+        if inv_grid == null or grid == null:
+            push_error("PPA_STORAGE_UI: continuous inventory or warehouse grid missing " + scope)
             quit(1)
             return
-        var last_page := STORAGE.pages(scope) - 1
-        npc_ui._storage_page(scope, 99)
-        if int(npc_ui._storage_pages.get(scope, -1)) != last_page:
-            push_error("PPA_STORAGE_UI: page bound wrong " + scope)
+        if inv_grid.capacity != 100 or grid.capacity != int(capacities[scope]):
+            push_error("PPA_STORAGE_UI: grid capacity wrong " + scope)
             quit(1)
             return
-        var cells: Array[Node] = npc_ui.find_children("NpcStorageCell_" + scope + "_*", "PanelContainer", true, false)
-        if cells.size() != STORAGE.visible_slots(scope, last_page):
-            push_error("PPA_STORAGE_UI: last-page cell count wrong " + scope)
+        if inv_grid.get_child_count() > 0 or grid.get_child_count() > 0:
+            push_error("PPA_STORAGE_UI: slots allocated instead of virtual draw " + scope)
             quit(1)
             return
-        if npc_ui.find_child("NpcStorageCell_" + scope + "_" + str(STORAGE.capacity(scope) - 1), true, false) == null:
-            push_error("PPA_STORAGE_UI: last slot missing " + scope)
+        var scroller = npc_ui.find_child("NpcStorageScroll_" + scope, true, false)
+        if scroller == null:
+            push_error("PPA_STORAGE_UI: scroll container missing " + scope)
+            quit(1)
+            return
+        var visible_start: Vector2i = grid.range_at(0.0, scroller.size.y)
+        var last_offset: float = maxf(0.0, grid.custom_minimum_size.y - scroller.size.y)
+        var visible_end: Vector2i = grid.range_at(last_offset, scroller.size.y)
+        if visible_start.x != 0 or visible_end.y != grid.capacity:
+            push_error("PPA_STORAGE_UI: cannot reach first/last slot by scrolling " + scope +
+                " start=" + str(visible_start) + " end=" + str(visible_end))
+            quit(1)
+            return
+        if visible_start.y - visible_start.x > 80 or visible_end.y - visible_end.x > 80:
+            push_error("PPA_STORAGE_UI: renderer draws too many offscreen cells " + scope)
+            quit(1)
+            return
+        if scroller.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_AUTO:
+            push_error("PPA_STORAGE_UI: continuous scroll disabled " + scope)
             quit(1)
             return
     var local_items: Array = []
@@ -450,7 +474,7 @@ func _run() -> void:
         push_error("PPA_CLAN_LANDSCAPE: nine tabs must fit in two rows")
         quit(1)
         return
-    print("PPA_STORAGE_CAPACITY_OK bag=100 personal=200 clan=500 premium=50 last_pages=verified rendered_per_panel=20")
+    print("PPA_STORAGE_CAPACITY_OK bag=100 personal=200 clan=500 premium=50 continuous_scroll=1 rendered_visible_only=1")
     print("PPA_CLAN_EXCHANGE_VISIBLE_OK portrait=3x3 landscape=5x2")
     print("PPA_TELEGRAM_NPC_PARITY_OK clan=9 forge=6 storage=4 arena=5 portrait=1")
 
