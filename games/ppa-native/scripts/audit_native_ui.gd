@@ -24,6 +24,22 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: character panel did not open")
         quit(1)
         return
+    if menu._panel.visible or menu._character_screen == null or not menu._character_screen.is_open():
+        push_error("PPA_UI_SMOKE: obsolete character panel visible or original five-page screen missing")
+        quit(1)
+        return
+    var original_char = menu._character_screen
+    for page in range(5):
+        original_char.open_index(page)
+        if str(original_char._caption.text) != str(original_char.CAPTIONS[page]):
+            push_error("PPA_UI_SMOKE: PPA character page caption mismatch: " + str(page))
+            quit(1)
+            return
+    original_char.open_index(0)
+    if original_char._page_container.get_child_count() < 5:
+        push_error("PPA_UI_SMOKE: missing PPA equipment/portrait/bag sections")
+        quit(1)
+        return
     menu.open_page("bag")
     menu.open_page("warehouse")
     menu.open_page("runes")
@@ -86,6 +102,6 @@ func _run() -> void:
         push_error("PPA_UI_SMOKE: cannot close character menu")
         quit(1)
         return
-    print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
+    print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 original_character=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
     menu.queue_free()
     quit(0)
