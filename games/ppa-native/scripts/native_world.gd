@@ -91,6 +91,8 @@ var _modal_world_frozen := false
 var _animation_player: AnimationPlayer
 var _run_animation := ""
 var _idle_animation := ""
+var _attack_animation := ""
+var _attack_animation_until := 0
 var _anim_state := ""
 
 func _ready() -> void:
@@ -736,6 +738,8 @@ func _find_model_animations(root: Node) -> void:
     _animation_player = null
     _idle_animation = ""
     _run_animation = ""
+    _attack_animation = ""
+    _attack_animation_until = 0
     _anim_state = ""
 
     for candidate in players:
@@ -749,6 +753,8 @@ func _find_model_animations(root: Node) -> void:
                 _idle_animation = str(animation_name)
             if _run_animation.is_empty() and ("run" in lower or "jog" in lower or "walk" in lower):
                 _run_animation = str(animation_name)
+            if _attack_animation.is_empty() and ("attack" in lower or "shoot" in lower or "fire" in lower):
+                _attack_animation = str(animation_name)
         if not _idle_animation.is_empty() and not _run_animation.is_empty():
             break
 
@@ -768,11 +774,20 @@ func _find_model_animations(root: Node) -> void:
 
     _set_animation("idle")
 
+func _trigger_preview_attack() -> void:
+    # Do NOT freeze joystick movement while firing in the native dungeon QA.
+    if _attack_animation.is_empty() or _animation_player == null:
+        return
+    _attack_animation_until = Time.get_ticks_msec() + 400
+    _anim_state = ""
+    _set_animation("attack")
+
 func _set_animation(state: String) -> void:
     if _animation_player == null or _anim_state == state:
         return
-
-    var animation_name := _run_animation if state == "run" else _idle_animation
+    if state != "attack" and Time.get_ticks_msec() < _attack_animation_until:
+        return
+    var animation_name := _attack_animation if state == "attack" else (_run_animation if state == "run" else _idle_animation)
     if animation_name.is_empty():
         return
 
