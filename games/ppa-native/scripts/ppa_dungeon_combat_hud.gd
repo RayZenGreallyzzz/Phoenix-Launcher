@@ -42,8 +42,11 @@ func _ready() -> void:
             -328.0+float(column)*107.0,-314.0+float(row)*62.0,
             101.0,55.0,Color("#4B365A"))
         skill.add_theme_font_size_override("font_size",10)
-        skill.pressed.connect(func(slot: int=i): skill_pressed.emit(slot))
+        skill.pressed.connect(_press_skill.bind(i))
         skill_buttons.append(skill)
+
+func _press_skill(slot: int) -> void:
+    skill_pressed.emit(slot)
 
 func _label(text: String, font_size: int, tint: Color, pos: Vector2, dims: Vector2) -> Label:
     var l := Label.new()
