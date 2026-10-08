@@ -427,7 +427,7 @@ func _run() -> void:
             push_error("PPA_STORAGE_UI: page bound wrong " + scope)
             quit(1)
             return
-        var cells := npc_ui.find_children("NpcStorageCell_" + scope + "_*", "PanelContainer", true, false)
+        var cells: Array[Node] = npc_ui.find_children("NpcStorageCell_" + scope + "_*", "PanelContainer", true, false)
         if cells.size() != STORAGE.visible_slots(scope, last_page):
             push_error("PPA_STORAGE_UI: last-page cell count wrong " + scope)
             quit(1)
