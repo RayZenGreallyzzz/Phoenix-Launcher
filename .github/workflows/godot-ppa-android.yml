@@ -180,6 +180,12 @@ jobs:
           set -euo pipefail
           python3 games/ppa-native/tools/normalize_native_dwarf.py games/ppa-native/assets/Dwarf.glb
 
+      - name: Download and verify seven other 3D heroes and original city NPC sprites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/fetch_native_test_assets.py
+
       - name: Prepare branded PNG engine splash
         shell: bash
         run: |
@@ -236,6 +242,16 @@ jobs:
           godot --headless --path games/ppa-native --script res://scripts/audit_gnome_import.gd 2>&1 | tee /tmp/ppa-dwarf-import-audit.log
           grep -q "PPA_DWARF_GEOMETRY_OK" /tmp/ppa-dwarf-import-audit.log
           grep -q "PPA_DWARF_IMPORT_OK" /tmp/ppa-dwarf-import-audit.log
+          for key in tank barbarian paladin archer mage assassin priest; do
+            test -s "games/ppa-native/assets/hero_${key}.glb.import"
+            ! grep -q 'valid=false' "games/ppa-native/assets/hero_${key}.glb.import"
+          done
+          for key in blacksmith storage auction arena clan merchant blackmarket dungeon fartzone_guide; do
+            test -s "games/ppa-native/assets/npc_${key}.png.import"
+            ! grep -q 'valid=false' "games/ppa-native/assets/npc_${key}.png.import"
+          done
+          godot --headless --path games/ppa-native --script res://scripts/audit_heroes_import.gd 2>&1 | tee /tmp/ppa-test-hero-audit.log
+          grep -q "PPA_ALL_TEST_ASSETS_OK" /tmp/ppa-test-hero-audit.log
 
       - name: Build native PPA APK
         shell: bash

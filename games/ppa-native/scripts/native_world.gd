@@ -15,6 +15,9 @@ const PX_PER_3D_UNIT := 34.0
 
 const JOYSTICK_SCRIPT = preload("res://scripts/virtual_joystick.gd")
 const DWARF_FIT = preload("res://scripts/dwarf_model_fit.gd")
+const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
+const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
+const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -58,6 +61,9 @@ const BUILDING_RECTS := [
 ]
 
 var profile: Dictionary = {}
+var selected_visual_class := "gnome"
+var test_menu: Control
+var _npc_probe_clock := 0.0
 var world_pos_px := CITY_ENTRY
 var move_input := Vector2.ZERO
 var facing_input := Vector2(0.0, 1.0)
@@ -88,13 +94,17 @@ var _anim_state := ""
 
 func _ready() -> void:
     profile = get_tree().get_meta("phoenix_account", {})
+    var preview_key := str(get_tree().get_meta("ppa_native_test_class", profile.get("classKey", "gnome"))).to_lower()
+    selected_visual_class = preview_key if HERO_CATALOG.valid_key(preview_key) else "gnome"
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     set_process_input(true)
 
     _plaza_poly = PackedVector2Array(PLAZA_POINTS)
     _build_city_2d()
+    _build_city_npcs()
     _build_3d_overlay()
     _build_hud()
+    _build_test_menu()
     world_pos_px = CITY_ENTRY
     _sync_world_visuals()
 
@@ -122,6 +132,45 @@ func _build_city_2d() -> void:
     map_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
     map_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.add_child(map_texture)
+
+# 2D NPCs at the exact authoritative live PPA image-space locations.
+# They scroll in the same 2D map layer, not in the Godot 3D player viewport.
+func _build_city_npcs() -> void:
+    for npc in NPC_CATALOG.NPCS:
+        var source := str(npc.get("image", ""))
+        if not ResourceLoader.exists(source):
+            push_warning("[PPA-NPC] Missing deployed artwork: " + source)
+            continue
+        var texture := load(source) as Texture2D
+        if texture == null or texture.get_height() <= 0:
+            push_warning("[PPA-NPC] Invalid image: " + source)
+            continue
+        var anchor: Vector2 = NPC_CATALOG.world_pos(npc, SCN_SCALE)
+        var image_height: float = float(npc.get("height", 112.0))
+        var sprite := Sprite2D.new()
+        sprite.name = "NPC_" + str(npc.get("id", ""))
+        sprite.texture = texture
+        sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        var pixel_scale: float = image_height / float(texture.get_height())
+        sprite.scale = Vector2.ONE * pixel_scale
+        sprite.position = anchor + Vector2(0.0, 18.0 - image_height * 0.5)
+        sprite.z_index = 1
+        city_world.add_child(sprite)
+
+        var label := Label.new()
+        label.name = "NPCLabel_" + str(npc.get("id", ""))
+        label.text = str(npc.get("name", "NPC"))
+        label.position = anchor + Vector2(-120.0, 23.0)
+        label.size = Vector2(240.0, 24.0)
+        label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        label.add_theme_font_size_override("font_size", 12)
+        label.add_theme_color_override("font_color", Color("#FFDBAD"))
+        label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+        label.add_theme_constant_override("shadow_offset_x", 1)
+        label.add_theme_constant_override("shadow_offset_y", 2)
+        label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        label.z_index = 1
+        city_world.add_child(label)
 
 func _build_3d_overlay() -> void:
     viewport_3d = SubViewport.new()
@@ -171,28 +220,31 @@ func _build_3d_overlay() -> void:
     player_visual = Node3D.new()
     player_3d.add_child(player_visual)
 
-    # The live PPA dwarf has a skinned body, a cannon and Idle/Run/Attack.
-    # Keep the capsule fallback strictly for broken/missing resources in dev.
-    if ResourceLoader.exists("res://assets/Dwarf.glb"):
-        var model_resource = load("res://assets/Dwarf.glb")
+    # The chosen native class is a *test preview*. It does not alter the
+    # authoritative server class or inventory. Only local player is 3D.
+    var hero: Dictionary = HERO_CATALOG.get_class(selected_visual_class)
+    var path := str(hero.get("model", ""))
+    if ResourceLoader.exists(path):
+        var model_resource = load(path)
         if model_resource is PackedScene:
             var model := (model_resource as PackedScene).instantiate() as Node3D
             if model != null:
                 player_visual.add_child(model)
-                if DWARF_FIT.fit(model, 1.90):
+                if DWARF_FIT.fit(model, float(hero.get("height", 2.25))):
                     _find_model_animations(model)
                 else:
                     model.queue_free()
                     _build_fallback_player()
-                print("[PPA-NATIVE] Loaded live Dwarf.glb with idle=", _idle_animation, " run=", _run_animation)
+                print("[PPA-NATIVE] Test class=", selected_visual_class, " glb=", path,
+                    " idle=", _idle_animation, " run=", _run_animation)
             else:
-                push_warning("[PPA-NATIVE] Dwarf.glb root is not Node3D")
+                push_warning("[PPA-NATIVE] GLB root is not a Node3D: " + path)
                 _build_fallback_player()
         else:
-            push_warning("[PPA-NATIVE] Dwarf.glb is not a PackedScene")
+            push_warning("[PPA-NATIVE] GLB failed scene import: " + path)
             _build_fallback_player()
     else:
-        push_warning("[PPA-NATIVE] Dwarf.glb missing from build")
+        push_warning("[PPA-NATIVE] Missing class GLB: " + path)
         _build_fallback_player()
 
     var shadow_mesh := CylinderMesh.new()
@@ -250,7 +302,8 @@ func _build_hud() -> void:
     add_child(name_label)
 
     var class_label := Label.new()
-    class_label.text = "МИРНЫЙ ГОРОД · %s" % (class_key if not class_key.is_empty() else "PLAYER3D")
+    var preview_name := str(HERO_CATALOG.get_class(selected_visual_class).get("name", selected_visual_class))
+    class_label.text = "МИРНЫЙ ГОРОД · ТЕСТ %s" % preview_name
     class_label.position = Vector2(30.0, 51.0)
     class_label.add_theme_font_size_override("font_size", 12)
     class_label.add_theme_color_override("font_color", Color("#FE6D1C"))
@@ -388,6 +441,26 @@ func _joy_end() -> void:
     if input_label:
         input_label.text = "SMART JOYSTICK · коснись левой половины"
 
+func _build_test_menu() -> void:
+    test_menu = TEST_WORLD_MENU.new()
+    test_menu.configure(profile, selected_visual_class)
+    add_child(test_menu)
+    test_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+func _probe_nearest_npc() -> void:
+    if test_menu == null:
+        return
+    var closest: Dictionary = {}
+    var best := INF
+    for npc in NPC_CATALOG.NPCS:
+        var target: Vector2 = NPC_CATALOG.world_pos(npc, SCN_SCALE)
+        var distance := world_pos_px.distance_to(target)
+        var radius := maxf(96.0, float(npc.get("radius", 72.0)))
+        if distance <= radius and distance < best:
+            closest = npc
+            best = distance
+    test_menu.set_near_npc(closest)
+
 func _physics_process(delta: float) -> void:
     var keyboard := Vector2.ZERO
     if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
@@ -410,6 +483,10 @@ func _physics_process(delta: float) -> void:
     else:
         _set_animation("idle")
 
+    _npc_probe_clock += delta
+    if _npc_probe_clock >= 0.20:
+        _npc_probe_clock = 0.0
+        _probe_nearest_npc()
     _sync_world_visuals()
 
 func _process(delta: float) -> void:

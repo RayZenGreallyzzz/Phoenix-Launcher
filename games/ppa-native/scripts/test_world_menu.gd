@@ -4,6 +4,7 @@ extends Control
 # save mutations happen here. Menu/stash persists across all 8 visual classes.
 const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const SHARED_STASH = preload("res://scripts/test_shared_storage.gd")
+const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 
 var account: Dictionary = {}
 var class_key := "gnome"
@@ -303,7 +304,6 @@ func _show_npcs() -> void:
     _line("9 NPC размещены по оригинальным координатам живой PPA.", true, true)
     _line("Подойди к NPC в городе и нажми «ПОГОВОРИТЬ».", true)
     _spacer()
-    const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
     for npc in NPC_CATALOG.NPCS:
         _line(str(npc.get("name", "?")) + " · (" + str(int(npc.get("x", 0))) + ", " + str(int(npc.get("y", 0))) + ") исходного арта", true)
 
