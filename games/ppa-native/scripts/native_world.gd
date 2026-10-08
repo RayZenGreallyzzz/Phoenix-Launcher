@@ -657,6 +657,11 @@ func _resolve_city_collision(target: Vector2) -> Vector2:
 
     return resolved
 
+# Shared camera bounds for Peace City and future native world scenes.
+# Overridden by DungeonWorld to match the genuine PPA dungeon texture.
+func _map_world_size() -> Vector2:
+    return Vector2(CITY_W, CITY_H)
+
 func _sync_world_visuals() -> void:
     if size.x < 2.0 or size.y < 2.0:
         return
@@ -665,11 +670,12 @@ func _sync_world_visuals() -> void:
         city_world.scale = MAP_SCALE
         # Match the web camera: clamp to the town edges, rather than exposing
         # an empty border. The 3D player is placed at the actual 2D screen pos.
+        var bounds := _map_world_size()
         var offset_x := size.x * 0.5 - world_pos_px.x
         var offset_y := size.y * 0.5 - world_pos_px.y
         city_world.position = Vector2(
-            clampf(offset_x, size.x - CITY_W, 0.0) if CITY_W > size.x else (size.x - CITY_W) * 0.5,
-            clampf(offset_y, size.y - CITY_H, 0.0) if CITY_H > size.y else (size.y - CITY_H) * 0.5
+            clampf(offset_x, size.x - bounds.x, 0.0) if bounds.x > size.x else (size.x - bounds.x) * 0.5,
+            clampf(offset_y, size.y - bounds.y, 0.0) if bounds.y > size.y else (size.y - bounds.y) * 0.5
         )
 
     if viewport_3d:
