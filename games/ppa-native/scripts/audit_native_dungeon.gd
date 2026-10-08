@@ -37,6 +37,37 @@ func _check() -> void:
     if toggle == null:
         _fail("mask-alignment diagnostic button missing")
         return
+    # Regression for tablet report: NativeWorld._input receives touch BEFORE
+    # button _gui_input. Joystick must not claim left-side toggle touches.
+    if toggle.size.y < 44.0:
+        _fail("mask toggle has a too-small touch target")
+        return
+    var toggle_center: Vector2 = toggle.get_global_rect().get_center()
+    if toggle_center.x >= scene.size.x * 0.5:
+        _fail("test did not exercise left-half joystick interception")
+        return
+    if scene._joy_point_allowed(toggle_center):
+        _fail("smart joystick still intercepts mask-toggle touch")
+        return
+    var touch := InputEventScreenTouch.new()
+    touch.pressed = true
+    touch.index = 91
+    touch.position = toggle_center
+    scene._input(touch)
+    if scene._joy_touch_id != -1:
+        _fail("mask toggle claimed as joystick touch in _input")
+        return
+    var mouse := InputEventMouseButton.new()
+    mouse.button_index = MOUSE_BUTTON_LEFT
+    mouse.pressed = true
+    mouse.position = toggle_center
+    scene._input(mouse)
+    if scene._joy_mouse_active:
+        _fail("mask toggle claimed as joystick mouse input")
+        return
+    if not scene._joy_point_allowed(Vector2(90.0, 230.0)):
+        _fail("fix accidentally disabled ordinary left-side joystick")
+        return
     if absf(scene._movement_speed_px() - scene.MOVE_SPEED_PX * world_size.x / 4096.0) > 0.01:
         _fail("dungeon move speed not matching world scaling")
         return
@@ -99,9 +130,12 @@ func _check() -> void:
     if scene._map_world_size() != world_size or scene._world_to_mask_uv(scene.world_pos_px) != scene._world_to_mask_uv(scene._entrance):
         _fail("portrait resizing modified dungeon world/mask alignment")
         return
+    if scene._joy_point_allowed(toggle.get_global_rect().get_center()):
+        _fail("portrait joystick intercepts diagnostic button")
+        return
     print("PPA_DUNGEON_WALK_TEST_OK world=", world_size,
         " mask=", scene._mask_image.get_size(), " entrance=", scene._entrance,
         " collisions=8points+slide original_art=1 world_scale=", scene._render_to_world_scale,
-        " mask_y_drift=0 overlay=1 portrait=1 mobs=0 server_writes=0")
+        " mask_y_drift=0 overlay=1 portrait=1 button_touch=1 joystick_ok=1 mobs=0 server_writes=0")
     scene.queue_free()
     quit(0)
