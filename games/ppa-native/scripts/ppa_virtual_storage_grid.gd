@@ -17,6 +17,7 @@ var _cell_size := 48.0
 var _stride := 53.0
 var _host: ScrollContainer
 var _last_visible := Vector2i.ZERO
+var _verified_items: Array = []
 
 func configure(kind: String, host: ScrollContainer, desired_columns: int = 4) -> void:
     storage_kind = kind
@@ -31,6 +32,12 @@ func configure(kind: String, host: ScrollContainer, desired_columns: int = 4) ->
     if _host != null and not _host.get_v_scroll_bar().value_changed.is_connected(_on_scroll):
         _host.get_v_scroll_bar().value_changed.connect(_on_scroll)
     _fit_cells()
+
+func apply_items_readonly(items: Array) -> void:
+    # This grid has no item actions. It only paints already authenticated
+    # save data, and only the visible rows, so even 500 slots stay cheap.
+    _verified_items = items.duplicate(true)
+    queue_redraw()
 
 func _fit_cells() -> void:
     if capacity <= 0 or columns <= 0:
@@ -79,6 +86,16 @@ func _draw() -> void:
         draw_rect(rect, EDGE, false, 1.2, true)
         draw_line(top_left + Vector2(3, 3),
             top_left + Vector2(_cell_size - 3, 3), SHINE, 1.0, true)
+        if index < _verified_items.size() and _verified_items[index] is Dictionary:
+            var item: Dictionary = _verified_items[index]
+            if not item.is_empty():
+                var name_text := str(item.get("name", "Предмет")).left(8)
+                var qty := int(item.get("qty", item.get("count", 1)))
+                draw_string(ThemeDB.fallback_font, top_left + Vector2(4, _cell_size * 0.47),
+                    name_text, HORIZONTAL_ALIGNMENT_LEFT, _cell_size - 8.0, 9, Color("#E0C68C"))
+                if qty > 1:
+                    draw_string(ThemeDB.fallback_font, top_left + Vector2(4, _cell_size - 5),
+                        "×" + str(qty), HORIZONTAL_ALIGNMENT_RIGHT, _cell_size - 8.0, 9, Color("#DFE4E6"))
 
 func rendered_slot_count() -> int:
     return _last_visible.y - _last_visible.x
