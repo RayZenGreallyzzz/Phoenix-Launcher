@@ -1,0 +1,36 @@
+name: Validate PPA native original shop catalog extractors
+on:
+  push:
+    branches: ["feature/godot-server-readonly-20261009"]
+    paths: [".github/workflows/test-ppa-native-shop-generator-20261010.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-original-ppa-shop-catalogs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract original LIVE public blacksmith and premium items (no auth)
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_forge_catalog.py
+          python3 games/ppa-native/tools/generate_ppa_premium_catalog.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          d=Path('games/ppa-native/scripts')
+          a=json.loads((d/'ppa_forge_catalog_generated.gd').read_text().split("const CATALOG = ",1)[1])
+          b=json.loads((d/'ppa_premium_catalog_generated.gd').read_text().split("const CATALOG = ",1)[1])
+          assert len(a['rows'])>=35
+          assert len(b['goods'])>=8
+          assert len(b['bundles'])==5 and len(b['subscriptions'])==3
+          assert any(x['id']=='acc:ring:legendary' and x['price']==12000 for x in a['rows'])
+          print('PPA_NATIVE_LIVE_SHOPS_SOURCE_PARITY_OK',
+                'recipes=',len(a['rows']),'goods=',len(b['goods']),
+                'bundles=',len(b['bundles']),'plans=',len(b['subscriptions']),
+                'writes=0',flush=True)
+          PY
