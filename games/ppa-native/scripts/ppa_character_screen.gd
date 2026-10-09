@@ -98,6 +98,9 @@ func clear_readonly_save() -> void:
 func _real_bag() -> Array:
     return _server_inventory.get("bag", []) if _server_inventory_verified else []
 
+func _real_resource_items() -> Array:
+    return _server_inventory.get("resource_items", []) if _server_inventory_verified else []
+
 func _real_equipment() -> Dictionary:
     return _server_inventory.get("equipped", {}) if _server_inventory_verified else {}
 
@@ -568,15 +571,21 @@ func _draw_inventory() -> void:
     var bag_line := HBoxContainer.new()
     bag_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _page_container.add_child(bag_line)
-    var bag_label := _text("СУМКА", 9, Color("#DCAE4C"))
+    var real_bag := _real_bag()
+    var real_resources := _real_resource_items()
+    var gear_count := 0
+    for candidate in real_bag:
+        if candidate is Dictionary and not (candidate as Dictionary).is_empty():
+            gear_count += 1
+    var occupied := gear_count + real_resources.size()
+    # Original Telegram PPA: bag (gear) PLUS virtual resourceItems (stacks).
+    var bag_title := "СУМКА"
+    if _server_inventory_verified:
+        bag_title += " · %d ШМОТ · %d СТАКОВ" % [gear_count, real_resources.size()]
+    var bag_label := _text(bag_title, 8, Color("#DCAE4C"))
     bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
-    var real_bag := _real_bag()
-    var occupied := 0
-    for candidate in real_bag:
-        if candidate is Dictionary and not (candidate as Dictionary).is_empty():
-            occupied += 1
     var count := _text((str(occupied) if _server_inventory_verified else "—") + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
     count.name = "OriginalPPABagCount"
     count.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -631,7 +640,9 @@ func _draw_inventory() -> void:
         slot.custom_minimum_size = Vector2(cell_side, cell_side)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var unlocked := i < 50
-        var item: Dictionary = SERVER_VIEW.item_at(real_bag, i)
+        var virtual_index := i - real_bag.size()
+        var is_virtual := virtual_index >= 0
+        var item: Dictionary = SERVER_VIEW.item_at(real_resources, virtual_index) if is_virtual else SERVER_VIEW.item_at(real_bag, i)
         var locked := not unlocked and item.is_empty()
         slot.disabled = locked
         slot.modulate.a = 1.0 if not locked else 0.40
@@ -648,7 +659,10 @@ func _draw_inventory() -> void:
         slot.add_theme_stylebox_override("disabled", slot_style)
         slot.disabled = locked or not _server_inventory_verified
         if not item.is_empty() and _server_inventory_verified:
-            slot.pressed.connect(func(): select_item_requested.emit("bag", i))
+            if is_virtual:
+                slot.pressed.connect(select_item_requested.emit.bind("resource", virtual_index))
+            else:
+                slot.pressed.connect(select_item_requested.emit.bind("bag", i))
         grid.add_child(slot)
         _bind_item_icon(item, slot)
     var info := PanelContainer.new()
