@@ -1,0 +1,26 @@
+name: Audit original PPA inventory schema (public source only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/godot-server-readonly-20261009
+    paths:
+      - games/ppa-native/tools/audit_live_inventory_schema.py
+      - .github/workflows/ppa-audit-original-inventory.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download only deployed original PPA character iframe (no credentials)
+        run: python3 games/ppa-native/tools/extract_original_ppa_frame.py
+      - name: Read exact PUBLIC PPA virtual inventory assembly
+        run: |
+          python3 games/ppa-native/tools/audit_live_inventory_schema.py | tee /tmp/ppa-schema.log
+          grep -q 'PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK' /tmp/ppa-schema.log
