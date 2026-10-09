@@ -17,6 +17,16 @@ const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
+# Exact deployed original PPA PVP_SHOP_ITEMS (reference catalog only).
+# Current rating, purchased-today limits, and live purchases require arena API.
+const ORIGINAL_PVP_SHOP = [
+    {"id":"hp_medium_3","name":"Среднее зелье HP ×3","icon":"❤","price":15,"limit":5,"minRating":0},
+    {"id":"mp_medium_3","name":"Среднее зелье MP ×3","icon":"◆","price":15,"limit":5,"minRating":0},
+    {"id":"stone_normal","name":"Камень заточки","icon":"◇","price":35,"limit":5,"minRating":1000},
+    {"id":"xp_scroll","name":"Свиток опыта +10% · 3 мин","icon":"✦","price":50,"limit":3,"minRating":1000},
+    {"id":"stone_premium","name":"Премиум камень заточки","icon":"✧","price":90,"limit":2,"minRating":1200},
+    {"id":"stone_rune","name":"Рунический камень заточки","icon":"⬢","price":180,"limit":1,"minRating":1400}
+]
 const GOLD := Color("#F6C66F")
 const TEXT := Color("#E5E4DE")
 const SUB := Color("#9FA8AB")
@@ -994,7 +1004,10 @@ func _show_arena() -> void:
         "rating":
             _message("РЕЙТИНГ PVP", "Бои, победы, позиции и таблица лидеров должны совпадать с Telegram.")
         "shop":
-            _message("МАГАЗИН АРЕНЫ", "Жетоны отображаются из реального сейва. Предложения и дневные остатки требуют отдельного подтверждённого каталога.")
+            _message("МАГАЗИН АРЕНЫ", "Шесть оригинальных товаров PPA и утверждённые цены. Остатки покупок сегодня и рейтинг требуют онлайн-состояния.")
+            for offer in ORIGINAL_PVP_SHOP:
+                _mini_row(str(offer["icon"]) + " " + str(offer["name"]),
+                    str(offer["price"]) + " ⚔ · рейтинг " + str(offer["minRating"]) + "+ · лимит " + str(offer["limit"]))
             _locked_action("КУПИТЬ")
         "history":
             _message("ИСТОРИЯ БОЁВ", "Исходы матчей и награды по подтверждённым серверным записям.")
