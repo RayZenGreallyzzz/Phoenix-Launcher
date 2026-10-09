@@ -37,11 +37,15 @@ func eligible(item: Dictionary) -> bool:
     if item.is_empty():
         return false
     var kind := str(item.get("kind", "")).to_lower()
+    var equip_slot := str(item.get("ppaEquipmentSlot", item.get("equipSlot", ""))).to_lower()
+    var title := str(item.get("name", "")).to_lower()
     match mode:
         "sell": return not bool(item.get("bound", false)) and bool(item.get("tradeable", true))
-        "equipment": return GEAR.has(kind)
-        "stone": return MATERIAL.has(kind) or "заточ" in str(item.get("name", "")).to_lower()
-        "rune": return kind == "rune"
+        # Original PPA equipment normally has kind=gear, slot=armor/weapon.
+        "equipment": return GEAR.has(equip_slot) or GEAR.has(kind)
+        "stone": return MATERIAL.has(kind) or ("заточ" in title and not ("руна" in title))
+        # Premium sharpening runes live in saved stones.rune, not runeSlots.
+        "rune": return kind == "rune" or ("руна" in title and "заточ" in title)
         _: return true
 
 func item_for(key: String) -> Dictionary:
