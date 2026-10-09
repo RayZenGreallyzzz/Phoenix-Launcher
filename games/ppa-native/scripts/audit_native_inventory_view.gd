@@ -61,6 +61,40 @@ func _run() -> void:
     if cloud_only_diag.get("nested_bag",0)!=-1:
         _fail("A missing nested inventory should not look like zero items")
         return
+    # The original PPA combines two physical bag pieces with independently
+    # saved materials/potions/stones/grimoire stacks into the same UI grid.
+    var live_cloud := {
+        "bag": [
+            {"uid":"real-armor", "name":"Броня лучника","slot":"armor"},
+            {"uid":"real-gloves", "name":"Перчатки лучника","slot":"gloves"}
+        ],
+        "equipped":{"ring":ring},
+        "materials":{"Серебряная руда":16, "Синий кристалл":4},
+        "stones":{"normal":3},
+        "potions":{"hp":132,"mp":125},
+        "consumables":{"portalStone":1},
+        "grimoires":{"arch_piercing_shot":1}
+    }
+    var original_view := VIEW.from_save(live_cloud)
+    var stacks: Array = original_view.get("resource_items", [])
+    if original_view.get("bag", []).size()!=2 or stacks.size()!=7:
+        _fail("Original virtual stack projection missing or added fictitious items")
+        return
+    if str(stacks[0].get("name",""))!="Серебряная руда" or int(stacks[0].get("count",0))!=16:
+        _fail("Material count/order no longer match the original Telegram save")
+        return
+    if str(stacks[3].get("name",""))!="Малое зелье HP" or int(stacks[3].get("count",0))!=132:
+        _fail("Live original PPA HP potion stack lost")
+        return
+    if str(stacks[6].get("name","")).find("Гримуар")<0:
+        _fail("Live original PPA grimoire failed to resolve from authoritative count")
+        return
+    if ART.art_path(stacks[0], "archer").is_empty() or ART.art_path(stacks[6], "archer").is_empty():
+        _fail("Official PPA resource/grimoire art is not resolved")
+        return
+    if VIEW.diagnose(live_cloud).get("server_stacks",0)!=7:
+        _fail("Server snapshot stack-count diagnostic incorrect")
+        return
     if not snap.get("has_bag",false) or snap.get("bag",[]).size()!=3:
         _fail("Original bag shape was lost")
         return
