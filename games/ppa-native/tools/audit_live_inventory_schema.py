@@ -41,9 +41,13 @@ match = PAGE.find(needle)
 if match < 0:
     raise RuntimeError("Original resourceItems builder moved; fail closed")
 end = PAGE.find("})();", match)
-if end < 0 or end - match > 24000:
-    raise RuntimeError("Original resourceItems builder end missing")
-block = unescape(PAGE[match:end+5])
+# The production inventory projection is long and can use nested closures.
+# Print a bounded public-code window without requiring a specific formatter.
+if end < 0 or end - match > 18000:
+    end = min(len(PAGE), match + 14000)
+else:
+    end += 5
+block = unescape(PAGE[match:end])
 print("PPA_RESOURCE_ITEMS_BUILDER_BEGIN", len(block), flush=True)
 for pos in range(0,len(block),2600):
     print("PPA_RESOURCE_ITEMS_PART",pos,repr(block[pos:pos+2600]),flush=True)
