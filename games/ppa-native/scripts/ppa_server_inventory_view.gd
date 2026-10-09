@@ -3,6 +3,9 @@ extends RefCounted
 # Read-only VIEW of the existing Telegram PPA cloud save. Never normalizes
 # items into the local test storage or calls any write endpoint.
 const EMPTY: Array = []
+# Generated at build time from the PUBLIC current Telegram PPA catalogs.
+# These are ONLY names/art; ownership and counts come from the authenticated D1 snapshot.
+const LIVE_ART = preload("res://scripts/ppa_item_catalog_generated.gd")
 
 static func _as_bag(raw: Variant) -> Array:
     if raw is Array:
@@ -49,14 +52,127 @@ static func _first_value(sources: Array[Dictionary], keys: Array[String]) -> Var
                 return value
     return null
 
+static func _raw_dictionary(save: Dictionary, name: String) -> Dictionary:
+    var value: Variant = save.get(name, null)
+    return value as Dictionary if value is Dictionary else {}
+
+static func _positive_count(value: Variant) -> int:
+    if value is int or value is float:
+        return maxi(0, int(value))
+    if value is String:
+        var text := str(value)
+        if text.is_valid_int():
+            return maxi(0, int(text))
+    return 0
+
+static func _add_stack(output: Array, kind: String, name: String, count: int, rarity_value: String, art: String, ico: String, extra: Dictionary = {}) -> void:
+    if count <= 0:
+        return
+    var item := {
+        "kind": kind,
+        "name": name,
+        "count": count,
+        "rarity": rarity_value,
+        "img": art,
+        "icon": ico,
+        "ppa_native_virtual": true
+    }
+    item.merge(extra, true)
+    output.append(item)
+
+static func resource_stacks_from_save(save: Dictionary) -> Array:
+    # Production PPA sendInvState builds resourceItems from precisely these
+    # categories, in this order. Recreate ONLY the visual projection. Never
+    # make a fake owned item, change the D1 save or assume drop quantities.
+    var result: Array = []
+    var official: Dictionary = LIVE_ART.ITEMS
+    var material_catalog: Dictionary = official.get("materials", {})
+    var stone_art: Dictionary = official.get("stone_art", {})
+    var shop_art: Dictionary = official.get("shop_art", {})
+    var grimoire_catalog: Dictionary = official.get("grimoires", {})
+    var materials := _raw_dictionary(save, "materials")
+    for name in materials.keys():
+        var count := _positive_count(materials[name])
+        if count == 0:
+            continue
+        var info: Dictionary = material_catalog.get(str(name), {})
+        _add_stack(result, "material", str(name), count, str(info.get("rarity", "common")),
+            str(info.get("src", "")), "◆")
+    var stones := _raw_dictionary(save, "stones")
+    for row in [
+        ["normal", "Обычный камень заточки", "common", "normalStone", "◆"],
+        ["premium", "Премиум камень заточки", "rare", "premiumStone", "✦"],
+        ["rune", "Премиум руна заточки", "rare", "premiumRune", "ᚱ"]
+    ]:
+        _add_stack(result, "stone", str(row[1]), _positive_count(stones.get(row[0], 0)),
+            str(row[2]), str(stone_art.get(row[3], "")), str(row[4]))
+    var potions := _raw_dictionary(save, "potions")
+    for row in [
+        ["hp", "hp_small", "Малое зелье HP", "common", "🧪"],
+        ["hpMedium", "hp_medium", "Среднее зелье HP", "uncommon", "⚗️"],
+        ["hpLarge", "hp_large", "Большое зелье HP", "rare", "🏺"],
+        ["mp", "mp_small", "Малое зелье маны", "common", "🔷"],
+        ["mpMedium", "mp_medium", "Среднее зелье маны", "uncommon", "🔷"],
+        ["mpLarge", "mp_large", "Большое зелье маны", "rare", "🔷"]
+    ]:
+        _add_stack(result, "consumable", str(row[2]), _positive_count(potions.get(row[0], 0)),
+            str(row[3]), str(shop_art.get(row[1], "")), str(row[4]),
+            {"consumableId": str(row[1])})
+    var consumables := _raw_dictionary(save, "consumables")
+    for row in [
+        ["magicSmall", "magic_small", "Магическая сила", "uncommon", "🔥"],
+        ["atkSpeedSmall", "atk_speed_small", "Скорость атаки", "uncommon", "🪽"],
+        ["speedSmall", "run_speed_small", "Скорость бега", "uncommon", "👢"],
+        ["physSmall", "phys_small", "Физическая сила", "uncommon", "💪"],
+        ["xpScroll", "xp_scroll", "Свиток опыта", "uncommon", "📜"],
+        ["premiumHpRegen", "premium_hp_regen", "Премиум банка HP", "epic", "❤"],
+        ["premiumMpRegen", "premium_mp_regen", "Премиум банка MP", "epic", "◆"]
+    ]:
+        var src := str(shop_art.get(row[1], ""))
+        if row[1] == "premium_hp_regen":
+            src = str(stone_art.get("premiumHp", ""))
+        elif row[1] == "premium_mp_regen":
+            src = str(stone_art.get("premiumMp", ""))
+        _add_stack(result, "consumable", str(row[2]), _positive_count(consumables.get(row[0], 0)),
+            str(row[3]), src, str(row[4]), {"consumableId": str(row[1])})
+    var feathers := _raw_dictionary(save, "feathers")
+    _add_stack(result, "material", "Перо Феникса", _positive_count(feathers.get("phoenix", 0)),
+        "rare", str(stone_art.get("feather", "")), "🪶")
+    for row in [
+        ["luckCoin", "luck_coin", "Премиум-монета удачи", "epic", "🍀"],
+        ["portalStone", "portal_stone", "Свиток телепорта", "epic", "📜"]
+    ]:
+        var src := str(shop_art.get(row[1], ""))
+        if row[1] == "luck_coin":
+            src = str(stone_art.get("luckCoin", ""))
+        _add_stack(result, "consumable", str(row[2]), _positive_count(consumables.get(row[0], 0)),
+            str(row[3]), src, str(row[4]), {"consumableId": str(row[1])})
+    _add_stack(result, "consumable", "Карточка смены имени",
+        _positive_count(save.get("renameCards", 0)), "epic", "", "✒️",
+        {"consumableId": "rename_card"})
+    var grimoires := _raw_dictionary(save, "grimoires")
+    for id in grimoires.keys():
+        var amount := _positive_count(grimoires[id])
+        if amount == 0:
+            continue
+        var info: Dictionary = grimoire_catalog.get(str(id), {})
+        if info.is_empty():
+            continue
+        _add_stack(result, "grimoire", "Гримуар · " + str(info.get("name", "")), amount,
+            "rare", str(info.get("card", "")), "📖",
+            {"skillId": str(id), "classKey": str(info.get("classKey", ""))})
+    return result
+
 static func from_save(save: Dictionary) -> Dictionary:
     var sources := _sources(save)
     var bag_raw: Variant = _first_value(sources, ["bag", "items"])
     var equipped_raw: Variant = _first_value(sources, ["equipped", "equipment"])
     var storage_raw: Variant = _first_value(sources, ["storage"])
+    var resource_items := resource_stacks_from_save(save)
     return {
         "save": save.duplicate(true),
         "bag": _as_bag(bag_raw),
+        "resource_items": resource_items,
         "has_bag": bag_raw is Array or bag_raw is Dictionary,
         "equipped": _as_equipment(equipped_raw),
         "has_equipped": equipped_raw is Dictionary,
