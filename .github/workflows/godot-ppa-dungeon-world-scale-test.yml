@@ -284,6 +284,24 @@ jobs:
               print('PPA BOOT SPLASH:',im.size,output.stat().st_size)
           PY
 
+      - name: Bundle original live PPA gear and resource artwork into APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/bundle_live_ppa_item_art.py 2>&1 | tee /tmp/ppa-item-art-bundle.log
+          grep -q 'PPA_NATIVE_LIVE_ITEM_ART_OK' /tmp/ppa-item-art-bundle.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('games/ppa-native/assets/ppa_item_icons')
+          data=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+          assert data['count'] >= 50
+          assert len(data['items']) == data['count']
+          for item in data['items']:
+              assert (root/item.removeprefix('/assets/')).is_file()
+          print('PPA_NATIVE_ITEM_ART_BUNDLE_VALID',data['count'],data['bytes'])
+          PY
+
       - name: Import native PPA project
         shell: bash
         run: |
