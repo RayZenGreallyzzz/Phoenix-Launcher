@@ -30,6 +30,16 @@ const EVENT_ITEMS := [
     {"id":"citadel", "group":"war", "title":"ЦИТАДЕЛЬ ФЕНИКСА", "detail":"Клановая война, захват, вход и награды — только через общий сервер."},
     {"id":"updates", "group":"updates", "title":"ПОСЛЕДНИЕ ОБНОВЛЕНИЯ", "detail":"Здесь появятся изменения из общего списка обновлений PPA."}
 ]
+# Reference exchange from original deployed PPA TITAN_SHARD_OFFERS.
+# Real claims and spending must be server-authoritative and are disabled.
+const TITAN_SHARD_OFFERS = [
+    {"name":"Обычная заточка ×3","icon":"◆","cost":1},
+    {"name":"Премиум-реген HP ×3","icon":"❤","cost":2},
+    {"name":"Свиток телепорта ×2","icon":"📜","cost":3},
+    {"name":"Редкий материал ×1","icon":"✦","cost":4},
+    {"name":"Премиум-заточка ×1","icon":"💎","cost":6},
+    {"name":"Премиум руна ×1","icon":"ᚱ","cost":12}
+]
 const GOLD := Color("#F5CA79")
 const WHITE := Color("#E8E0D1")
 const MUTED := Color("#A99A81")
@@ -305,6 +315,14 @@ func _events() -> void:
             if id == "titan":
                 var shards: Variant = _player_data_readonly.get("titanShards", null)
                 _section("ОСКОЛКИ КРИСТАЛЬНОГО ТИТАНА", str(shards) if shards != null else "— · нет сохранённых данных")
+                _section("ОБМЕН ТРОФЕЕВ · КАТАЛОГ PPA", "Оригинальные награды и цены. Обмен заблокирован до серверной операции.")
+                for offer in TITAN_SHARD_OFFERS:
+                    _section(str(offer["icon"]) + " " + str(offer["name"]),
+                        str(offer["cost"]) + " осколк(ов) · не доступно для покупки")
+            elif id == "ruri":
+                _section("РАСПИСАНИЕ РУРИ", "В оригинальном событии цикл начинается 1-го числа, длительность 10 дней. Текущий статус подтвердит сервер.")
+            elif id == "mimic":
+                _section("РАСПИСАНИЕ МИМИКА-СОМБРЕРО", "В оригинальном событии цикл начинается 25-го числа, длительность 5 дней. Текущий статус подтвердит сервер.")
             _section("СТАТУС / ВРЕМЯ", "— · требуется подтверждение от сервера PPA")
             _locked("ВОЙТИ / ПОЛУЧИТЬ НАГРАДУ")
     if found == 0:
