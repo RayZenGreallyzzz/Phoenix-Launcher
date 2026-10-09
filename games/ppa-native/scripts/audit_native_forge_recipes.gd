@@ -87,7 +87,30 @@ func _check() -> void:
     if npc._forge_owned_material("Рунический слиток") != 444 or npc._forge_owned_material("Перо Феникса") != 4:
         _fail("Materials and phoenix feathers must be read from the signed save")
         return
-    for cat in ["legendary","accessories","pets","enhance","rune_fusion"]:
+    for cat in ["legendary", "accessories", "pets"]:
+        npc._select_tab(cat)
+        await process_frame
+        if not npc.is_open():
+            _fail("Smith cannot open original tab " + cat)
+            return
+        var canonical: Dictionary = {}
+        for offer in rows:
+            if str(offer.get("tab", "")) == cat:
+                canonical = offer
+                break
+        if canonical.is_empty():
+            _fail("Canonical smith catalog does not include " + cat)
+            return
+        var item_id := str(canonical.get("id", ""))
+        if npc.find_child("NpcProduct_" + item_id, true, false) == null:
+            _fail("Canonical smith " + cat + " offer is not rendered: " + item_id)
+            return
+        npc._select_item(item_id)
+        await process_frame
+        if npc.selected_id != item_id:
+            _fail("Selecting canonical smith " + cat + " item failed")
+            return
+    for cat in ["enhance", "rune_fusion"]:
         npc._select_tab(cat)
         await process_frame
         if not npc.is_open():
@@ -96,5 +119,5 @@ func _check() -> void:
     if before != JSON.stringify(synthetic_save):
         _fail("Read-only smith UI mutated an authenticated save")
         return
-    print("PPA_NATIVE_FORGE_CATALOG_READONLY_OK source=original-live-smith epic=1 legendary=1 pets=1 wings=1 cloak=1 artifact=1 forge_tabs=6 writes=0")
+    print("PPA_NATIVE_FORGE_CATALOG_READONLY_OK source=original-live-smith epic=1 legendary=1 pets=1 wings=1 cloak=1 artifact=1 forge_tabs=6 all_original_recipe_cards=1 writes=0")
     quit(0)
