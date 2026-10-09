@@ -163,6 +163,64 @@ static func resource_stacks_from_save(save: Dictionary) -> Array:
             {"skillId": str(id), "classKey": str(info.get("classKey", ""))})
     return result
 
+# Identical eight original Telegram PPA stat rune kinds. These definitions
+# describe items only; the actual owned quantity/slot always comes from D1.
+const RUNE_TYPES := {
+    "strength": {"name":"Руна Силы","icon":"⚔","label":"Урон","values":[2,4,6,9,13]},
+    "defense": {"name":"Руна Защиты","icon":"🛡","label":"Защита","values":[3,5,8,12,17]},
+    "agility": {"name":"Руна Ловкости","icon":"⚡","label":"Уворот","values":[1,2,3,4.5,6]},
+    "mana": {"name":"Руна Маны","icon":"🔷","label":"Макс. MP","values":[6,10,15,22,30]},
+    "health": {"name":"Руна Здоровья","icon":"❤","label":"Макс. HP","values":[5,8,12,18,25]},
+    "crit": {"name":"Руна Крита","icon":"✴","label":"Крит. шанс","values":[1,2,3,4.5,6]},
+    "speed": {"name":"Руна Скорости","icon":"➤","label":"Скорость атаки/каста","values":[2,3,4.5,6,8]},
+    "vampirism": {"name":"Руна Вампиризма","icon":"🩸","label":"Вампиризм","values":[1,2,3,4.5,6]}
+}
+const RUNE_RARITIES := ["common","uncommon","rare","epic","legendary"]
+
+static func rune_definition(key: String) -> Dictionary:
+    var bits := key.split("|")
+    if bits.size() != 2 or not RUNE_TYPES.has(bits[0]) or not RUNE_RARITIES.has(bits[1]):
+        return {}
+    var definition: Dictionary = RUNE_TYPES[bits[0]]
+    var tier_index := RUNE_RARITIES.find(bits[1])
+    var art: Dictionary = LIVE_ART.ITEMS.get("rune_art", {})
+    var value: Variant = (definition.get("values", []) as Array)[tier_index]
+    return {
+        "name": str(definition.get("name", "Руна")), "kind": "rune",
+        "key": key, "runeKey": key, "rarity": bits[1],
+        "icon": str(definition.get("icon", "ᚱ")),
+        "img": str(art.get(key, "")),
+        "valueText": str(definition.get("label", "")) + " +" + str(value) + "%",
+        "count": 1
+    }
+
+static func rune_view_from_save(save: Dictionary) -> Dictionary:
+    var owned := _raw_dictionary(save, "runes")
+    var found: Array = []
+    for key in owned.keys():
+        var item := rune_definition(str(key))
+        var quantity := _positive_count(owned[key])
+        if not item.is_empty() and quantity > 0:
+            item["count"] = quantity
+            found.append(item)
+    var equipped: Array = []
+    var slots_raw: Variant = save.get("runeSlots", [])
+    if slots_raw is Array:
+        for key in slots_raw:
+            equipped.append(rune_definition(str(key)))
+    while equipped.size() < 10:
+        equipped.append({})
+    equipped.resize(10)
+    var progress := _raw_dictionary(save, "runeProgress")
+    var level_slots := maxi(_positive_count(progress.get("levelSlots", 0)),
+        _positive_count(save.get("lvl", save.get("level", 0))) / 10)
+    var rebirth_slots := maxi(_positive_count(progress.get("rebirthSlots", 0)),
+        _positive_count(save.get("rebirths", 0)))
+    return {
+        "inventory": found, "slots": equipped,
+        "unlocked": mini(10, level_slots + rebirth_slots)
+    }
+
 static func from_save(save: Dictionary) -> Dictionary:
     var sources := _sources(save)
     var bag_raw: Variant = _first_value(sources, ["bag", "items"])
