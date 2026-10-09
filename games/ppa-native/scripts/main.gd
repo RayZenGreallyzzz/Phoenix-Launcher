@@ -353,10 +353,12 @@ func _nullable_account_text(key: String) -> String:
     return str(raw) if typeof(raw) == TYPE_STRING else ""
 
 func _show_connected() -> void:
-    var nickname := str(account.get("nickname", "Phoenix"))
-    var ppa_nickname := str(account.get("ppaNickname", nickname))
-    var class_key := str(account.get("classKey", ""))
-    var telegram_id := str(account.get("telegramId", ""))
+    var nickname := _nullable_account_text("nickname")
+    if nickname.is_empty():
+        nickname = "Phoenix"
+    var ppa_nickname := _nullable_account_text("ppaNickname")
+    var class_key := _nullable_account_text("classKey")
+    var telegram_id := _nullable_account_text("telegramId")
 
     status_label.text = "✓ Phoenix Account подключён · game ticket принят"
     status_label.add_theme_color_override("font_color", Color("#53CDAB"))
