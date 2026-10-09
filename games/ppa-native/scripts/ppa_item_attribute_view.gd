@@ -21,7 +21,7 @@ const ATTRIBUTES := {
     "plus":"Заточка", "enh":"Заточка", "upgradeLevel":"Заточка", "bm":"Боевая мощь",
     "requiredLevel":"Требуемый уровень", "levelRequired":"Требуемый уровень",
     "minLevel":"Требуемый уровень", "lvlReq":"Требуемый уровень",
-    "valueText":"Эффект", "bonusText":"Бонус", "hpPct":"HP (%)", "mpPct":"MP (%)", "atkPct":"Атака (%)", "defPct":"Защита (%)", "critDmg":"Крит. урон"
+    "valueText":"Эффект", "bonusText":"Бонус", "hpPct":"HP (%)", "mpPct":"MP (%)", "atkPct":"Атака (%)", "defPct":"Защита (%)"
 }
 const NESTED := ["stats", "baseStats", "bonuses", "bonus", "extraStats", "attributes", "effects"]
 const DESCRIPTIONS := ["description", "desc", "effectText", "useText", "bonusText", "valueText", "skillDescription"]
