@@ -77,6 +77,21 @@ static func _add_stack(output: Array, kind: String, name: String, count: int, ra
         "icon": ico,
         "ppa_native_virtual": true
     }
+    if kind == "material":
+        item["typeName"] = "Крафтовый материал"
+        item["useText"] = "Используется у кузнеца для создания предметов, аксессуаров или питомцев."
+    elif kind == "stone":
+        item["typeName"] = "Камень заточки"
+        if name == "Обычный камень заточки":
+            item["useText"] = "Заточка до +5. При неудаче вещь может потерять заточку или разрушиться в зависимости от редкости."
+        elif name == "Премиум камень заточки":
+            item["useText"] = "Безопасная заточка до +7: при неудаче теряется только камень."
+        else:
+            item["useText"] = "Премиум руна повышает шанс одной попытки заточки."
+    elif kind == "consumable":
+        item["typeName"] = "Расходуемый предмет"
+    elif kind == "grimoire":
+        item["typeName"] = "Книга навыка"
     item.merge(extra, true)
     output.append(item)
 
@@ -160,7 +175,8 @@ static func resource_stacks_from_save(save: Dictionary) -> Array:
             continue
         _add_stack(result, "grimoire", "Гримуар · " + str(info.get("name", "")), amount,
             "rare", str(info.get("card", "")), "📖",
-            {"skillId": str(id), "classKey": str(info.get("classKey", ""))})
+            {"skillId": str(id), "classKey": str(info.get("classKey", "")),
+                "useText": str(info.get("description", ""))})
     return result
 
 # Identical eight original Telegram PPA stat rune kinds. These definitions
