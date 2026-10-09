@@ -8,6 +8,7 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 # One server character remains authoritative; this gallery is visual test only.
 signal character_confirmed
 signal account_switch_requested
+signal registration_requested(nickname: String, class_key: String)
 
 var account: Dictionary = {}
 var verified_state: Dictionary = {} # Never edited by the native demo gallery.
@@ -16,6 +17,7 @@ var _class_label: Label
 var _info_label: Label
 var _status_label: Label
 var _enter_button: Button
+var _nickname_input: LineEdit
 var _preview_host: TextureRect
 var _preview_viewport: SubViewport
 var _preview_camera: Camera3D
@@ -176,6 +178,13 @@ func _build_ui() -> void:
     _name_label.clip_text = true
     details.add_child(_name_label)
 
+    _nickname_input = LineEdit.new()
+    _nickname_input.placeholder_text = "Ник нового героя (3–18 символов)"
+    _nickname_input.max_length = 18
+    _nickname_input.visible = false
+    _nickname_input.text_changed.connect(func(_value: String): _refresh_enter_button())
+    details.add_child(_nickname_input)
+
     _class_label = Label.new()
     _class_label.add_theme_font_size_override("font_size", 16)
     _class_label.add_theme_color_override("font_color", Color("#CEB7A4"))
@@ -254,6 +263,10 @@ func _refresh_account() -> void:
     if _name_label == null:
         return
     var server_key := str(account.get("classKey", "")).to_lower().strip_edges()
+    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not server_key.is_empty()
+    _nickname_input.visible = not registered and not str(account.get("telegramId", "")).is_empty()
+    _name_label.text = "СОЗДАНИЕ ГЕРОЯ" if not registered else str(account.get("ppaNickname", ""))
+    _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА" if not registered else "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
     if not HERO_CATALOG.valid_key(server_key):
         server_key = "gnome"
     _choose_class(server_key)
@@ -270,8 +283,8 @@ func _choose_class(key: String) -> void:
         return
     _selected_class_key = key
     var hero: Dictionary = HERO_CATALOG.hero_info(key)
-    var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
-    _name_label.text = nickname
+    var nickname := str(account.get("ppaNickname", ""))
+    _name_label.text = nickname if not nickname.is_empty() else "НОВЫЙ ГЕРОЙ"
     _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
     var description := str(hero.get("description", ""))
     if not verified_state.is_empty():
@@ -282,9 +295,10 @@ func _choose_class(key: String) -> void:
         description += "\nРеальный прогресс загружен только для чтения. Сумка тестового мира пока локальная."
     else:
         description += "\n\nТЕСТ: классы, сумка и склад локальные, НЕ синхронизированы с Telegram."
+    if str(account.get("ppaNickname", "")).strip_edges().is_empty() and str(account.get("telegramId", "")).is_empty():
+        description += "\n\nEmail уже авторизован. Создание первого героя откроем после безопасной миграции серверных идентификаторов."
     _info_label.text = description
-    _enter_button.disabled = str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty()
-    _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
+    _refresh_enter_button()
     for id in _class_buttons.keys():
         var button := _class_buttons[id] as Button
         if button != null:
@@ -293,8 +307,34 @@ func _choose_class(key: String) -> void:
     # Delay heavy GLB imports until the user actually selects a class.
     call_deferred("_load_preview")
 
+func _refresh_enter_button() -> void:
+    if _enter_button == null:
+        return
+    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not str(account.get("classKey", "")).strip_edges().is_empty()
+    if registered:
+        _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
+        _enter_button.disabled = false
+    else:
+        _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА"
+        var candidate := _nickname_input.text.strip_edges() if _nickname_input != null else ""
+        _enter_button.disabled = str(account.get("telegramId", "")).is_empty() or candidate.length() < 3 or candidate.length() > 18
+
+func show_registration_error(message: String) -> void:
+    if _status_label != null:
+        _status_label.text = message
+        _status_label.add_theme_color_override("font_color", Color("#F14D4C"))
+    _refresh_enter_button()
+
 func _confirm_preview() -> void:
     if account.is_empty():
+        return
+    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not str(account.get("classKey", "")).strip_edges().is_empty()
+    if not registered:
+        if str(account.get("telegramId", "")).is_empty():
+            show_registration_error("Email-only регистрация ждёт миграцию игрового ID.")
+            return
+        _enter_button.disabled = true
+        registration_requested.emit(_nickname_input.text.strip_edges(), _selected_class_key)
         return
     # Never enter with a visual class that conflicts with the real server hero.
     if not verified_state.is_empty() and _selected_class_key != str(account.get("classKey", "")).to_lower():
