@@ -78,6 +78,8 @@ func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_a
     # This is a VIEW only. Never merge with the local test bag/equipment.
     _server_inventory = SERVER_VIEW.from_save(save)
     _server_diagnostics = SERVER_VIEW.diagnose(save)
+    _server_skills = _project_server_skill_cards(save)
+    _server_skills_received = true
     _server_save_version = save_version
     _server_saved_at = saved_at
     _server_inventory_verified = true
@@ -109,6 +111,44 @@ func _real_equipment() -> Dictionary:
 func _bind_item_icon(item: Dictionary, button: Button) -> void:
     if _icon_loader != null and not item.is_empty():
         _icon_loader.bind_button(item, class_key, button)
+
+func _project_server_skill_cards(save: Dictionary) -> Dictionary:
+    # Matches original Telegram sendInvState(): the canonical skill cards
+    # appear for the selected class even when rank=0; only the progress is
+    # taken from the actual D1 save. No invented learned skills or book counts.
+    var cls := str(save.get("classKey", save.get("cls", account.get("classKey", class_key)))).to_lower()
+    if not ORIGINAL_GRIMOIRES.has_method("class_info"):
+        return {"active":[], "passive":[]}
+    var definitions: Dictionary = ORIGINAL_GRIMOIRES.class_info(cls)
+    var ranks_raw: Variant = save.get("skillRanks", {})
+    var owned_raw: Variant = save.get("grimoires", {})
+    var drops_raw: Variant = save.get("grimoireRankDrops", {})
+    var ranks: Dictionary = ranks_raw if ranks_raw is Dictionary else {}
+    var books: Dictionary = owned_raw if owned_raw is Dictionary else {}
+    var drops: Dictionary = drops_raw if drops_raw is Dictionary else {}
+    var result := {"active":[], "passive":[]}
+    for category in ["active", "passive"]:
+        for raw in definitions.get(category, []):
+            if not raw is Dictionary:
+                continue
+            var id := str(raw.get("id", ""))
+            if id.is_empty():
+                continue
+            var skill: Dictionary = (raw as Dictionary).duplicate(true)
+            var rank := clampi(int(ranks.get(id, 0)), 0, 5)
+            var total := maxi(0, int(books.get(id, 0)))
+            var grades: Variant = drops.get(id, {})
+            var by_rank: Dictionary = grades if grades is Dictionary else {}
+            var third := mini(total, maxi(0, int(by_rank.get("3", by_rank.get(3, 0)))))
+            var second := mini(total - third, maxi(0, int(by_rank.get("2", by_rank.get(2, 0)))))
+            skill["rank"] = rank
+            skill["count"] = total
+            skill["book1"] = total - second - third
+            skill["book2"] = second
+            skill["book3"] = third
+            skill["max"] = rank >= 5
+            (result[category] as Array).append(skill)
+    return result
 
 func apply_authoritative_skill_snapshot(snapshot: Dictionary) -> void:
     # Called ONLY by a future authenticated PPA player-state bridge.
@@ -820,7 +860,7 @@ func _draw_source_skill_card(skill: Dictionary, passive: bool) -> void:
     # Godot may auto-rename repeated siblings (@PanelContainer@N). CI and
     # runtime must identify source skill slots by metadata, not node names.
     card.set_meta("ppa_skill_slot", true)
-    card.set_meta("ppa_skill_verified", has_skill)
+    card.set_meta("ppa_skill_verified", has_skill and rank > 0)
     card.custom_minimum_size.y = 90.0
     card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     var bg := _style_box(Color("#17191B"), Color("#685235"), 7, 1)
