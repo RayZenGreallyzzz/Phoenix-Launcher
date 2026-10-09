@@ -442,7 +442,7 @@ func _mini_row(value: String, right: String = "") -> void:
     # column on portrait Android screens. Use full-width stacked labels.
     if right.length() > 13 or value.length() > 42:
         var stacked := VBoxContainer.new()
-        stacked.name = "NpcFullWidthPriceRow"
+        stacked.name = "NpcFullWidthPriceRow_" + str(_body.get_child_count())
         stacked.add_theme_constant_override("separation", 2)
         stacked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _body.add_child(stacked)
