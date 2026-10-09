@@ -309,6 +309,14 @@ jobs:
           print('PPA_NATIVE_ITEM_ART_BUNDLE_VALID',data['count'],data['bytes'])
           PY
 
+      - name: Generate exact original PPA material, potion, grimoire artwork catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_item_catalog.py 2>&1 | tee /tmp/ppa-items-catalog.log
+          grep -q 'PPA_CANONICAL_ITEM_CATALOG_OK' /tmp/ppa-items-catalog.log
+          test -s games/ppa-native/scripts/ppa_item_catalog_generated.gd
+
       - name: Import native PPA project
         shell: bash
         run: |
