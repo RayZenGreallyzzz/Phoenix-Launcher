@@ -218,6 +218,7 @@ static func diagnose(save: Dictionary) -> Dictionary:
         "nested_bag": bag_nested,
         "nested_equipped": equip_nested,
         "shown_bag": _count_bag(view.get("bag", null)),
+        "server_stacks": (view.get("resource_items", []) as Array).size(),
         "shown_equipped": _count_equipped(view.get("equipped", null)),
         "root_bag_text": _count_text(bag_root),
         "root_equipped_text": _count_text(equip_root),
