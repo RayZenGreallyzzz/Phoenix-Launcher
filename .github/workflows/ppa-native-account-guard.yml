@@ -1,0 +1,20 @@
+name: Native PPA account boundary (no APK publication)
+on:
+  pull_request:
+    paths:
+      - 'games/ppa-native/scripts/main.gd'
+      - 'games/ppa-native/scripts/character_select.gd'
+      - 'games/ppa-native/tools/test_native_auth_boundary.py'
+      - 'app/src/main/java/com/phoenixgames/launcher/runtime/GameRuntime.kt'
+      - '.github/workflows/ppa-native-account-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-auth-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no stale session/foreign hero or fake synced inventory
+        run: python3 games/ppa-native/tools/test_native_auth_boundary.py
