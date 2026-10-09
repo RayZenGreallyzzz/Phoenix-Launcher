@@ -89,6 +89,17 @@ static func art_path(item: Dictionary, actual_class: String) -> String:
             return path
     return ""
 
+func _bundled_texture(path: String) -> Texture2D:
+    # Use approved Telegram PPA images already packed into the APK.
+    # They load lazily when the inventory slot appears, not at app launch.
+    var file_name := path.get_slice("?", 0).trim_prefix("/assets/")
+    if file_name.is_empty() or file_name.contains("..") or file_name.contains("\\"):
+        return null
+    var resource_path := "res://assets/ppa_item_icons/" + file_name
+    if ResourceLoader.exists(resource_path):
+        return ResourceLoader.load(resource_path) as Texture2D
+    return null
+
 func bind_button(item: Dictionary, actual_class: String, button: Button) -> void:
     var path := art_path(item, actual_class)
     if path.is_empty():
@@ -101,6 +112,11 @@ func bind_button(item: Dictionary, actual_class: String, button: Button) -> void
     button.set_meta("ppa_icon_upgrade", int(item.get("upgrade", item.get("plus", 0))))
     if _cache.has(path):
         _show_icon(button, path, _cache[path])
+        return
+    var bundled := _bundled_texture(path)
+    if bundled != null:
+        _cache[path] = bundled
+        _show_icon(button, path, bundled)
         return
     if _failed.has(path):
         return
