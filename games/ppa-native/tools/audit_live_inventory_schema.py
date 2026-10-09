@@ -21,15 +21,16 @@ patterns = (
     r"СТАКОВ", r"стаков", r"шмот", r"function\s+renderInventory",
     r"function\s+renderBag", r"renderBag\s*=", r"materials",
     r"potions", r"grimoires", r"\binventory\b", r"msg\.items",
-    r"renderInv", r"\bINV\.bag\b",
+    r"renderInv", r"\bINV\.bag\b", r"resourceItems", r"resourceItems\s*:",
+    r"function\s+sendInvState", r"sendInvState\s*=", r"function\s+buildBagView",
 )
 for label, source in sources.items():
     print(f"PPA_ORIGINAL_INVENTORY_PUBLIC_SOURCE {label} chars={len(source)}", flush=True)
     for pattern in patterns:
-        matches = list(re.finditer(pattern, source, re.I))[:2]
+        matches = list(re.finditer(pattern, source, re.I))[:8 if "resourceItems" in pattern or "sendInvState" in pattern else 2]
         for match in matches:
-            a = max(0, match.start() - 160)
-            b = min(len(source), match.end() + 340)
+            a = max(0, match.start() - 240)
+            b = min(len(source), match.end() + (1300 if "resourceItems" in pattern or "sendInvState" in pattern else 340))
             excerpt = " ".join(source[a:b].split())
-            print(f"PPA_SCHEMA {label} {pattern}: {excerpt[:480]}", flush=True)
+            print(f"PPA_SCHEMA {label} {pattern}: {excerpt[:1650]}", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
