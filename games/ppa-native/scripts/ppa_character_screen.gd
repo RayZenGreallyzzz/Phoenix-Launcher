@@ -116,9 +116,9 @@ func _project_server_skill_cards(save: Dictionary) -> Dictionary:
     # Matches original Telegram sendInvState(): the canonical skill cards
     # appear for the selected class even when rank=0; only the progress is
     # taken from the actual D1 save. No invented learned skills or book counts.
-    var cls := str(save.get("classKey", save.get("cls", account.get("classKey", class_key)))).to_lower()
-    if not ORIGINAL_GRIMOIRES.has_method("class_info"):
-        return {"active":[], "passive":[]}
+    var cls := str(save.get("classKey", class_key)).to_lower()
+    if not ["tank","paladin","barbarian","assassin","gnome","archer","mage","priest"].has(cls):
+        cls = class_key
     var definitions: Dictionary = ORIGINAL_GRIMOIRES.class_info(cls)
     var ranks_raw: Variant = save.get("skillRanks", {})
     var owned_raw: Variant = save.get("grimoires", {})
@@ -129,7 +129,7 @@ func _project_server_skill_cards(save: Dictionary) -> Dictionary:
     var result := {"active":[], "passive":[]}
     for category in ["active", "passive"]:
         for raw in definitions.get(category, []):
-            if not raw is Dictionary:
+            if not (raw is Dictionary):
                 continue
             var id := str(raw.get("id", ""))
             if id.is_empty():
