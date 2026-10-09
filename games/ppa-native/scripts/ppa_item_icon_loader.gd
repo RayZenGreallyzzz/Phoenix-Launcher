@@ -8,6 +8,7 @@ const MAX_PARALLEL := 3
 const MAX_BYTES := 5 * 1024 * 1024
 const CLASS_KEYS := ["tank", "paladin", "barbarian", "assassin", "gnome", "archer", "mage", "priest"]
 const LEGENDARY_SLOTS := ["weapon", "helmet", "armor", "legs", "gloves", "boots"]
+const VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 
 var _cache: Dictionary = {}
 var _failed: Dictionary = {}
@@ -59,6 +60,10 @@ static func _slot_key(item: Dictionary) -> String:
 
 static func _allowed_path(value: String) -> String:
     var path := value.strip_edges()
+    if path.begins_with(ASSET_BASE + "/assets/"):
+        path = path.trim_prefix(ASSET_BASE)
+    elif path.begins_with("assets/"):
+        path = "/" + path
     if not path.begins_with("/assets/") or path.contains("..") or path.contains("\\") or path.contains("%"):
         return ""
     var filename := path.get_slice("?", 0).to_lower()
@@ -69,7 +74,7 @@ static func _allowed_path(value: String) -> String:
 static func art_path(item: Dictionary, actual_class: String) -> String:
     # Exact approved Telegram PPA v514 legend assets, six gear slots
     # for all eight classes. Rings/necklaces preserve their own imagery.
-    if str(preload("res://scripts/ppa_server_inventory_view.gd").rarity(item)) == "legendary":
+    if VIEW.rarity(item) == "legendary":
         var slot := _slot_key(item)
         var cls := _class_key(item, actual_class)
         if not slot.is_empty() and not cls.is_empty():
@@ -86,6 +91,8 @@ func bind_button(item: Dictionary, actual_class: String, button: Button) -> void
         return
     button.tooltip_text = str(item.get("name", item.get("title", "Предмет PPA")))
     button.set_meta("ppa_icon_path", path)
+    button.set_meta("ppa_icon_qty", VIEW.item_count(item))
+    button.set_meta("ppa_icon_upgrade", int(item.get("upgrade", item.get("plus", 0))))
     if _cache.has(path):
         _show_icon(button, path, _cache[path])
         return
@@ -105,6 +112,30 @@ func _show_icon(button: Button, path: String, texture: Texture2D) -> void:
     button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
     button.text = ""
     button.add_theme_constant_override("icon_max_width", 56)
+    # Icons must not hide the actual server stack count and upgrade.
+    for key in ["qty", "upgrade"]:
+        var amount: int = int(button.get_meta("ppa_icon_" + key, 0))
+        if amount <= 0 or (key == "qty" and amount == 1):
+            continue
+        var label := Label.new()
+        label.name = "PPAReal" + key.capitalize()
+        label.text = ("×" if key == "qty" else "+") + str(amount)
+        label.anchor_left = 1.0 if key == "qty" else 0.0
+        label.anchor_right = label.anchor_left
+        label.anchor_top = 1.0 if key == "qty" else 0.0
+        label.anchor_bottom = label.anchor_top
+        label.offset_left = -46.0 if key == "qty" else 3.0
+        label.offset_right = -3.0 if key == "qty" else 46.0
+        label.offset_top = -21.0 if key == "qty" else 1.0
+        label.offset_bottom = -1.0 if key == "qty" else 21.0
+        label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if key == "qty" else HORIZONTAL_ALIGNMENT_LEFT
+        label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        label.add_theme_font_size_override("font_size", 11)
+        label.add_theme_color_override("font_color", Color("#FFD78F"))
+        label.add_theme_color_override("font_shadow_color", Color.BLACK)
+        label.add_theme_constant_override("shadow_offset_x", 1)
+        label.add_theme_constant_override("shadow_offset_y", 1)
+        button.add_child(label)
 
 func _start_more() -> void:
     while _active < MAX_PARALLEL and not _queue.is_empty():
