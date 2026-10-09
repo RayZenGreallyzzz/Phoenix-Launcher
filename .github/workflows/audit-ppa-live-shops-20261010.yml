@@ -38,5 +38,11 @@ jobs:
                       frag=re.sub(r"\s+"," ",frag)
                       frag=re.sub(r"data:image/[^,]+,[a-zA-Z0-9+/=]{100,}","<embedded_asset_omitted>",frag)
                       print("PPA_SHOP_SOURCE",name,m.start(),frag[:430],flush=True)
+          for needle in ("function sendBlackmarketState","function sendBlackMarketState","function sendBlackMarket","blackmarketFrame.contentWindow","blackMarketOffers","blackMarketState","BM_STATE","blackMarket","bmOffers","type:'blackmarketState'","type:'blackMarketState'"):
+              offsets=[m.start() for m in list(re.finditer(re.escape(needle),page,re.I))[:8]]
+              print("PPA_BLACKMARKET_SAVE_RULE",needle,len(offsets),flush=True)
+              for index in offsets:
+                  frag=re.sub(r"\s+"," ",page[max(0,index-210):index+1400])
+                  print("PPA_BLACKMARKET_SOURCE",index,frag[:1250],flush=True)
           print("PPA_SHOP_PUBLIC_AUDIT_OK no_player_data=1 no_writes=1",flush=True)
           PY
