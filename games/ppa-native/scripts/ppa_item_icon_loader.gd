@@ -60,8 +60,12 @@ static func _slot_key(item: Dictionary) -> String:
 
 static func _allowed_path(value: String) -> String:
     var path := value.strip_edges()
+    # Telegram PPA build.mjs externalizes inline art as "./assets/<hash>.webp".
+    # That original relative form MUST resolve to the same Worker /assets URL.
     if path.begins_with(ASSET_BASE + "/assets/"):
         path = path.trim_prefix(ASSET_BASE)
+    elif path.begins_with("./assets/"):
+        path = path.trim_prefix(".")
     elif path.begins_with("assets/"):
         path = "/" + path
     if not path.begins_with("/assets/") or path.contains("..") or path.contains("\\") or path.contains("%"):
@@ -88,6 +92,8 @@ static func art_path(item: Dictionary, actual_class: String) -> String:
 func bind_button(item: Dictionary, actual_class: String, button: Button) -> void:
     var path := art_path(item, actual_class)
     if path.is_empty():
+        # Some original item records have no image at all. Keep their name
+        # visible in native inventory rather than an unhelpful "×1" tile.
         return
     button.tooltip_text = str(item.get("name", item.get("title", "Предмет PPA")))
     button.set_meta("ppa_icon_path", path)
