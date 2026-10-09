@@ -407,6 +407,14 @@ jobs:
           grep -q 'PPA_NATIVE_SKILL_RUNE_VIEW_OK' /tmp/ppa-skill-rune-view.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-skill-rune-view.log; then exit 1; fi
 
+      - name: Verify one PPA saved player feeds every native menu without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_all_save_views.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-all-save-views.log
+          grep -q 'PPA_SHARED_ALL_MENUS_READONLY_OK' /tmp/ppa-native-all-save-views.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-all-save-views.log; then exit 1; fi
+
       - name: Build native PPA APK
         shell: bash
         run: |
