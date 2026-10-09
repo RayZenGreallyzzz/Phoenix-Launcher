@@ -358,6 +358,14 @@ jobs:
           set -euo pipefail
           godot --headless --path games/ppa-native --script res://scripts/audit_native_server_readonly.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-readonly.log
           grep -q 'PPA_NATIVE_AUTH_READONLY_SMOKE_OK' /tmp/ppa-server-readonly.log
+
+      - name: Verify native original PPA inventory art and server-only item view
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_inventory_view.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-item-view.log
+          grep -q 'PPA_NATIVE_SERVER_ITEMS_VIEW_OK' /tmp/ppa-server-item-view.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-server-item-view.log; then exit 1; fi
       - name: Build native PPA APK
         shell: bash
         run: |
