@@ -229,6 +229,17 @@ func _register_character(nickname: String, class_key: String) -> void:
     if err != OK and selection_screen != null:
         selection_screen.show_registration_error("Ошибка запроса: %s" % error_string(err))
 
+func _load_character_identity() -> void:
+    request_mode = "character"
+    status_label.text = "Проверяем единого владельца персонажа PPA…"
+    var headers := PackedStringArray([
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var err := http.request(API_BASE + "/api/game/character", headers, HTTPClient.METHOD_GET)
+    if err != OK:
+        _show_error("Не удалось проверить владельца героя: %s" % error_string(err))
+
 func _load_game_state() -> void:
     if session_token.is_empty():
         _show_error("Сессия Godot отсутствует.")
@@ -246,6 +257,11 @@ func _load_game_state() -> void:
 func _on_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     var body_text := body.get_string_from_utf8()
     var parsed = JSON.parse_string(body_text)
+    if request_mode == "character" and response_code == 404:
+        # Older production Worker does not yet expose the optional identity
+        # registry. Fall back to the separately gated read-only save route.
+        _load_game_state()
+        return
     if request_mode == "register" and (response_code < 200 or response_code >= 300):
         var problem := "Регистрация персонажа недоступна (HTTP %d)" % response_code
         if typeof(parsed) == TYPE_DICTIONARY:
@@ -273,6 +289,17 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    if request_mode == "character":
+        if data.get("needsCharacter", true) == true:
+            _show_error("Сервер не нашёл сохранённого персонажа этого аккаунта.")
+            return
+        var canonical_id := str(data.get("characterId", ""))
+        if canonical_id.is_empty():
+            _show_error("Не подтверждён внутренний ID персонажа.")
+            return
+        account["characterId"] = canonical_id
+        _load_game_state()
+        return
     if request_mode == "register":
         var p: Dictionary = data.get("profile", {})
         var created_nick := str(p.get("nickname", ""))
@@ -352,7 +379,7 @@ func _show_connected() -> void:
         return
     # Player selection is a real mandatory step after account verification.
     # Never let the native client silently create/change the live hero class.
-    _load_game_state()
+    _load_character_identity()
 
 func _show_character_selection() -> void:
     if selection_screen != null:
