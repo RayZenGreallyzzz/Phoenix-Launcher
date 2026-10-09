@@ -57,4 +57,12 @@ for name in ("MATERIAL_DB", "PPA_V172_ART", "GRIMOIRE_ART"):
     if match < 0:
         match = PAGE.find("var " + name + "=")
     print("PPA_PUBLIC_ASSET_CATALOG",name,"found=",match>=0,"excerpt=",repr(unescape(PAGE[match:match+900])) if match>=0 else "",flush=True)
+from html import unescape as _unescape
+for term in ("function classGearArt", "function refreshGearArt",
+             "const CLASS_ART_SLOTS=", "var CLASS_ART_SLOTS=",
+             "const CLASS_ITEM_NAMES=", "const CLASS_DISPLAY="):
+    at = PAGE.find(term)
+    print("PPA_PUBLIC_GEAR_SCHEMA", term, "found=", at>=0,
+          "excerpt=", repr(_unescape(PAGE[at:at+2700])) if at>=0 else "",
+          flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
