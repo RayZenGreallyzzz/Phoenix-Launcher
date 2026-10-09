@@ -339,6 +339,7 @@ func _arena() -> void:
     open_ui.pressed.connect(func(): arena_requested.emit())
     _body.add_child(open_ui)
     _section("ОБЩИЙ ОНЛАЙН", "Вход в матч остаётся выключен до защищённого native WebSocket-билета и серверного подбора.")
+    _locked("НАЧАТЬ PVP МАТЧ")
 
 func _locations() -> void:
     _section("МИР PPA", "Тестовая карта подземелья уже доступна без сервера. Полный игровой вход с монстрами и наградами подключим позднее.")
