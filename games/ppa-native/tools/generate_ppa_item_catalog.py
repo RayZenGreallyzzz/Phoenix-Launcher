@@ -64,7 +64,10 @@ def main() -> None:
     grimoire_art = constant(source, "GRIMOIRE_ART")
     grimoire_classes = constant(source, "GRIMOIRE_CATALOG")
     original_shop = constant(source, "SHOP_ICON_ART", required=False)
-    if len(materials) < 10 or len(grimoire_art) != 72 or len(grimoire_classes) != 8:
+    original_gear = constant(source, "CLASS_GEAR_ART")
+    original_epic_gear = constant(source, "EPIC_CLASS_GEAR_ART", required=False)
+    original_jewelry = constant(source, "JEWELRY_VARIANTS", required=False)
+    if len(materials) < 10 or len(grimoire_art) != 72 or len(grimoire_classes) != 8 or len(original_gear) < 8:
         raise RuntimeError("Public original PPA item catalog changed")
     if not all(stones.get(key) for key in
                ("normalStone","premiumStone","premiumRune","feather","luckCoin","premiumHp","premiumMp")):
@@ -93,6 +96,9 @@ def main() -> None:
         "stone_art": stones,
         "shop_art": shop_art,
         "grimoires": grimoire_titles,
+        "class_gear": original_gear,
+        "epic_gear": original_epic_gear,
+        "jewelry": original_jewelry,
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
@@ -106,6 +112,8 @@ def main() -> None:
           f"grimoires={len(grimoire_titles)}",
           f"stones={len(stones)}",
           f"shop={len(shop_art)}",
+          f"gear_classes={len(original_gear)}",
+          f"epic_classes={len(original_epic_gear)}",
           f"source_sha256={hashlib.sha256(source.encode()).hexdigest()}",
           "server_writes=0", flush=True)
 
