@@ -483,7 +483,8 @@ func _section(title: String) -> void:
     bar.add_child(caption)
 
 func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Button:
-    var equipped: Dictionary = _real_equipment().get(kind, {})
+    var raw_equipped: Variant = _real_equipment().get(kind, {})
+    var equipped: Dictionary = raw_equipped if raw_equipped is Dictionary else {}
     var filled := not equipped.is_empty()
     var b := _button(name + "\n" + (str(equipped.get("name", "")) if filled else "свободно"), 7)
     b.custom_minimum_size = Vector2(w, h)
@@ -494,7 +495,6 @@ func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Butt
     ))
     # These server-owned items are inspect-only until authoritative
     # equipment operations are connected to the original PPA backend.
-    b.disabled = true
     _bind_item_icon(equipped, b)
     return b
 
@@ -606,7 +606,9 @@ func _draw_inventory() -> void:
         # inventory slots as fully transparent. The entire bottom half
         # looks like an empty broken scroll page in the user's 0.1.60 video.
         slot.add_theme_stylebox_override("disabled", slot_style)
-        slot.disabled = true
+        slot.disabled = locked or not _server_inventory_verified
+        if not item.is_empty() and _server_inventory_verified:
+            slot.pressed.connect(func(): select_item_requested.emit("bag", i))
         grid.add_child(slot)
         _bind_item_icon(item, slot)
     var info := PanelContainer.new()
