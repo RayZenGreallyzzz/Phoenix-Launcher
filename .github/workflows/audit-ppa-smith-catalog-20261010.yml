@@ -40,5 +40,10 @@ jobs:
                   for x in m[:12]:
                       start=max(0,x.start()-230);end=min(len(source),x.end()+560)
                       print("PPA_SMITH_SOURCE",x.start(),re.sub(r"\s+"," ",source[start:end])[:850],flush=True)
+          for name,source in parser.frames:
+              if name!="blacksmithFrame":continue
+              for needle in ("function qtyForRarity", "function petQty", "function craftGear", "function craftAccessory", "function craftPet", "function renderGearCraft", "function renderAccessories", "function renderPets", "function renderPetCraft", "function renderCraft"):
+                  p=source.find(needle)
+                  if p>=0: print("PPA_SMITH_RULE",needle,re.sub(r"\\s+"," ",source[p:p+2100])[:2100],flush=True)
           print("PPA_SMITH_AUDIT_OK public_html_only=1 no_auth=1 no_game_writes=1",flush=True)
           PY
