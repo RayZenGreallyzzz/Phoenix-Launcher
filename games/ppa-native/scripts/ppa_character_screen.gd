@@ -613,7 +613,8 @@ func _draw_inventory() -> void:
             "D1 корень: сумка " + str(diag.get("root_bag_text", "—")) +
             " / надето " + str(diag.get("root_equipped_text", "—")) +
             "\nвлож. inventory: сумка " + str(diag.get("nested_bag_text", "—")) +
-            " / надето " + str(diag.get("nested_equipped_text", "—")),
+            " / надето " + str(diag.get("nested_equipped_text", "—")) +
+            "\nвиртуальных стаков из D1: " + str(diag.get("server_stacks", 0)),
             8, Color("#9CBBC0")
         )
         counts_line.name = "PPACloudRawFieldsDiagnostic"
