@@ -264,7 +264,7 @@ func _wallet() -> void:
     _section("TON CONNECT · КОШЕЛЁК PPA", "Кошелёк нельзя подключить простой имитацией кнопки в Godot. Требуется безопасный TON Connect и серверная проверка переводов.")
     _section("ПОДКЛЮЧЁННЫЙ TON АДРЕС", "— · статус ещё не получен от TON Connect")
     # D1 game currency is not the TON address balance.
-    var game_gram := _player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса")
+    var game_gram: String = str(_player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса"))
     _section("ИГРОВОЙ БАЛАНС GRAM", str(game_gram) + " · из сохранения PPA")
     _section("GOLD / PPA", str(_player_data_readonly.get("goldDisplay", "—")) +
         " Gold · " + str(_player_data_readonly.get("ppaDisplay", "—")) + " PPA · сохранение D1")
