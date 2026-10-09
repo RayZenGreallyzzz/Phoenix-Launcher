@@ -682,14 +682,14 @@ func _run() -> void:
     print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 original_character=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
     # Global PPA sections are neither NPCs nor the five-page character panel.
     var hub = menu._global_hub
-    for section in ["premium", "wallet", "events", "locations"]:
+    for section in ["premium", "wallet", "events", "locations", "arena"]:
         menu.open_page("character")
         menu.open_global_section(section)
         if hub == null or not hub.is_open() or menu._character_screen.visible or menu._npc_screen.is_open() or menu._panel.visible:
             push_error("PPA_GLOBAL_ISOLATION: global page overlaps character or NPC: " + section)
             quit(1)
             return
-        if hub.section != section or hub._tabs.get_child_count() != 4 or hub._body.get_child_count() == 0:
+        if hub.section != section or hub._tabs.get_child_count() != 5 or hub._body.get_child_count() == 0:
             push_error("PPA_GLOBAL_NAV: missing native global page " + section)
             quit(1)
             return
