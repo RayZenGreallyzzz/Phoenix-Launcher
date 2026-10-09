@@ -438,13 +438,32 @@ func _quest_filter(key: String) -> void:
     _render()
 
 func _mini_row(value: String, right: String = "") -> void:
+    # A long arena price/rating string must never shrink into a one-character
+    # column on portrait Android screens. Use full-width stacked labels.
+    if right.length() > 13 or value.length() > 42:
+        var stacked := VBoxContainer.new()
+        stacked.name = "NpcFullWidthPriceRow"
+        stacked.add_theme_constant_override("separation", 2)
+        stacked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _body.add_child(stacked)
+        var caption := _label(value, 12, SUB)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        stacked.add_child(caption)
+        if not right.is_empty():
+            var details := _label(right, 12, GOLD)
+            details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            stacked.add_child(details)
+        return
     var row := HBoxContainer.new()
+    row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _body.add_child(row)
     var lhs := _label(value, 12, SUB)
     lhs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     row.add_child(lhs)
     if not right.is_empty():
-        row.add_child(_label(right, 12, GOLD))
+        var amount := _label(right, 12, GOLD)
+        amount.autowrap_mode = TextServer.AUTOWRAP_OFF
+        row.add_child(amount)
 
 func _choice_tiles(options: Array, current: String, selected: Callable) -> void:
     var tiles := HFlowContainer.new()
