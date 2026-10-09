@@ -9,6 +9,7 @@ const MAX_BYTES := 5 * 1024 * 1024
 const CLASS_KEYS := ["tank", "paladin", "barbarian", "assassin", "gnome", "archer", "mage", "priest"]
 const LEGENDARY_SLOTS := ["weapon", "helmet", "armor", "legs", "gloves", "boots"]
 const VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
+const OFFICIAL_ART = preload("res://scripts/ppa_item_catalog_generated.gd")
 
 var _cache: Dictionary = {}
 var _failed: Dictionary = {}
@@ -75,6 +76,26 @@ static func _allowed_path(value: String) -> String:
         return ""
     return path
 
+static func _restored_equipment_art(item: Dictionary, actual_class: String) -> String:
+    # The original Telegram game compacts equipment saves and reconstructs
+    # approved item.img with classGearArt(rarity,classKey,slot). Do the same
+    # visually; never mutate the server's inventory object.
+    var slot := _slot_key(item)
+    var cls := _class_key(item, actual_class)
+    if not slot.is_empty() and not cls.is_empty():
+        var catalog: Dictionary = OFFICIAL_ART.ITEMS
+        var rarity_name := VIEW.rarity(item)
+        var grouped: Dictionary = catalog.get("epic_gear", {}) if rarity_name == "epic" else catalog.get("class_gear", {})
+        var class_art: Dictionary = grouped.get(cls, {})
+        var result := _allowed_path(str(class_art.get(slot, "")))
+        if not result.is_empty():
+            return result
+        if rarity_name == "epic":
+            var ordinary_group: Dictionary = catalog.get("class_gear", {})
+            var ordinary: Dictionary = ordinary_group.get(cls, {})
+            return _allowed_path(str(ordinary.get(slot, "")))
+    return ""
+
 static func art_path(item: Dictionary, actual_class: String) -> String:
     # Exact approved Telegram PPA v514 legend assets, six gear slots
     # for all eight classes. Rings/necklaces preserve their own imagery.
@@ -87,7 +108,8 @@ static func art_path(item: Dictionary, actual_class: String) -> String:
         var path := _allowed_path(str(item.get(field, "")))
         if not path.is_empty():
             return path
-    return ""
+    # Missing img in the D1 save is NORMAL for approved compacted PPA gear.
+    return _restored_equipment_art(item, actual_class)
 
 func _bundled_texture(path: String) -> Texture2D:
     # Use approved Telegram PPA images already packed into the APK.
