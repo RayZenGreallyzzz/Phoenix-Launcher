@@ -64,6 +64,7 @@ def main() -> None:
     grimoire_art = constant(source, "GRIMOIRE_ART")
     grimoire_classes = constant(source, "GRIMOIRE_CATALOG")
     original_shop = constant(source, "SHOP_ICON_ART", required=False)
+    original_rune_art = constant(source, "RUNE_ART", required=False)
     original_gear = constant(source, "CLASS_GEAR_ART")
     original_epic_gear = constant(source, "EPIC_CLASS_GEAR_ART", required=False)
     original_jewelry = constant(source, "JEWELRY_VARIANTS", required=False)
@@ -99,6 +100,7 @@ def main() -> None:
         "class_gear": original_gear,
         "epic_gear": original_epic_gear,
         "jewelry": original_jewelry,
+        "rune_art": original_rune_art,
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
@@ -114,6 +116,7 @@ def main() -> None:
           f"shop={len(shop_art)}",
           f"gear_classes={len(original_gear)}",
           f"epic_classes={len(original_epic_gear)}",
+          f"rune_icons={len(original_rune_art)}",
           f"source_sha256={hashlib.sha256(source.encode()).hexdigest()}",
           "server_writes=0", flush=True)
 
