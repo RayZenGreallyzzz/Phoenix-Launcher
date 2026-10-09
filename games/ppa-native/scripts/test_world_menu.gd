@@ -580,6 +580,15 @@ func _show_items(source_name: String) -> void:
     _action(actions, "ТОРГОВЕЦ", func(): _open_service_by_id("merchant"))
 
 func _open_item(source_name: String, index: int) -> void:
+    if _has_verified_save and _character_screen != null:
+        var server_inventory := SERVER_VIEW.from_save(_verified_save)
+        var source: Array = server_inventory.get("resource_items", []) if source_name == "resource" else server_inventory.get("bag", [])
+        var owned_item: Dictionary = SERVER_VIEW.item_at(source, index)
+        if not owned_item.is_empty():
+            # Do not hide the original character inventory or open the
+            # legacy generic test modal. One window, one source of truth.
+            _character_screen.call("show_server_item_details", owned_item)
+        return
     _selected_item_source = source_name
     _selected_item_index = index
     open_page("item")
