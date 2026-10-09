@@ -812,7 +812,13 @@ func _set_currency(index: int) -> void:
     _asking_currency = "PPA" if index == 0 else "Gram"
 
 func _show_forge() -> void:
-    _section("КУЗНЕЦ · " + tab.to_upper(), "Точные вещи и компоненты будут получены из серверного инвентаря PPA.")
+    # Recipe names, prices and ingredient requirements are sourced from the
+    # current PUBLIC original PPA smith. Player possessions are rendered only
+    # from the account-bound read-only server save; crafting is never local.
+    var source_note := ("Подлинные рецепты из действующей PPA · остатки только из подтверждённого сохранения."
+        if tab in ["equipment", "legendary", "accessories", "pets"]
+        else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
+    _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
     if tab == "enhance":
         _section("ЗАТОЧКА · ВЫБОР ЭКИПИРОВКИ", "Вещь, заточка и руна выбираются отдельно. Надетые предметы тоже доступны.")
         var chosen := HBoxContainer.new()
