@@ -7,6 +7,7 @@ const HUB = preload("res://scripts/ppa_global_hub.gd")
 const NPC = preload("res://scripts/ppa_npc_screen.gd")
 const PICKER = preload("res://scripts/ppa_inventory_picker.gd")
 const ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
+const STORAGE_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 
 func _initialize() -> void:
     call_deferred("_check")
@@ -60,8 +61,29 @@ func _check() -> void:
     if not npc.is_open():
         fail("Original native arena NPC menu failed to open")
         return
+    # The storage screenshot showed original item names but no icons:
+    # virtualized cells must now reuse the same approved bundled textures.
+    var test_scroll := ScrollContainer.new()
+    test_scroll.size = Vector2(340, 340)
+    root.add_child(test_scroll)
+    var grid := STORAGE_GRID.new()
+    test_scroll.add_child(grid)
+    grid.configure("inventory", test_scroll, 5)
+    var view: Dictionary = VIEW.npc_player_view(save)
+    var rendered_items: Array = view.get("inventory", [])
+    grid.apply_items_readonly(rendered_items)
+    var found_texture := false
+    for raw in rendered_items:
+        if raw is Dictionary:
+            var tex: Texture2D = grid._approved_texture(raw)
+            if tex != null:
+                found_texture = true
+                break
+    if not found_texture:
+        fail("NPC warehouse item grid did not load any actual PPA texture from APK bundle")
+        return
     if before != JSON.stringify(save):
         fail("Read-only menus must never mutate original saved player")
         return
-    print("PPA_NPC_ARENA_EVENTS_READONLY_OK icons_shared=1 arena_open=1 tokens=27 titan_shards=4 writes=0")
+    print("PPA_NPC_ARENA_EVENTS_READONLY_OK icons_shared=1 warehouse_icon=1 arena_open=1 tokens=27 titan_shards=4 writes=0")
     quit(0)
