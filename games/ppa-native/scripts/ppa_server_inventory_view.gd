@@ -64,6 +64,51 @@ static func from_save(save: Dictionary) -> Dictionary:
         "version": save.get("version", null)
     }
 
+# Privacy-safe counts of the exact already authenticated PPA save. Never
+# include item names, IDs, TG identifiers, tokens, or actual item payloads.
+static func _count_bag(raw: Variant) -> int:
+    if not (raw is Array or raw is Dictionary):
+        return -1
+    var values: Array = _as_bag(raw)
+    var n := 0
+    for entry in values:
+        if entry is Dictionary and not (entry as Dictionary).is_empty():
+            n += 1
+    return n
+
+static func _count_equipped(raw: Variant) -> int:
+    if not (raw is Dictionary):
+        return -1
+    var n := 0
+    for entry in (raw as Dictionary).values():
+        if entry is Dictionary and not (entry as Dictionary).is_empty():
+            n += 1
+    return n
+
+static func _count_text(n: int) -> String:
+    return str(n) if n >= 0 else "нет поля"
+
+static func diagnose(save: Dictionary) -> Dictionary:
+    var nested_raw: Variant = save.get("inventory", null)
+    var nested: Dictionary = nested_raw if nested_raw is Dictionary else {}
+    var view := from_save(save)
+    var bag_root := _count_bag(save.get("bag", null))
+    var equip_root := _count_equipped(save.get("equipped", null))
+    var bag_nested := _count_bag(nested.get("bag", null))
+    var equip_nested := _count_equipped(nested.get("equipped", null))
+    return {
+        "root_bag": bag_root,
+        "root_equipped": equip_root,
+        "nested_bag": bag_nested,
+        "nested_equipped": equip_nested,
+        "shown_bag": _count_bag(view.get("bag", null)),
+        "shown_equipped": _count_equipped(view.get("equipped", null)),
+        "root_bag_text": _count_text(bag_root),
+        "root_equipped_text": _count_text(equip_root),
+        "nested_bag_text": _count_text(bag_nested),
+        "nested_equipped_text": _count_text(equip_nested)
+    }
+
 static func item_at(items: Array, index: int) -> Dictionary:
     if index < 0 or index >= items.size() or not (items[index] is Dictionary):
         return {}
