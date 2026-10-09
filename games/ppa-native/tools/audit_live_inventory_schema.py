@@ -73,4 +73,9 @@ for term in ("function runeDefByKey(", "function runeUnlockedSlots(", "function 
     at = PAGE.find(term)
     print("PPA_PUBLIC_RUNE_DEFINITION", term, "found=", at >= 0,
           "excerpt=", repr(PAGE[at:at+2400]) if at >= 0 else "", flush=True)
+# Public client source inspection only. No access to actual player balances.
+for term in ("function ppaBuildSaveObject()", "function sendInvState()", "function sendWalletState()", "gold:INV.gold", "gold:INV", "ppa:INV.ppa", "gram:", "gramBalance", "walletBalance", "function renderItemTooltip(", "function itemStatsText("):
+    at = PAGE.find(term)
+    print("PPA_PUBLIC_MONEY_ATTR_SCHEMA", term, "found=", at >= 0,
+          "excerpt=", repr(PAGE[at:at+4500]) if at >= 0 else "", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
