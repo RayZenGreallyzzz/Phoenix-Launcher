@@ -289,8 +289,14 @@ func _choose_class(key: String) -> void:
 func _confirm_preview() -> void:
     if account.is_empty():
         return
-    # Only in SceneTree memory. The server never receives this class choice.
-    get_tree().set_meta("ppa_native_test_class", _selected_class_key)
+    # The gallery can preview all eight GLBs, but pressing Enter must ALWAYS
+    # use the already registered Telegram PPA character's original class.
+    # Never impersonate another hero or send a client-selected class to PPA.
+    var server_class := str(account.get("classKey", "")).to_lower().strip_edges()
+    if not HERO_CATALOG.valid_key(server_class):
+        _status_label.text = "СЕРВЕР PPA НЕ ПОДТВЕРДИЛ КЛАСС"
+        return
+    get_tree().set_meta("ppa_native_test_class", server_class)
     get_tree().set_meta("ppa_native_test_mode", true)
     character_confirmed.emit()
 
