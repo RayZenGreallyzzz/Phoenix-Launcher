@@ -37,6 +37,20 @@ func _run() -> void:
     if ART.art_path(ring,"gnome")!="/assets/rings/existing-ring.png":
         _fail("Legendary ring should preserve its original PPA icon")
         return
+    # build.mjs exports the ORIGINAL PPA inline item art with a leading "./".
+    # Real cloud items often retain precisely this string inside their save.
+    var exported_ppa_art := {"name":"Лук лучника","rarity":"common","img":"./assets/c73ef6814017bda6.png"}
+    if ART.art_path(exported_ppa_art,"archer")!="/assets/c73ef6814017bda6.png":
+        _fail("Original Telegram ./assets URL was rejected")
+        return
+    var exported_potion := {"name":"Зелье","img":"assets/test-ppa-potion.webp?v=1"}
+    if ART.art_path(exported_potion,"archer")!="/assets/test-ppa-potion.webp?v=1":
+        _fail("Original asset URL normalization broke")
+        return
+    var fake_escape := {"img":"./assets/../secrets.png"}
+    if ART.art_path(fake_escape,"archer")!="":
+        _fail("Escaping asset directory should be blocked")
+        return
     var fake_external := {"img":"https://evil.example/steal.png"}
     if ART.art_path(fake_external,"gnome")!="":
         _fail("External image URL permitted")
