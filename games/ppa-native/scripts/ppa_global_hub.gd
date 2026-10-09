@@ -8,6 +8,7 @@ signal character_requested
 signal snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 
+const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const CATEGORIES := [
     {"id":"premium", "title":"ПРЕМИУМ МАГАЗИН"},
     {"id":"wallet", "title":"КОШЕЛЁК"},
@@ -36,6 +37,7 @@ var section := "events"
 var subsection := "game"
 var selected_event := "ruri"
 var snapshot: Dictionary = {}
+var _player_data_readonly: Dictionary = {}
 var _back: ColorRect
 var _frame: PanelContainer
 var _heading: Label
@@ -162,6 +164,16 @@ func _fit() -> void:
 func is_open() -> bool:
     return visible
 
+func apply_player_save_readonly(save: Dictionary) -> void:
+    _player_data_readonly = SAVE_VIEWS.global_player_view(save)
+    if visible:
+        _render()
+
+func clear_player_save_readonly() -> void:
+    _player_data_readonly.clear()
+    if visible:
+        _render()
+
 func open_section(which: String = "events") -> void:
     if not ["premium", "wallet", "events", "locations"].has(which):
         return
@@ -251,7 +263,11 @@ func _premium() -> void:
 func _wallet() -> void:
     _section("TON CONNECT · КОШЕЛЁК PPA", "Кошелёк нельзя подключить простой имитацией кнопки в Godot. Требуется безопасный TON Connect и серверная проверка переводов.")
     _section("ПОДКЛЮЧЁННЫЙ TON АДРЕС", "— · статус ещё не получен от TON Connect")
-    _section("ИГРОВОЙ БАЛАНС GRAM", str(snapshot.get("gramDisplay", "— · нет подтверждённого баланса")))
+    # D1 game currency is not the TON address balance.
+    var game_gram := _player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса")
+    _section("ИГРОВОЙ БАЛАНС GRAM", str(game_gram) + " · из сохранения PPA")
+    _section("GOLD / PPA", str(_player_data_readonly.get("goldDisplay", "—")) +
+        " Gold · " + str(_player_data_readonly.get("ppaDisplay", "—")) + " PPA · сохранение D1")
     _section("ПОПОЛНЕНИЕ / ВЫВОД", "Минимум пополнения — 1 Gram, минимальный вывод — 15 Gram. Вывод одобряет администратор.")
     _locked("ПРИВЯЗАТЬ КОШЕЛЁК")
     _locked("ПОПОЛНИТЬ / ВЫВЕСТИ")
