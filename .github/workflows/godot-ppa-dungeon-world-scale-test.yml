@@ -317,6 +317,14 @@ jobs:
           grep -q 'PPA_CANONICAL_ITEM_CATALOG_OK' /tmp/ppa-items-catalog.log
           test -s games/ppa-native/scripts/ppa_item_catalog_generated.gd
 
+      - name: Generate exact original PPA blacksmith recipes (display only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_forge_catalog.py 2>&1 | tee /tmp/ppa-forge-catalog.log
+          grep -q 'PPA_CANONICAL_FORGE_CATALOG_OK' /tmp/ppa-forge-catalog.log
+          test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
+
       - name: Import native PPA project
         shell: bash
         run: |
@@ -391,6 +399,14 @@ jobs:
           set -euo pipefail
           godot --headless --path games/ppa-native --script res://scripts/audit_native_server_readonly.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-readonly.log
           grep -q 'PPA_NATIVE_AUTH_READONLY_SMOKE_OK' /tmp/ppa-server-readonly.log
+
+      - name: Verify epic, legendary, pet and wing recipe parity without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_forge_recipes.gd --quit-after 600 2>&1 | tee /tmp/ppa-forge-native-test.log
+          grep -q 'PPA_NATIVE_FORGE_CATALOG_READONLY_OK' /tmp/ppa-forge-native-test.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-forge-native-test.log; then exit 1; fi
 
       - name: Verify native original PPA inventory art and server-only item view
         shell: bash
