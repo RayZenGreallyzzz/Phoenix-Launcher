@@ -298,6 +298,10 @@ func _enter_native_world() -> void:
     if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
+    var registered_class := str(account.get("classKey", "")).to_lower().strip_edges()
+    if not CHARACTER_SELECT_SCRIPT.CLASS_NAMES.has(registered_class):
+        _show_error("Сервер PPA вернул неизвестный класс. Не будем подменять персонажа.")
+        return
     get_tree().set_meta("phoenix_account", account.duplicate(true))
     # Expose the game SESSION in process memory to the read-only native
     # save adapter. Never pass launcher credentials or Telegram ID as auth.
