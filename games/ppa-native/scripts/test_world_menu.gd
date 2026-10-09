@@ -400,6 +400,10 @@ func open_page(page: String) -> void:
         # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
+        # Re-read the SAME authenticated PPA save whenever the character
+        # panel is reopened, just as global and NPC menus already do.
+        # One GET per opening, not per page/scroll; no local save or writes.
+        refresh_readonly_save_requested.emit()
         return
     if _native_web_ui != null and _web_open:
         _native_web_ui.hideUi()
