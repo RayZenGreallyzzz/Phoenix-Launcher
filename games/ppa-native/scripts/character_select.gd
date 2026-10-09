@@ -9,6 +9,7 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 signal character_confirmed
 
 var account: Dictionary = {}
+var verified_state: Dictionary = {} # Never edited by the native demo gallery.
 var _name_label: Label
 var _class_label: Label
 var _info_label: Label
@@ -35,6 +36,11 @@ const CLASS_NAMES := {
 
 func set_account(value: Dictionary) -> void:
     account = value.duplicate(true)
+    if is_node_ready():
+        _refresh_account()
+
+func set_verified_state(value: Dictionary) -> void:
+    verified_state = value.duplicate(true)
     if is_node_ready():
         _refresh_account()
 
@@ -244,6 +250,13 @@ func _refresh_account() -> void:
     if not HERO_CATALOG.valid_key(server_key):
         server_key = "gnome"
     _choose_class(server_key)
+    # A verified PPA save has exactly ONE authoritative class. Other GLB
+    # previews are for the disconnected beta gallery only.
+    var locked := not verified_state.is_empty()
+    for id in _class_buttons.keys():
+        var button := _class_buttons[id] as Button
+        if button != null:
+            button.disabled = locked and str(id) != server_key
 
 func _choose_class(key: String) -> void:
     if not HERO_CATALOG.valid_key(key):
@@ -253,8 +266,17 @@ func _choose_class(key: String) -> void:
     var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
     _name_label.text = nickname
     _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
-    _info_label.text = str(hero.get("description", "")) + "\n\nВсе классы используют одну локальную тестовую сумку и склад. Реальный класс и прогресс PPA не изменяются."
-    _enter_button.disabled = account.is_empty()
+    var description := str(hero.get("description", ""))
+    if not verified_state.is_empty():
+        var level := int(verified_state.get("lvl", verified_state.get("level", 0)))
+        description += "\n\n✓ Сохранение PPA подтверждено сервером"
+        if level > 0:
+            description += " · Уровень %d" % level
+        description += "\nРеальный прогресс загружен только для чтения. Сумка тестового мира пока локальная."
+    else:
+        description += "\n\nТЕСТ: классы, сумка и склад локальные, НЕ синхронизированы с Telegram."
+    _info_label.text = description
+    _enter_button.disabled = str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty()
     _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
     for id in _class_buttons.keys():
         var button := _class_buttons[id] as Button
@@ -266,6 +288,10 @@ func _choose_class(key: String) -> void:
 
 func _confirm_preview() -> void:
     if account.is_empty():
+        return
+    # Never enter with a visual class that conflicts with the real server hero.
+    if not verified_state.is_empty() and _selected_class_key != str(account.get("classKey", "")).to_lower():
+        _status_label.text = "Класс должен совпадать с сохранённым героем."
         return
     # Only in SceneTree memory. The server never receives this class choice.
     get_tree().set_meta("ppa_native_test_class", _selected_class_key)
