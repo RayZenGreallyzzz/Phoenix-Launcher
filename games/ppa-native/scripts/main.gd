@@ -321,6 +321,11 @@ func _show_character_selection() -> void:
     selection_screen.set_account(account)
     selection_screen.set_verified_state(authoritative_state if state_read_available else {})
     selection_screen.character_confirmed.connect(_enter_native_world)
+    selection_screen.account_switch_requested.connect(_return_to_launcher)
+
+func _return_to_launcher() -> void:
+    _clear_saved_session()
+    get_tree().quit()
 
 func _show_error(message: String) -> void:
     status_label.text = "✕ " + message
