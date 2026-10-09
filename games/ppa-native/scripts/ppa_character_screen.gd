@@ -12,6 +12,8 @@ signal unequip_requested(slot: String)
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
 const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
+const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
+const ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 
 const CAPTIONS := [
     "1. ИНВЕНТАРЬ",
@@ -62,6 +64,36 @@ var _original_skill_card_count := 0
 # skill selected from the global grimoire illustration catalog.
 var _server_skills_received := false
 var _server_skills: Dictionary = {}
+var _server_inventory: Dictionary = {}
+var _server_inventory_verified := false
+var _icon_loader: Node
+
+func apply_readonly_save(save: Dictionary) -> void:
+    # This is a VIEW only. Never merge with the local test bag/equipment.
+    _server_inventory = SERVER_VIEW.from_save(save)
+    _server_inventory_verified = true
+    var actual_class := str(save.get("classKey", save.get("cls", account.get("classKey", "")))).to_lower()
+    if ["tank", "paladin", "barbarian", "assassin", "gnome", "archer", "mage", "priest"].has(actual_class):
+        class_key = actual_class
+    if is_node_ready() and visible:
+        _draw_page()
+
+func clear_readonly_save() -> void:
+    _server_inventory.clear()
+    _server_inventory_verified = false
+    clear_authoritative_skill_snapshot()
+    if is_node_ready() and visible:
+        _draw_page()
+
+func _real_bag() -> Array:
+    return _server_inventory.get("bag", []) if _server_inventory_verified else []
+
+func _real_equipment() -> Dictionary:
+    return _server_inventory.get("equipped", {}) if _server_inventory_verified else {}
+
+func _bind_item_icon(item: Dictionary, button: Button) -> void:
+    if _icon_loader != null and not item.is_empty():
+        _icon_loader.bind_button(item, class_key, button)
 
 func apply_authoritative_skill_snapshot(snapshot: Dictionary) -> void:
     # Called ONLY by a future authenticated PPA player-state bridge.
@@ -91,6 +123,9 @@ func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> v
 
 func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _icon_loader = ITEM_ICONS.new()
+    _icon_loader.name = "PPAApprovedItemIcons"
+    add_child(_icon_loader)
     _mono = SystemFont.new()
     _mono.font_names = PackedStringArray(["monospace", "Courier New"])
     _create_frame()
@@ -448,7 +483,7 @@ func _section(title: String) -> void:
     bar.add_child(caption)
 
 func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Button:
-    var equipped: Dictionary = stash.equipment.get(kind, {})
+    var equipped: Dictionary = _real_equipment().get(kind, {})
     var filled := not equipped.is_empty()
     var b := _button(name + "\n" + (str(equipped.get("name", "")) if filled else "свободно"), 7)
     b.custom_minimum_size = Vector2(w, h)
@@ -457,7 +492,10 @@ func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Butt
     b.add_theme_stylebox_override("normal", _style_box(
         Color("#0C0F12"), RARITIES.get(str(equipped.get("rarity", "common")), Color("#A26620")) if filled else Color("#A26620"), 6, 1
     ))
-    b.pressed.connect(func(): unequip_requested.emit(kind))
+    # These server-owned items are inspect-only until authoritative
+    # equipment operations are connected to the original PPA backend.
+    b.disabled = true
+    _bind_item_icon(equipped, b)
     return b
 
 func _draw_inventory() -> void:
@@ -524,7 +562,12 @@ func _draw_inventory() -> void:
     bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
-    var count := _text(str(stash.bag.size()) + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
+    var real_bag := _real_bag()
+    var occupied := 0
+    for candidate in real_bag:
+        if candidate is Dictionary and not (candidate as Dictionary).is_empty():
+            occupied += 1
+    var count := _text((str(occupied) if _server_inventory_verified else "—") + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
     count.name = "OriginalPPABagCount"
     count.autowrap_mode = TextServer.AUTOWRAP_OFF
     count.custom_minimum_size.x = 66.0
@@ -548,27 +591,29 @@ func _draw_inventory() -> void:
         slot.custom_minimum_size = Vector2(cell_side, cell_side)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var unlocked := i < 50
-        var item: Dictionary = stash.bag[i] if i < stash.bag.size() else {}
+        var item: Dictionary = SERVER_VIEW.item_at(real_bag, i)
         var locked := not unlocked and item.is_empty()
         slot.disabled = locked
         slot.modulate.a = 1.0 if not locked else 0.40
         var edge := Color("#5D431F") if unlocked else Color("#282A2B")
         if not item.is_empty():
-            edge = RARITIES.get(str(item.get("rarity", "common")), edge)
-            slot.text = str(item.get("short", "◆")) + "\n×" + str(item.get("qty", 1))
+            edge = RARITIES.get(SERVER_VIEW.rarity(item), edge)
+            slot.text = SERVER_VIEW.symbol(item) + "\n×" + str(SERVER_VIEW.item_count(item))
+            slot.tooltip_text = SERVER_VIEW.title(item)
         var slot_style := _style_box(Color("#0B0E11"), edge, 4)
         slot.add_theme_stylebox_override("normal", slot_style)
         # Without this override, Godot draws the 50 disabled, locked
         # inventory slots as fully transparent. The entire bottom half
         # looks like an empty broken scroll page in the user's 0.1.60 video.
         slot.add_theme_stylebox_override("disabled", slot_style)
-        slot.pressed.connect(func(): select_item_requested.emit("bag", i))
+        slot.disabled = true
         grid.add_child(slot)
+        _bind_item_icon(item, slot)
     var info := PanelContainer.new()
     info.custom_minimum_size.y = 35
     info.add_theme_stylebox_override("panel", _style_box(Color("#0D1013"), Color("#303238"), 5))
     _page_container.add_child(info)
-    var hint := _text("Тапни предмет, чтобы посмотреть или надеть.", 8, MUTED)
+    var hint := _text("ПРЕДМЕТЫ PPA · ТОЛЬКО ПРОСМОТР" if _server_inventory_verified else "ОЖИДАЕМ НАСТОЯЩИЙ ИНВЕНТАРЬ PPA", 8, MUTED)
     hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     info.add_child(hint)
@@ -583,13 +628,16 @@ func _draw_stats() -> void:
     var block := VBoxContainer.new()
     block.add_theme_constant_override("separation", 7)
     level.add_child(block)
-    block.add_child(_text("Уровень —                                    — / — XP", 9, Color("#A9AFB4")))
+    var original_save: Dictionary = _server_inventory.get("save", {}) if _server_inventory_verified else {}
+    var saved_level := str(original_save.get("lvl", original_save.get("level", "—")))
+    var saved_xp := str(original_save.get("xp", "—"))
+    block.add_child(_text("Уровень " + saved_level + "              XP " + saved_xp, 9, Color("#A9AFB4")))
     var xp := ProgressBar.new()
     xp.custom_minimum_size.y = 9
     xp.show_percentage = false
     xp.value = 0
     block.add_child(xp)
-    _page_container.add_child(_text("Перерождений: —             доступно с 30 ур.", 9, Color("#A9AFB4")))
+    _page_container.add_child(_text("Перерождений: " + str(original_save.get("rebirths", "—")) + "             доступно с 30 ур.", 9, Color("#A9AFB4")))
     var actions := HBoxContainer.new()
     _page_container.add_child(actions)
     for label in ["СБРОС ХАРАКТЕРИСТИК", "ПЕРЕРОЖДЕНИЕ · 30 УР."]:
@@ -598,7 +646,7 @@ func _draw_stats() -> void:
         b.custom_minimum_size.y = 34
         b.disabled = true
         actions.add_child(b)
-    _page_container.add_child(_text("Очки характеристик: —", 9, Color("#F0BB51")))
+    _page_container.add_child(_text("Очки характеристик: " + str(original_save.get("statPts", "—")), 9, Color("#F0BB51")))
     for entry in [
         ["❤", "HP"], ["◉", "Мана"], ["⚔", "Атака"],
         ["◆", "Защита"], ["➤", "Скорость"], ["≋", "Скорость атаки"],
@@ -617,7 +665,18 @@ func _draw_stats() -> void:
         var name := _text(str(entry[1]), 8, Color("#B8BDC1"))
         name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         line.add_child(name)
-        var value := _text("—", 10, Color("#E6E6E6"))
+        var source_keys := {
+            "HP":["hp"], "Мана":["mp"], "Атака":["atk", "attack"],
+            "Защита":["def", "defense"], "Скорость":["speed", "spd"],
+            "Скорость атаки":["attackSpeed", "atkSpeed"], "Крит. урон":["critDamage", "critDmg"],
+            "Крит. шанс":["critChance", "crit"], "Уворот":["dodge", "evasion"]
+        }
+        var server_value: Variant = "—"
+        for field in source_keys.get(str(entry[1]), []):
+            if original_save.has(field):
+                server_value = original_save[field]
+                break
+        var value := _text(str(server_value), 10, Color("#E6E6E6"))
         value.custom_minimum_size.x = 55
         value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         line.add_child(value)
@@ -947,8 +1006,9 @@ func _draw_runes() -> void:
     inv.add_theme_constant_override("v_separation", 6)
     _page_container.add_child(inv)
     var rune_count := 0
-    for i in range(stash.bag.size()):
-        var item: Dictionary = stash.bag[i]
+    var rune_bag := _real_bag()
+    for i in range(rune_bag.size()):
+        var item: Dictionary = SERVER_VIEW.item_at(rune_bag, i)
         if str(item.get("kind", "")) != "rune" and str(item.get("id", "")) != "test_rune":
             continue
         rune_count += 1
