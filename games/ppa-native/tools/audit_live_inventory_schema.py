@@ -33,4 +33,24 @@ for label, source in sources.items():
             b = min(len(source), match.end() + (1300 if "resourceItems" in pattern or "sendInvState" in pattern else 340))
             excerpt = " ".join(source[a:b].split())
             print(f"PPA_SCHEMA {label} {pattern}: {excerpt[:1650]}", flush=True)
+# Exact public inventory stack builder, not a player save. Print enough to
+# reconstruct the same projection from D1 inventory fields in native Godot.
+from html import unescape
+needle = "resourceItems:(function(){"
+match = PAGE.find(needle)
+if match < 0:
+    raise RuntimeError("Original resourceItems builder moved; fail closed")
+end = PAGE.find("})();", match)
+if end < 0 or end - match > 24000:
+    raise RuntimeError("Original resourceItems builder end missing")
+block = unescape(PAGE[match:end+5])
+print("PPA_RESOURCE_ITEMS_BUILDER_BEGIN", len(block), flush=True)
+for pos in range(0,len(block),2600):
+    print("PPA_RESOURCE_ITEMS_PART",pos,repr(block[pos:pos+2600]),flush=True)
+print("PPA_RESOURCE_ITEMS_BUILDER_END",flush=True)
+for name in ("MATERIAL_DB", "PPA_V172_ART", "GRIMOIRE_ART"):
+    match = PAGE.find("const " + name + "=")
+    if match < 0:
+        match = PAGE.find("var " + name + "=")
+    print("PPA_PUBLIC_ASSET_CATALOG",name,"found=",match>=0,"excerpt=",repr(unescape(PAGE[match:match+900])) if match>=0 else "",flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
