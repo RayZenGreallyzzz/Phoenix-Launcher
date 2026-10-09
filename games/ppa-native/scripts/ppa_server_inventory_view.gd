@@ -29,25 +29,31 @@ static func _as_bag(raw: Variant) -> Array:
 static func _as_equipment(raw: Variant) -> Dictionary:
     return (raw as Dictionary).duplicate(true) if raw is Dictionary else {}
 
-static func _find_source(save: Dictionary) -> Dictionary:
+static func _sources(save: Dictionary) -> Array[Dictionary]:
+    # The original Telegram PPA persists inventory as top-level state.bag,
+    # state.equipped and state.storage (see the deployed ppa-bridge.js).
+    # Nested 'inventory' may be a partial UI cache. It must NEVER override
+    # the authoritative top-level bag or equipment.
+    var candidates: Array[Dictionary] = [save]
     for key in ["inventory", "inv", "INV"]:
-        if save.get(key) is Dictionary:
-            return save[key]
-    return save
+        var raw: Variant = save.get(key, null)
+        if raw is Dictionary:
+            candidates.append(raw as Dictionary)
+    return candidates
+
+static func _first_value(sources: Array[Dictionary], keys: Array[String]) -> Variant:
+    for source in sources:
+        for key in keys:
+            var value: Variant = source.get(key, null)
+            if value != null:
+                return value
+    return null
 
 static func from_save(save: Dictionary) -> Dictionary:
-    var src := _find_source(save)
-    var bag_raw: Variant = null
-    for key in ["bag", "items"]:
-        if src.has(key):
-            bag_raw = src[key]
-            break
-    if bag_raw == null and src != save:
-        bag_raw = save.get("bag", save.get("items", null))
-    var equipped_raw: Variant = src.get("equipped", src.get("equipment", null))
-    if equipped_raw == null and src != save:
-        equipped_raw = save.get("equipped", save.get("equipment", {}))
-    var storage_raw: Variant = src.get("storage", save.get("storage", {}))
+    var sources := _sources(save)
+    var bag_raw: Variant = _first_value(sources, ["bag", "items"])
+    var equipped_raw: Variant = _first_value(sources, ["equipped", "equipment"])
+    var storage_raw: Variant = _first_value(sources, ["storage"])
     return {
         "save": save.duplicate(true),
         "bag": _as_bag(bag_raw),
