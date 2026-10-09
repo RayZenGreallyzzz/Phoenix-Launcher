@@ -84,4 +84,7 @@ for term in ("ARENA_SHOP", "arenaShop", "arenaTokens", "arenaAttempts", "arenaPv
     at = PAGE.find(term)
     print("PPA_ORIGINAL_ARENA_EVENT_SCHEMA", term, "found=", at >= 0,
           "excerpt=", repr(PAGE[max(0,at-200):at+1900]) if at >= 0 else "", flush=True)
+for term in ("const PVP_SHOP_ITEMS", "const PVP_SHOP_CATALOG", "const PVP_SHOP", "const ARENA_SHOP", "function sendArenaMenuState", "function sendEventsState", "function ppaSendEventsState", "const eventCatalog", "const offers=[", "const RURI_ART", "const TITAN_ART"):
+    at = PAGE.find(term)
+    print("PPA_EXACT_ARENA_EVENT_CODE", term, "found=", at>=0, "excerpt=", repr(PAGE[at:at+4600]) if at>=0 else "", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
