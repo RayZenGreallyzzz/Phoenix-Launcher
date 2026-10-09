@@ -7,6 +7,7 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 # touching live server account class, inventory, progress or character ID.
 # One server character remains authoritative; this gallery is visual test only.
 signal character_confirmed
+signal account_switch_requested
 
 var account: Dictionary = {}
 var verified_state: Dictionary = {} # Never edited by the native demo gallery.
@@ -231,6 +232,12 @@ func _build_ui() -> void:
     _enter_button.pressed.connect(_confirm_preview)
     _enter_button.disabled = true
     details.add_child(_enter_button)
+
+    var switch_account := Button.new()
+    switch_account.text = "СМЕНИТЬ АККАУНТ · В ЛАУНЧЕР"
+    switch_account.custom_minimum_size = Vector2(0, 40)
+    switch_account.pressed.connect(func(): account_switch_requested.emit())
+    details.add_child(switch_account)
 
     var footer := Label.new()
     footer.text = "ТЕСТОВАЯ ГАЛЕРЕЯ: СМЕНА КЛАССА НЕ ЗАПИСЫВАЕТСЯ НА СЕРВЕР PPA"
