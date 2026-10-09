@@ -98,7 +98,24 @@ def static_object(source: str,name: str):
             continue
         transformed.append(ch)
         pos+=1
-    value=ast.literal_eval("".join(transformed))
+    tree=ast.parse("".join(transformed), mode="eval")
+    # Original PPA can refer to a predeclared icon or decorative theme.
+    # Those unresolved public JS variables are NOT executed or substituted
+    # with invented values; only required literal ID, name, price survive.
+    def decode(node):
+        if isinstance(node,ast.Expression):return decode(node.body)
+        if isinstance(node,ast.Constant):return node.value
+        if isinstance(node,(ast.List,ast.Tuple)):return [decode(x) for x in node.elts]
+        if isinstance(node,ast.Dict):return {decode(k):decode(v) for k,v in zip(node.keys,node.values)}
+        if isinstance(node,ast.UnaryOp) and isinstance(node.op,(ast.USub,ast.UAdd)):
+            raw=decode(node.operand)
+            if isinstance(raw,(int,float)):
+                return -raw if isinstance(node.op,ast.USub) else raw
+        if isinstance(node,ast.Name):
+            print("PPA_PREMIUM_SOURCE_JS_REFERENCE",node.id,"ignored_no_eval=1",flush=True)
+            return None
+        raise RuntimeError("Premium catalog has nonliteral/dynamic JS entry; refusing to evaluate: "+type(node).__name__)
+    value=decode(tree)
     if not isinstance(value,(dict,list)):raise RuntimeError("Premium catalog is not static")
     return value
 
