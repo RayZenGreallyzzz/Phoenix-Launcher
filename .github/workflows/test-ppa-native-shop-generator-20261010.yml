@@ -2,7 +2,10 @@ name: Validate PPA native original shop catalog extractors
 on:
   push:
     branches: ["feature/godot-server-readonly-20261009"]
-    paths: [".github/workflows/test-ppa-native-shop-generator-20261010.yml"]
+    paths:
+      - ".github/workflows/test-ppa-native-shop-generator-20261010.yml"
+      - "games/ppa-native/tools/generate_ppa_forge_catalog.py"
+      - "games/ppa-native/tools/generate_ppa_premium_catalog.py"
   workflow_dispatch:
 
 permissions:
