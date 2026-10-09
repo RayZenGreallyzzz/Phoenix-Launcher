@@ -219,6 +219,14 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    # Both existing PPA auth endpoints must identify the same server game.
+    # Do not accept a successful HTTP response with another game's account.
+    if data.get("ok", false) != true or str(data.get("gameId", "")) != GAME_ID:
+        _show_error("Ответ сервера относится к другой игре или не подтверждён.")
+        return
+    if not (data.get("account") is Dictionary):
+        _show_error("Сервер не подтвердил аккаунт Phoenix.")
+        return
     if request_mode == "exchange":
         var session: Dictionary = data.get("session", {})
         session_token = str(session.get("token", ""))
@@ -290,7 +298,17 @@ func _enter_native_world() -> void:
     if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
+    var registered_class := str(account.get("classKey", "")).to_lower().strip_edges()
+    if not CHARACTER_SELECT_SCRIPT.CLASS_NAMES.has(registered_class):
+        _show_error("Сервер PPA вернул неизвестный класс. Не будем подменять персонажа.")
+        return
     get_tree().set_meta("phoenix_account", account.duplicate(true))
+    # Expose the game SESSION in process memory to the read-only native
+    # save adapter. Never pass launcher credentials or Telegram ID as auth.
+    if session_token.is_empty():
+        _show_error("Игровая сессия Phoenix истекла. Нужна новая авторизация.")
+        return
+    get_tree().set_meta("ppa_native_game_session", session_token)
     var err := get_tree().change_scene_to_file("res://world.tscn")
     if err != OK:
         _show_error("Не удалось открыть native world: %s" % error_string(err))

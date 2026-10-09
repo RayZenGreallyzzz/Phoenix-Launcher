@@ -1,19 +1,19 @@
-name: Build Godot PPA 21-40 and 41-60 test APK (direct download)
+name: Verify Godot read-only server snapshot bridge (unreleased)
 
 on:
   push:
-    branches: [ "test/godot-dungeon-tiers-21-60-20261009" ]
+    branches: [ "feature/godot-server-readonly-20261009" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/godot-ppa-dungeon-world-scale-test.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-direct-godot-personal-test
+  group: ppa-native-game-state-readonly-test
   cancel-in-progress: true
 
 jobs:
@@ -242,6 +242,13 @@ jobs:
           grep -q "PPA_ORIGINAL_CHARFRAME_EXTRACT_OK" /tmp/ppa-original-charframe.log
           test -s games/ppa-native/webview-plugin/src/main/assets/ppa_original/charFrame.html
 
+      - name: Audit original Telegram PPA virtual inventory stack schema (public code only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/audit_live_inventory_schema.py 2>&1 | tee /tmp/ppa-original-inventory-schema.log
+          grep -q 'PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK' /tmp/ppa-original-inventory-schema.log
+
       - name: Install Gradle 8.13 for Godot Android v2 WebView plugin
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -283,6 +290,48 @@ jobs:
               assert min(im.size)>=256
               print('PPA BOOT SPLASH:',im.size,output.stat().st_size)
           PY
+
+      - name: Bundle original live PPA gear and resource artwork into APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/bundle_live_ppa_item_art.py 2>&1 | tee /tmp/ppa-item-art-bundle.log
+          grep -q 'PPA_NATIVE_LIVE_ITEM_ART_OK' /tmp/ppa-item-art-bundle.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('games/ppa-native/assets/ppa_item_icons')
+          data=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+          assert data['count'] >= 50
+          assert len(data['items']) == data['count']
+          for item in data['items']:
+              assert (root/item.removeprefix('/assets/')).is_file()
+          print('PPA_NATIVE_ITEM_ART_BUNDLE_VALID',data['count'],data['bytes'])
+          PY
+
+      - name: Generate exact original PPA material, potion, grimoire artwork catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_item_catalog.py 2>&1 | tee /tmp/ppa-items-catalog.log
+          grep -q 'PPA_CANONICAL_ITEM_CATALOG_OK' /tmp/ppa-items-catalog.log
+          test -s games/ppa-native/scripts/ppa_item_catalog_generated.gd
+
+      - name: Generate exact original PPA blacksmith recipes (display only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_forge_catalog.py 2>&1 | tee /tmp/ppa-forge-catalog.log
+          grep -q 'PPA_CANONICAL_FORGE_CATALOG_OK' /tmp/ppa-forge-catalog.log
+          test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
+
+      - name: Generate original Telegram PPA premium shop goods and packs (display only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_premium_catalog.py 2>&1 | tee /tmp/ppa-premium-catalog.log
+          grep -q 'PPA_ORIGINAL_PREMIUM_CATALOG_OK' /tmp/ppa-premium-catalog.log
+          test -s games/ppa-native/scripts/ppa_premium_catalog_generated.gd
 
       - name: Import native PPA project
         shell: bash
@@ -352,6 +401,60 @@ jobs:
           grep -q "PPA_NEW_DUNGEON_SPRITE_CONTRACT_OK" /tmp/ppa-dungeon-test.log
           if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:" /tmp/ppa-dungeon-test.log; then exit 1; fi
 
+      - name: Verify native protected save snapshot adapter (no server calls)
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_server_readonly.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-readonly.log
+          grep -q 'PPA_NATIVE_AUTH_READONLY_SMOKE_OK' /tmp/ppa-server-readonly.log
+
+      - name: Verify epic, legendary, pet and wing recipe parity without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_forge_recipes.gd --quit-after 600 2>&1 | tee /tmp/ppa-forge-native-test.log
+          grep -q 'PPA_NATIVE_FORGE_CATALOG_READONLY_OK' /tmp/ppa-forge-native-test.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-forge-native-test.log; then exit 1; fi
+
+      - name: Verify native original PPA inventory art and server-only item view
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_inventory_view.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-item-view.log
+          grep -q 'PPA_NATIVE_SERVER_ITEMS_VIEW_OK' /tmp/ppa-server-item-view.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-server-item-view.log; then exit 1; fi
+      - name: Verify real PPA active/passive skill ranks, grimoire books, rune slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_skill_rune_view.gd --quit-after 600 2>&1 | tee /tmp/ppa-skill-rune-view.log
+          grep -q 'PPA_NATIVE_SKILL_RUNE_VIEW_OK' /tmp/ppa-skill-rune-view.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-skill-rune-view.log; then exit 1; fi
+
+      - name: Verify one PPA saved player feeds every native menu without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_all_save_views.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-all-save-views.log
+          grep -q 'PPA_SHARED_ALL_MENUS_READONLY_OK' /tmp/ppa-native-all-save-views.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-all-save-views.log; then exit 1; fi
+
+      - name: Verify real PPA long-press item stats, balances and compact popup
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_item_attributes.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-item-attributes.log
+          grep -q 'PPA_REAL_ITEM_LONG_PRESS_ATTRIBUTES_OK' /tmp/ppa-native-item-attributes.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-item-attributes.log; then exit 1; fi
+
+      - name: Verify one PPA player's NPC inventory, arena tokens and event counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_npc_arena_events.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-npc-arena-events.log
+          grep -q 'PPA_NPC_ARENA_EVENTS_READONLY_OK' /tmp/ppa-native-npc-arena-events.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-npc-arena-events.log; then exit 1; fi
+
       - name: Build native PPA APK
         shell: bash
         run: |
@@ -415,39 +518,8 @@ jobs:
       - name: Upload signed test APK as backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhoenixPixArena-Godot-21-60-Test-APK-ZIP
+          name: PhoenixPixArena-Server-State-ReadOnly-NOT-RELEASED
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct personal test APK under separate tag, NOT launcher update
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG='ppa-godot-direct-test'
-          APP='PhoenixPixArena-Godot-test.apk'
-          cp build/PhoenixPixArena-native-debug.apk "build/$APP"
-          sha256sum "build/$APP" > build/godot-test.sha256
-          SIZE="$(stat -c %s "build/$APP")"
-          DIGEST="$(sha256sum "build/$APP" | cut -d" " -f1)"
-          test "$SIZE" -gt 100000000
-          echo "Build ${PPA_VERSION_NAME} | code ${PPA_VERSION_CODE} | SHA256 $DIGEST | bytes $SIZE" > build/direct-test-notes.txt
-          echo "Separate visual QA with all three monster tiers (1-20, 21-40, 41-60). Installs over PPA, still no server sync." >> build/direct-test-notes.txt
-          echo "NOT an update for Phoenix Launcher, and NOT on ppa-native-stable." >> build/direct-test-notes.txt
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PPA Godot Direct Test" --notes-file build/direct-test-notes.txt --latest=false
-          fi
-          gh release upload "$TAG" "build/$APP" build/godot-test.sha256 --repo "$GITHUB_REPOSITORY" --clobber
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file build/direct-test-notes.txt --title "PPA Godot ${PPA_VERSION_NAME}" --latest=false
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > build/test-published.json
-          python3 - <<'PY'
-          import json,hashlib,os
-          from pathlib import Path
-          j=json.loads(Path('build/test-published.json').read_text())
-          p=Path('build/PhoenixPixArena-Godot-test.apk')
-          assert j['tag_name']=='ppa-godot-direct-test'
-          assert any(a['name']==p.name and a['size']==p.stat().st_size and a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest() for a in j['assets'])
-          print('PPA_DIRECT_INSTALL_TEST_RELEASE_OK package=com.phoenixgames.ppa bytes='+str(p.stat().st_size))
-          PY

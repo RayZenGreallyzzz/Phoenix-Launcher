@@ -1,0 +1,34 @@
+name: Check live PPA native save route (read-only probe)
+on:
+  push:
+    branches: ["feature/godot-server-readonly-20261009"]
+    paths: [".github/workflows/check-live-ppa-native-route.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-safe-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify live existing PPA + native route (NO secrets, NO writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://ppa-phoenixpixarena.1988stella1988.workers.dev"
+          HEALTH="$(curl -fsS --max-time 15 "$BASE/api/health")"
+          echo "$HEALTH" | grep -q '"ok":true'
+          HTTP="$(curl -sS --max-time 15 --output /tmp/ppa-anon-state.txt --write-out '%{http_code}' "$BASE/api/game/state")"
+          node -e 'const fs=require("node:fs");const j=JSON.parse(fs.readFileSync("/tmp/ppa-anon-state.txt","utf8"));if(!j||j.ok!==false)process.exit(1);console.log("PPA_NATIVE_ROUTE_ANONYMOUS_CODE="+(j.code||"unknown"));'
+          if [ "$HTTP" = 401 ]; then
+            echo "PPA_NATIVE_LIVE_ROUTE_READY=1 auth_required=1 legacy_health=OK"
+          elif [ "$HTTP" = 404 ]; then
+            echo "PPA_NATIVE_LIVE_ROUTE_READY=0 status=404 live_worker_not_active_or_gate_off"
+            echo "::notice::The native save route is not live/enabled; Android only has read-only UI test mode."
+          else
+            echo "::error::Unexpected native state route HTTP $HTTP; stopping parity claims."
+            exit 1
+          fi
+          echo "PPA_LIVE_ANONYMOUS_PROBE_DONE no_auth_tokens=1 no_db_reads=1 no_saves_modified=1"

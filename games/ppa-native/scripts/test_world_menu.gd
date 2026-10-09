@@ -9,12 +9,14 @@ const SHOP_CATALOG = preload("res://scripts/test_shop_catalog.gd")
 const CANONICAL_CHARACTER = preload("res://scripts/ppa_character_screen.gd")
 const NPC_SCREEN = preload("res://scripts/ppa_npc_screen.gd")
 const GLOBAL_HUB = preload("res://scripts/ppa_global_hub.gd")
+const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 
 signal change_class_requested
 # Future server adapter listens to this and returns a verified read-only NPC snapshot.
 signal npc_snapshot_requested(service: String)
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
+signal refresh_readonly_save_requested
 
 
 var account: Dictionary = {}
@@ -43,6 +45,36 @@ var _smith_tab := "enhance"
 var _page_notice_default := "PPA · ТЕСТОВЫЙ КЛИЕНТ · СЕРВЕРНЫЕ ПОКУПКИ ОТКЛЮЧЕНЫ"
 var _selected_item_index := -1
 var _selected_item_source := "bag"
+var _verified_save: Dictionary = {}
+var _has_verified_save := false
+
+func apply_readonly_snapshot(payload: Dictionary) -> void:
+    if payload.get("readOnly", false) != true or not (payload.get("state") is Dictionary):
+        return
+    _verified_save = (payload["state"] as Dictionary).duplicate(true)
+    _has_verified_save = true
+    if _character_screen != null:
+        _character_screen.apply_readonly_save(
+            _verified_save, payload.get("version", null), payload.get("updatedAt", null)
+        )
+    if _npc_screen != null:
+        _npc_screen.apply_player_save_readonly(_verified_save)
+    if _global_hub != null:
+        _global_hub.apply_player_save_readonly(_verified_save)
+    if _panel != null and _panel.visible:
+        _refresh()
+
+func clear_readonly_snapshot() -> void:
+    _verified_save.clear()
+    _has_verified_save = false
+    if _character_screen != null:
+        _character_screen.clear_readonly_save()
+    if _npc_screen != null:
+        _npc_screen.clear_player_save_readonly()
+    if _global_hub != null:
+        _global_hub.clear_player_save_readonly()
+    if _panel != null and _panel.visible:
+        _refresh()
 
 
 func configure(profile: Dictionary, selected_class: String) -> void:
@@ -69,6 +101,9 @@ func _ready() -> void:
         _character_screen.close_requested.connect(close_menu)
         _character_screen.select_item_requested.connect(_open_item)
         _character_screen.unequip_requested.connect(_on_character_unequip)
+        _character_screen.refresh_readonly_save_requested.connect(
+            func(): refresh_readonly_save_requested.emit()
+        )
         _character_screen.visible = false
     _panel.visible = false
     _background.visible = false
@@ -91,6 +126,11 @@ func _ready() -> void:
     _global_hub.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _global_hub.close_requested.connect(close_menu)
     _global_hub.character_requested.connect(func(): open_page("character"))
+    _global_hub.arena_requested.connect(func():
+        # Navigate to existing native arena NPC UI, without spawning a fake
+        # arena or starting a server match.
+        open_npc({"id":"existing-arena-menu", "service":"arena", "name":"Мечник арены"})
+    )
     _global_hub.snapshot_requested.connect(func(section: String): global_snapshot_requested.emit(section))
     _global_hub.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     # Optional A/B comparison of the untouched Telegram character iframe.
@@ -281,6 +321,8 @@ func open_global_section(which: String) -> void:
     _background.visible = false
     current_page = "global_" + which
     _global_hub.open_section(which)
+    # Refresh the one shared save on menu entry, not one request per tab.
+    refresh_readonly_save_requested.emit()
 
 func _on_character_unequip(slot: String) -> void:
     var result: String = stash.unequip_test_item(slot)
@@ -313,6 +355,9 @@ func open_npc(npc: Dictionary) -> void:
         _global_hub.close_global()
     current_page = "npc_" + valid_service
     _npc_screen.open_npc(npc)
+    # Same authenticated D1 save is shared with character, forge, warehouse,
+    # auction and currencies. Do not re-GET for every picker/scroll event.
+    refresh_readonly_save_requested.emit()
 
 func set_near_npc(npc: Dictionary) -> void:
     # Preserve the NPC whose shop is currently open, even if the player moves.
@@ -355,6 +400,10 @@ func open_page(page: String) -> void:
         # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
+        # Re-read the SAME authenticated PPA save whenever the character
+        # panel is reopened, just as global and NPC menus already do.
+        # One GET per opening, not per page/scroll; no local save or writes.
+        refresh_readonly_save_requested.emit()
         return
     if _native_web_ui != null and _web_open:
         _native_web_ui.hideUi()
@@ -553,11 +602,38 @@ func _show_items(source_name: String) -> void:
     _action(actions, "ТОРГОВЕЦ", func(): _open_service_by_id("merchant"))
 
 func _open_item(source_name: String, index: int) -> void:
+    if _has_verified_save and _character_screen != null:
+        var server_inventory := SERVER_VIEW.from_save(_verified_save)
+        var source: Array = server_inventory.get("resource_items", []) if source_name == "resource" else server_inventory.get("bag", [])
+        var owned_item: Dictionary = SERVER_VIEW.item_at(source, index)
+        if not owned_item.is_empty():
+            # Do not hide the original character inventory or open the
+            # legacy generic test modal. One window, one source of truth.
+            _character_screen.call("show_server_item_details", owned_item)
+        return
     _selected_item_source = source_name
     _selected_item_index = index
     open_page("item")
 
 func _show_item_details() -> void:
+    if _has_verified_save:
+        var server_inventory := SERVER_VIEW.from_save(_verified_save)
+        var server_bag: Array = server_inventory.get("bag", [])
+        var resource_stacks: Array = server_inventory.get("resource_items", [])
+        var source_items: Array = resource_stacks if _selected_item_source == "resource" else server_bag
+        var real_item: Dictionary = SERVER_VIEW.item_at(source_items, _selected_item_index)
+        if real_item.is_empty():
+            open_page("bag")
+            return
+        _line(SERVER_VIEW.title(real_item), false, true)
+        _line("Количество: " + str(SERVER_VIEW.item_count(real_item)))
+        _line("Редкость: " + SERVER_VIEW.rarity(real_item), true)
+        _line("Настоящий предмет PPA. Действия будут доступны после серверного подключения.", true)
+        var back_to_bag := Button.new()
+        back_to_bag.text = "НАЗАД"
+        back_to_bag.pressed.connect(open_page.bind("bag"))
+        _list.add_child(back_to_bag)
+        return
     var from_bag := _selected_item_source == "bag"
     var items: Array = stash.bag if from_bag else stash.warehouse
     if _selected_item_index < 0 or _selected_item_index >= items.size():

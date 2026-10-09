@@ -7,12 +7,16 @@ signal close_requested
 signal character_requested
 signal snapshot_requested(section: String)
 signal dungeon_visual_test_requested
+signal arena_requested
 
+const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
+const ORIGINAL_PREMIUM = preload("res://scripts/ppa_premium_catalog_generated.gd")
 const CATEGORIES := [
     {"id":"premium", "title":"ПРЕМИУМ МАГАЗИН"},
     {"id":"wallet", "title":"КОШЕЛЁК"},
     {"id":"events", "title":"СОБЫТИЯ"},
-    {"id":"locations", "title":"ЛОКАЦИИ"}
+    {"id":"locations", "title":"ЛОКАЦИИ"},
+    {"id":"arena", "title":"АРЕНА"}
 ]
 const EVENT_GROUPS := [
     {"id":"game", "title":"ИГРОВЫЕ"},
@@ -27,6 +31,16 @@ const EVENT_ITEMS := [
     {"id":"citadel", "group":"war", "title":"ЦИТАДЕЛЬ ФЕНИКСА", "detail":"Клановая война, захват, вход и награды — только через общий сервер."},
     {"id":"updates", "group":"updates", "title":"ПОСЛЕДНИЕ ОБНОВЛЕНИЯ", "detail":"Здесь появятся изменения из общего списка обновлений PPA."}
 ]
+# Reference exchange from original deployed PPA TITAN_SHARD_OFFERS.
+# Real claims and spending must be server-authoritative and are disabled.
+const TITAN_SHARD_OFFERS = [
+    {"name":"Обычная заточка ×3","icon":"◆","cost":1},
+    {"name":"Премиум-реген HP ×3","icon":"❤","cost":2},
+    {"name":"Свиток телепорта ×2","icon":"📜","cost":3},
+    {"name":"Редкий материал ×1","icon":"✦","cost":4},
+    {"name":"Премиум-заточка ×1","icon":"💎","cost":6},
+    {"name":"Премиум руна ×1","icon":"ᚱ","cost":12}
+]
 const GOLD := Color("#F5CA79")
 const WHITE := Color("#E8E0D1")
 const MUTED := Color("#A99A81")
@@ -36,6 +50,7 @@ var section := "events"
 var subsection := "game"
 var selected_event := "ruri"
 var snapshot: Dictionary = {}
+var _player_data_readonly: Dictionary = {}
 var _back: ColorRect
 var _frame: PanelContainer
 var _heading: Label
@@ -162,8 +177,18 @@ func _fit() -> void:
 func is_open() -> bool:
     return visible
 
+func apply_player_save_readonly(save: Dictionary) -> void:
+    _player_data_readonly = SAVE_VIEWS.global_player_view(save)
+    if visible:
+        _render()
+
+func clear_player_save_readonly() -> void:
+    _player_data_readonly.clear()
+    if visible:
+        _render()
+
 func open_section(which: String = "events") -> void:
-    if not ["premium", "wallet", "events", "locations"].has(which):
+    if not ["premium", "wallet", "events", "locations", "arena"].has(which):
         return
     section = which
     subsection = "game" if which == "events" else "all"
@@ -214,13 +239,14 @@ func _render() -> void:
         b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _tabs.add_child(b)
     var caption := {"premium":"ПРЕМИУМ МАГАЗИН", "wallet":"КОШЕЛЁК",
-        "events":"ЦЕНТР СОБЫТИЙ", "locations":"КАРТА И ЛОКАЦИИ"}
+        "events":"ЦЕНТР СОБЫТИЙ", "locations":"КАРТА И ЛОКАЦИИ", "arena":"АРЕНА PPA"}
     _heading.text = str(caption[section])
     match section:
         "premium": _premium()
         "wallet": _wallet()
         "events": _events()
         "locations": _locations()
+        "arena": _arena()
     _scroll.set_deferred("scroll_vertical", 0)
 
 func _section(title: String, detail: String) -> void:
@@ -239,26 +265,69 @@ func _locked(label_text: String) -> void:
     b.name = "GlobalServerActionLocked"
     _body.add_child(b)
 
+func _original_premium_cards(title_text: String, offers: Array) -> void:
+    _section(title_text, "Реальный ассортимент Telegram PPA · цены из оригинального магазина")
+    var cards := GridContainer.new()
+    cards.name = "OriginalPpaPremiumGrid_" + title_text.replace(" ", "_")
+    cards.columns = 2 if size.x < 780.0 else 3
+    cards.add_theme_constant_override("h_separation", 6)
+    cards.add_theme_constant_override("v_separation", 7)
+    _body.add_child(cards)
+    for raw in offers:
+        if not (raw is Dictionary):
+            continue
+        var item: Dictionary = raw
+        var tile := PanelContainer.new()
+        tile.add_theme_stylebox_override("panel", _style(Color("#171A1E"), LINE))
+        tile.custom_minimum_size.y = 125.0
+        cards.add_child(tile)
+        var column := VBoxContainer.new()
+        column.add_theme_constant_override("separation", 4)
+        tile.add_child(column)
+        var art := str(item.get("img", ""))
+        if art.begins_with("res://") and ResourceLoader.exists(art):
+            var picture := TextureRect.new()
+            picture.texture = load(art) as Texture2D
+            picture.custom_minimum_size = Vector2(60.0, 55.0)
+            picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+            picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+            column.add_child(picture)
+        var name_label := _label(str(item.get("name", "")), 12, WHITE)
+        name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        column.add_child(name_label)
+        column.add_child(_label(str(item.get("price", "?")) + " Gram", 12, GOLD))
+        var details := _label(str(item.get("desc","")), 10, MUTED)
+        details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        column.add_child(details)
+    if offers.is_empty():
+        _section("НЕТ ПРЕДЛОЖЕНИЙ", "Публичный каталог игры пуст, выдуманные товары не показываем.")
+
 func _premium() -> void:
-    _section("ПРЕМИУМ PPA", "Подписки и игровые услуги. Наличие, цены и ограничения должны поступать из настоящего магазина Telegram PPA.")
-    _section("ПОДПИСКИ", "Срок действия, бонусы и текущий статус — данные игрового сервера.")
-    _locked("ОФОРМИТЬ ПОДПИСКУ")
-    _section("ИГРОВЫЕ УСЛУГИ", "Смена класса, разблокировки и другие покупки не осуществляются в тестовом клиенте.")
-    _locked("ПЕРЕЙТИ К ПОКУПКЕ")
-    _section("ПРЕМИУМ ПРЕДМЕТЫ", "Заточки, руны, расходники, кирки. Без выдуманных остатков и цен.")
-    _locked("КУПИТЬ ПРЕДМЕТ")
+    _section("ПРЕМИУМ PPA", "Все товары, наборы и тарифы ниже извлечены из работающего Telegram PPA. Покупки пока защищённо отключены.")
+    _section("ВАШИ GRAM · СЕРВЕРНЫЙ БАЛАНС",
+        str(_player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса")))
+    var catalog: Dictionary = ORIGINAL_PREMIUM.CATALOG
+    _original_premium_cards("ПРЕМИУМ ПРЕДМЕТЫ И УСЛУГИ", catalog.get("goods", []))
+    _original_premium_cards("ГОТОВЫЕ НАБОРЫ", catalog.get("bundles", []))
+    _original_premium_cards("ПРЕМИУМ ПОДПИСКИ", catalog.get("subscriptions", []))
+    _locked("КУПИТЬ · ТОЛЬКО ПОСЛЕ СЕРВЕРНОЙ ПРОВЕРКИ")
+    _section("БЕЗОПАСНОСТЬ", "Показ цены не является оплатой. Реальные Gram и выдача вещей должны проверяться общим сервером PPA.")
 
 func _wallet() -> void:
     _section("TON CONNECT · КОШЕЛЁК PPA", "Кошелёк нельзя подключить простой имитацией кнопки в Godot. Требуется безопасный TON Connect и серверная проверка переводов.")
     _section("ПОДКЛЮЧЁННЫЙ TON АДРЕС", "— · статус ещё не получен от TON Connect")
-    _section("ИГРОВОЙ БАЛАНС GRAM", str(snapshot.get("gramDisplay", "— · нет подтверждённого баланса")))
+    # D1 game currency is not the TON address balance.
+    var game_gram: String = str(_player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса"))
+    _section("ИГРОВОЙ БАЛАНС GRAM", str(game_gram) + " · из сохранения PPA")
+    _section("GOLD / PPA", str(_player_data_readonly.get("goldDisplay", "—")) +
+        " Gold · " + str(_player_data_readonly.get("ppaDisplay", "—")) + " PPA · сохранение D1")
     _section("ПОПОЛНЕНИЕ / ВЫВОД", "Минимум пополнения — 1 Gram, минимальный вывод — 15 Gram. Вывод одобряет администратор.")
     _locked("ПРИВЯЗАТЬ КОШЕЛЁК")
     _locked("ПОПОЛНИТЬ / ВЫВЕСТИ")
     _section("КАЗНА", "Игровой банк PPA не является автоматическим TON-выводом.")
 
 func _events() -> void:
-    _section("ЦЕНТР СОБЫТИЙ", "Категории сверены с Telegram PPA. Активность, таймеры, билеты и награды станут видны после серверной синхронизации.")
+    _section("ЦЕНТР СОБЫТИЙ", "Утверждённые события PPA. Живые таймеры и билеты требуют отдельного серверного статуса.")
     var nav := GridContainer.new()
     nav.name = "GlobalEventGroups"
     nav.columns = 2 if size.y > size.x else 4
@@ -283,10 +352,34 @@ func _events() -> void:
         _body.add_child(b)
         if selected_event == id:
             _section(str(event_item["title"]), str(event_item["detail"]))
+            if id == "titan":
+                var shards: Variant = _player_data_readonly.get("titanShards", null)
+                _section("ОСКОЛКИ КРИСТАЛЬНОГО ТИТАНА", str(shards) if shards != null else "— · нет сохранённых данных")
+                _section("ОБМЕН ТРОФЕЕВ · КАТАЛОГ PPA", "Оригинальные награды и цены. Обмен заблокирован до серверной операции.")
+                for offer in TITAN_SHARD_OFFERS:
+                    _section(str(offer["icon"]) + " " + str(offer["name"]),
+                        str(offer["cost"]) + " осколк(ов) · не доступно для покупки")
+            elif id == "ruri":
+                _section("РАСПИСАНИЕ РУРИ", "В оригинальном событии цикл начинается 1-го числа, длительность 10 дней. Текущий статус подтвердит сервер.")
+            elif id == "mimic":
+                _section("РАСПИСАНИЕ МИМИКА-СОМБРЕРО", "В оригинальном событии цикл начинается 25-го числа, длительность 5 дней. Текущий статус подтвердит сервер.")
             _section("СТАТУС / ВРЕМЯ", "— · требуется подтверждение от сервера PPA")
             _locked("ВОЙТИ / ПОЛУЧИТЬ НАГРАДУ")
     if found == 0:
         _section("КЛАНОВЫЕ СОБЫТИЯ", "В Telegram-центре событий пока нет отдельных событий этой категории.")
+
+func _arena() -> void:
+    _section("PVP И ИСПЫТАНИЯ", "Общая арена PPA. Игроки, рейтинг и бой должны обслуживаться оригинальным сервером.")
+    var tokens: Variant = _player_data_readonly.get("arenaTokens", null)
+    _section("⚔ ЖЕТОНЫ АРЕНЫ", str(tokens) if tokens != null else "— · нет данных")
+    for mode in ["1×1 PVP", "3×3 PVP", "5×5 PVP", "ВОЛНЫ И ИСПЫТАНИЯ", "РЕЙТИНГ", "МАГАЗИН АРЕНЫ"]:
+        _section(mode, "Информация и доступность матча должны поступать из сервера PPA")
+    var open_ui := _button("ОТКРЫТЬ МЕНЮ МЕЧНИКА АРЕНЫ")
+    open_ui.name = "OpenExistingArenaNpcMenu"
+    open_ui.pressed.connect(func(): arena_requested.emit())
+    _body.add_child(open_ui)
+    _section("ОБЩИЙ ОНЛАЙН", "Вход в матч остаётся выключен до защищённого native WebSocket-билета и серверного подбора.")
+    _locked("НАЧАТЬ PVP МАТЧ")
 
 func _locations() -> void:
     _section("МИР PPA", "Тестовая карта подземелья уже доступна без сервера. Полный игровой вход с монстрами и наградами подключим позднее.")

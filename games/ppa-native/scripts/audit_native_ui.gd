@@ -52,7 +52,15 @@ func _run() -> void:
         quit(1)
         return
     print("PPA_HERO_HUD_DEDUP_OK hero_button=0 hub_button=1")
+    # Telegram and Godot must read one shared save when the hero is reopened.
+    # No request is allowed merely from scrolling/changing character pages.
+    var character_refreshes := {"count":0}
+    menu.refresh_readonly_save_requested.connect(func(): character_refreshes["count"] = int(character_refreshes["count"]) + 1)
     menu.open_page("character")
+    if character_refreshes["count"] != 1:
+        push_error("PPA_SHARED_SAVE_REFRESH: character entry must request one authenticated GET")
+        quit(1)
+        return
     if not menu.is_open():
         push_error("PPA_UI_SMOKE: character panel did not open")
         quit(1)
@@ -102,6 +110,10 @@ func _run() -> void:
 
     for page in range(5):
         original_char.open_index(page)
+        if character_refreshes["count"] != 1:
+            push_error("PPA_SHARED_SAVE_REFRESH: page switches must never trigger extra GET")
+            quit(1)
+            return
         if str(original_char._caption.text) != str(original_char.CAPTIONS[page]):
             push_error("PPA_UI_SMOKE: PPA character page caption mismatch: " + str(page))
             quit(1)
@@ -682,14 +694,14 @@ func _run() -> void:
     print("PPA_NATIVE_UI_SMOKE_OK npc_windows=", checked, " native_pages=5 original_character=5 canonical_merchant=12 duplicate_shops=0 transactions=0")
     # Global PPA sections are neither NPCs nor the five-page character panel.
     var hub = menu._global_hub
-    for section in ["premium", "wallet", "events", "locations"]:
+    for section in ["premium", "wallet", "events", "locations", "arena"]:
         menu.open_page("character")
         menu.open_global_section(section)
         if hub == null or not hub.is_open() or menu._character_screen.visible or menu._npc_screen.is_open() or menu._panel.visible:
             push_error("PPA_GLOBAL_ISOLATION: global page overlaps character or NPC: " + section)
             quit(1)
             return
-        if hub.section != section or hub._tabs.get_child_count() != 4 or hub._body.get_child_count() == 0:
+        if hub.section != section or hub._tabs.get_child_count() != 5 or hub._body.get_child_count() == 0:
             push_error("PPA_GLOBAL_NAV: missing native global page " + section)
             quit(1)
             return

@@ -9,9 +9,14 @@ extends Control
 signal close_requested
 signal select_item_requested(source_name: String, index: int)
 signal unequip_requested(slot: String)
+signal refresh_readonly_save_requested
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
 const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
+const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
+const ATTRIBUTE_VIEW = preload("res://scripts/ppa_item_attribute_view.gd")
+const SHARED_SAVE = preload("res://scripts/ppa_shared_save_views.gd")
+const ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 
 const CAPTIONS := [
     "1. ИНВЕНТАРЬ",
@@ -55,6 +60,12 @@ var _book_overlay: ColorRect
 var _book_dialog: PanelContainer
 var _book_container: VBoxContainer
 var _book_scroll: ScrollContainer
+var _item_overlay: ColorRect
+var _item_contents: VBoxContainer
+var _hold_slot: Button
+var _hold_item: Dictionary = {}
+var _hold_since_ms := 0
+var _hold_origin := Vector2.ZERO
 var _gesture_scroll: ScrollContainer
 var _original_skill_card_count := 0
 # Mirrors the original iframe's renderSkills(sk): the absence of verified
@@ -62,6 +73,88 @@ var _original_skill_card_count := 0
 # skill selected from the global grimoire illustration catalog.
 var _server_skills_received := false
 var _server_skills: Dictionary = {}
+var _server_inventory: Dictionary = {}
+var _server_inventory_verified := false
+var _server_save_version: Variant = null
+var _server_saved_at: Variant = null
+var _server_diagnostics: Dictionary = {}
+var _icon_loader: Node
+
+func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_at: Variant = null) -> void:
+    # This is a VIEW only. Never merge with the local test bag/equipment.
+    _server_inventory = SERVER_VIEW.from_save(save)
+    _server_diagnostics = SERVER_VIEW.diagnose(save)
+    _server_skills = _project_server_skill_cards(save)
+    _server_skills_received = true
+    _server_save_version = save_version
+    _server_saved_at = saved_at
+    _server_inventory_verified = true
+    var actual_class := str(save.get("classKey", save.get("cls", account.get("classKey", "")))).to_lower()
+    if ["tank", "paladin", "barbarian", "assassin", "gnome", "archer", "mage", "priest"].has(actual_class):
+        class_key = actual_class
+    if is_node_ready() and visible:
+        _draw_page()
+
+func clear_readonly_save() -> void:
+    _server_inventory.clear()
+    _server_diagnostics.clear()
+    _server_save_version = null
+    _server_saved_at = null
+    _server_inventory_verified = false
+    clear_authoritative_skill_snapshot()
+    if is_node_ready() and visible:
+        _draw_page()
+
+func _real_bag() -> Array:
+    return _server_inventory.get("bag", []) if _server_inventory_verified else []
+
+func _real_resource_items() -> Array:
+    return _server_inventory.get("resource_items", []) if _server_inventory_verified else []
+
+func _real_equipment() -> Dictionary:
+    return _server_inventory.get("equipped", {}) if _server_inventory_verified else {}
+
+func _bind_item_icon(item: Dictionary, button: Button) -> void:
+    if _icon_loader != null and not item.is_empty():
+        _icon_loader.bind_button(item, class_key, button)
+
+func _project_server_skill_cards(save: Dictionary) -> Dictionary:
+    # Matches original Telegram sendInvState(): the canonical skill cards
+    # appear for the selected class even when rank=0; only the progress is
+    # taken from the actual D1 save. No invented learned skills or book counts.
+    var cls := str(save.get("classKey", class_key)).to_lower()
+    if not ["tank","paladin","barbarian","assassin","gnome","archer","mage","priest"].has(cls):
+        cls = class_key
+    var definitions: Dictionary = ORIGINAL_GRIMOIRES.class_info(cls)
+    var ranks_raw: Variant = save.get("skillRanks", {})
+    var owned_raw: Variant = save.get("grimoires", {})
+    var drops_raw: Variant = save.get("grimoireRankDrops", {})
+    var ranks: Dictionary = ranks_raw if ranks_raw is Dictionary else {}
+    var books: Dictionary = owned_raw if owned_raw is Dictionary else {}
+    var drops: Dictionary = drops_raw if drops_raw is Dictionary else {}
+    var result := {"active":[], "passive":[]}
+    for category in ["active", "passive"]:
+        for raw in definitions.get(category, []):
+            if not (raw is Dictionary):
+                continue
+            var id := str(raw.get("id", ""))
+            if id.is_empty():
+                continue
+            var skill: Dictionary = (raw as Dictionary).duplicate(true)
+            var rank := clampi(int(ranks.get(id, 0)), 0, 5)
+            var total := maxi(0, int(books.get(id, 0)))
+            var grades: Variant = drops.get(id, {})
+            var by_rank: Dictionary = grades if grades is Dictionary else {}
+            var third := mini(total, maxi(0, int(by_rank.get("3", by_rank.get(3, 0)))))
+            var second := mini(total - third, maxi(0, int(by_rank.get("2", by_rank.get(2, 0)))))
+            skill["rank"] = rank
+            skill["count"] = total
+            skill["book1"] = total - second - third
+            skill["book2"] = second
+            skill["book3"] = third
+            skill["max"] = rank >= 5
+            (result[category] as Array).append(skill)
+    return result
 
 func apply_authoritative_skill_snapshot(snapshot: Dictionary) -> void:
     # Called ONLY by a future authenticated PPA player-state bridge.
@@ -91,10 +184,15 @@ func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> v
 
 func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _icon_loader = ITEM_ICONS.new()
+    _icon_loader.name = "PPAApprovedItemIcons"
+    add_child(_icon_loader)
     _mono = SystemFont.new()
     _mono.font_names = PackedStringArray(["monospace", "Courier New"])
     _create_frame()
     _create_book_overlay()
+    _create_item_overlay()
+    set_process(false)
     _fit_to_viewport()
     visible = false
 
@@ -319,6 +417,8 @@ func open_index(index: int) -> void:
     _page = posmod(index, 5)
     if _book_overlay != null:
         _book_overlay.visible = false
+    if _item_overlay != null:
+        _item_overlay.visible = false
     visible = true
     _fit_to_viewport()
     _draw_page()
@@ -335,6 +435,10 @@ func is_open() -> bool:
 # Godot's native touch scroll deadzone is set high to avoid *double* scrolling.
 func _input(event: InputEvent) -> void:
     if not visible or _frame == null:
+        return
+    # The inspected server item owns the touch surface. A swipe must not
+    # unexpectedly switch underlying character pages or trigger the joystick.
+    if _item_overlay != null and _item_overlay.visible:
         return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
@@ -448,7 +552,8 @@ func _section(title: String) -> void:
     bar.add_child(caption)
 
 func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Button:
-    var equipped: Dictionary = stash.equipment.get(kind, {})
+    var raw_equipped: Variant = _real_equipment().get(kind, {})
+    var equipped: Dictionary = raw_equipped if raw_equipped is Dictionary else {}
     var filled := not equipped.is_empty()
     var b := _button(name + "\n" + (str(equipped.get("name", "")) if filled else "свободно"), 7)
     b.custom_minimum_size = Vector2(w, h)
@@ -457,7 +562,12 @@ func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Butt
     b.add_theme_stylebox_override("normal", _style_box(
         Color("#0C0F12"), RARITIES.get(str(equipped.get("rarity", "common")), Color("#A26620")) if filled else Color("#A26620"), 6, 1
     ))
-    b.pressed.connect(func(): unequip_requested.emit(kind))
+    # These server-owned items are inspect-only until authoritative
+    # equipment operations are connected to the original PPA backend.
+    _bind_item_icon(equipped, b)
+    if filled and _server_inventory_verified:
+        b.pressed.connect(show_server_item_details.bind(equipped))
+        b.gui_input.connect(_watch_item_hold.bind(b, equipped))
     return b
 
 func _draw_inventory() -> void:
@@ -517,20 +627,74 @@ func _draw_inventory() -> void:
     profession.add_child(cls)
 
     _section("ИНВЕНТАРЬ")
+    var real_save: Dictionary = _server_inventory.get("save", {}) if _server_inventory_verified else {}
+    var wallet: Dictionary = SHARED_SAVE.money(real_save)
+    var money_bar := _text(
+        "GOLD: " + (str(wallet["gold"]) if wallet.get("gold", null) != null else "—") +
+        "    PPA: " + (str(wallet["ppa"]) if wallet.get("ppa", null) != null else "—") +
+        "    GRAM: " + (str(wallet["gram"]) if wallet.get("gram", null) != null else "—"),
+        9, Color("#E8BA70")
+    )
+    money_bar.name = "PPAUnifiedSavedBalances"
+    money_bar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    money_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _page_container.add_child(money_bar)
     var bag_line := HBoxContainer.new()
     bag_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _page_container.add_child(bag_line)
-    var bag_label := _text("СУМКА", 9, Color("#DCAE4C"))
+    var real_bag := _real_bag()
+    var real_resources := _real_resource_items()
+    var gear_count := 0
+    for candidate in real_bag:
+        if candidate is Dictionary and not (candidate as Dictionary).is_empty():
+            gear_count += 1
+    var occupied := gear_count + real_resources.size()
+    # Original Telegram PPA: bag (gear) PLUS virtual resourceItems (stacks).
+    var bag_title := "СУМКА"
+    if _server_inventory_verified:
+        bag_title += " · %d ШМОТ · %d СТАКОВ" % [gear_count, real_resources.size()]
+    var bag_label := _text(bag_title, 8, Color("#DCAE4C"))
     bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     bag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     bag_line.add_child(bag_label)
-    var count := _text(str(stash.bag.size()) + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
+    var count := _text((str(occupied) if _server_inventory_verified else "—") + " / " + str(CAPACITY.INVENTORY), 7, MUTED)
     count.name = "OriginalPPABagCount"
     count.autowrap_mode = TextServer.AUTOWRAP_OFF
     count.custom_minimum_size.x = 66.0
     count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     count.size_flags_horizontal = Control.SIZE_SHRINK_END
     bag_line.add_child(count)
+
+    # Temporary read-only reconciliation display. This exposes only numeric
+    # counts of server save fields, never items, Telegram IDs or account data.
+    # Unlike the inventory slot count it also shows the unparsed cloud shape,
+    # so a stale D1 save can be distinguished from a broken Godot renderer.
+    if _server_inventory_verified:
+        var diag := _server_diagnostics
+        var version_text := str(_server_save_version) if _server_save_version != null else "—"
+        var saved_text := "—"
+        if _server_saved_at != null and float(_server_saved_at) > 0.0:
+            saved_text = Time.get_datetime_string_from_unix_time(
+                int(float(_server_saved_at) / 1000.0), true
+            ).replace("T", " ") + " UTC"
+        var d1_line := _text("СЕЙВ D1 v" + version_text + " · " + saved_text, 8, Color("#9CBBC0"))
+        d1_line.name = "PPACloudSaveVersionDiagnostic"
+        _page_container.add_child(d1_line)
+        var counts_line := _text(
+            "D1 корень: сумка " + str(diag.get("root_bag_text", "—")) +
+            " / надето " + str(diag.get("root_equipped_text", "—")) +
+            "\nвлож. inventory: сумка " + str(diag.get("nested_bag_text", "—")) +
+            " / надето " + str(diag.get("nested_equipped_text", "—")) +
+            "\nвиртуальных стаков из D1: " + str(diag.get("server_stacks", 0)),
+            8, Color("#9CBBC0")
+        )
+        counts_line.name = "PPACloudRawFieldsDiagnostic"
+        _page_container.add_child(counts_line)
+        var refresh := _button("↻ ПЕРЕЧИТАТЬ СЕРВЕР PPA (ТОЛЬКО ЧТЕНИЕ)", 8)
+        refresh.name = "PPARefreshCloudSave"
+        refresh.custom_minimum_size.y = 26
+        refresh.pressed.connect(func(): refresh_readonly_save_requested.emit())
+        _page_container.add_child(refresh)
 
     var grid := GridContainer.new()
     grid.name = "OriginalPPABagGrid"
@@ -548,27 +712,37 @@ func _draw_inventory() -> void:
         slot.custom_minimum_size = Vector2(cell_side, cell_side)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var unlocked := i < 50
-        var item: Dictionary = stash.bag[i] if i < stash.bag.size() else {}
+        var virtual_index := i - real_bag.size()
+        var is_virtual := virtual_index >= 0
+        var item: Dictionary = SERVER_VIEW.item_at(real_resources, virtual_index) if is_virtual else SERVER_VIEW.item_at(real_bag, i)
         var locked := not unlocked and item.is_empty()
         slot.disabled = locked
         slot.modulate.a = 1.0 if not locked else 0.40
         var edge := Color("#5D431F") if unlocked else Color("#282A2B")
         if not item.is_empty():
-            edge = RARITIES.get(str(item.get("rarity", "common")), edge)
-            slot.text = str(item.get("short", "◆")) + "\n×" + str(item.get("qty", 1))
+            edge = RARITIES.get(SERVER_VIEW.rarity(item), edge)
+            slot.text = SERVER_VIEW.symbol(item) + "\n×" + str(SERVER_VIEW.item_count(item))
+            slot.tooltip_text = SERVER_VIEW.title(item)
         var slot_style := _style_box(Color("#0B0E11"), edge, 4)
         slot.add_theme_stylebox_override("normal", slot_style)
         # Without this override, Godot draws the 50 disabled, locked
         # inventory slots as fully transparent. The entire bottom half
         # looks like an empty broken scroll page in the user's 0.1.60 video.
         slot.add_theme_stylebox_override("disabled", slot_style)
-        slot.pressed.connect(func(): select_item_requested.emit("bag", i))
+        slot.disabled = locked or not _server_inventory_verified
+        if not item.is_empty() and _server_inventory_verified:
+            slot.gui_input.connect(_watch_item_hold.bind(slot, item))
+            if is_virtual:
+                slot.pressed.connect(select_item_requested.emit.bind("resource", virtual_index))
+            else:
+                slot.pressed.connect(select_item_requested.emit.bind("bag", i))
         grid.add_child(slot)
+        _bind_item_icon(item, slot)
     var info := PanelContainer.new()
     info.custom_minimum_size.y = 35
     info.add_theme_stylebox_override("panel", _style_box(Color("#0D1013"), Color("#303238"), 5))
     _page_container.add_child(info)
-    var hint := _text("Тапни предмет, чтобы посмотреть или надеть.", 8, MUTED)
+    var hint := _text("ПРЕДМЕТЫ PPA · ТОЛЬКО ПРОСМОТР" if _server_inventory_verified else "ОЖИДАЕМ НАСТОЯЩИЙ ИНВЕНТАРЬ PPA", 8, MUTED)
     hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     info.add_child(hint)
@@ -583,13 +757,16 @@ func _draw_stats() -> void:
     var block := VBoxContainer.new()
     block.add_theme_constant_override("separation", 7)
     level.add_child(block)
-    block.add_child(_text("Уровень —                                    — / — XP", 9, Color("#A9AFB4")))
+    var original_save: Dictionary = _server_inventory.get("save", {}) if _server_inventory_verified else {}
+    var saved_level := str(original_save.get("lvl", original_save.get("level", "—")))
+    var saved_xp := str(original_save.get("xp", "—"))
+    block.add_child(_text("Уровень " + saved_level + "              XP " + saved_xp, 9, Color("#A9AFB4")))
     var xp := ProgressBar.new()
     xp.custom_minimum_size.y = 9
     xp.show_percentage = false
     xp.value = 0
     block.add_child(xp)
-    _page_container.add_child(_text("Перерождений: —             доступно с 30 ур.", 9, Color("#A9AFB4")))
+    _page_container.add_child(_text("Перерождений: " + str(original_save.get("rebirths", "—")) + "             доступно с 30 ур.", 9, Color("#A9AFB4")))
     var actions := HBoxContainer.new()
     _page_container.add_child(actions)
     for label in ["СБРОС ХАРАКТЕРИСТИК", "ПЕРЕРОЖДЕНИЕ · 30 УР."]:
@@ -598,7 +775,7 @@ func _draw_stats() -> void:
         b.custom_minimum_size.y = 34
         b.disabled = true
         actions.add_child(b)
-    _page_container.add_child(_text("Очки характеристик: —", 9, Color("#F0BB51")))
+    _page_container.add_child(_text("Очки характеристик: " + str(original_save.get("statPts", "—")), 9, Color("#F0BB51")))
     for entry in [
         ["❤", "HP"], ["◉", "Мана"], ["⚔", "Атака"],
         ["◆", "Защита"], ["➤", "Скорость"], ["≋", "Скорость атаки"],
@@ -617,7 +794,18 @@ func _draw_stats() -> void:
         var name := _text(str(entry[1]), 8, Color("#B8BDC1"))
         name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         line.add_child(name)
-        var value := _text("—", 10, Color("#E6E6E6"))
+        var source_keys := {
+            "HP":["hp"], "Мана":["mp"], "Атака":["atk", "attack"],
+            "Защита":["def", "defense"], "Скорость":["speed", "spd"],
+            "Скорость атаки":["attackSpeed", "atkSpeed"], "Крит. урон":["critDamage", "critDmg"],
+            "Крит. шанс":["critChance", "crit"], "Уворот":["dodge", "evasion"]
+        }
+        var server_value: Variant = "—"
+        for field in source_keys.get(str(entry[1]), []):
+            if original_save.has(field):
+                server_value = original_save[field]
+                break
+        var value := _text(str(server_value), 10, Color("#E6E6E6"))
         value.custom_minimum_size.x = 55
         value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         line.add_child(value)
@@ -699,7 +887,7 @@ func _draw_source_skill_card(skill: Dictionary, passive: bool) -> void:
     # Godot may auto-rename repeated siblings (@PanelContainer@N). CI and
     # runtime must identify source skill slots by metadata, not node names.
     card.set_meta("ppa_skill_slot", true)
-    card.set_meta("ppa_skill_verified", has_skill)
+    card.set_meta("ppa_skill_verified", has_skill and rank > 0)
     card.custom_minimum_size.y = 90.0
     card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     var bg := _style_box(Color("#17191B"), Color("#685235"), 7, 1)
@@ -827,6 +1015,153 @@ func _book_picture(path: String, dimensions: Vector2) -> TextureRect:
         picture.texture = load(path) as Texture2D
     return picture
 
+# Inspection stays inside the original five-page native character screen.
+# Never open the generic old dark test "ПРЕДМЕТ · ИНВЕНТАРЬ" window.
+func _cancel_item_hold() -> void:
+    _hold_slot = null
+    _hold_item.clear()
+    _hold_since_ms = 0
+    set_process(false)
+
+func _watch_item_hold(event: InputEvent, slot: Button, item: Dictionary) -> void:
+    if item.is_empty() or not _server_inventory_verified:
+        return
+    if event is InputEventScreenTouch:
+        var touch := event as InputEventScreenTouch
+        if touch.pressed and (_hold_slot == null or _hold_slot == slot):
+            _hold_slot = slot
+            _hold_item = item.duplicate(true)
+            _hold_since_ms = Time.get_ticks_msec()
+            _hold_origin = touch.position
+            set_process(true)
+        elif not touch.pressed and _hold_slot == slot:
+            _cancel_item_hold()
+    elif event is InputEventMouseButton:
+        var mouse := event as InputEventMouseButton
+        if mouse.button_index == MOUSE_BUTTON_LEFT:
+            if mouse.pressed and (_hold_slot == null or _hold_slot == slot):
+                _hold_slot = slot
+                _hold_item = item.duplicate(true)
+                _hold_since_ms = Time.get_ticks_msec()
+                _hold_origin = mouse.position
+                set_process(true)
+            elif not mouse.pressed and _hold_slot == slot:
+                _cancel_item_hold()
+    elif event is InputEventScreenDrag and _hold_slot == slot:
+        var drag := event as InputEventScreenDrag
+        if drag.position.distance_to(_hold_origin) > 16.0:
+            _cancel_item_hold()
+    elif event is InputEventMouseMotion and _hold_slot == slot:
+        var motion := event as InputEventMouseMotion
+        if motion.position.distance_to(_hold_origin) > 16.0:
+            _cancel_item_hold()
+
+func _process(_delta: float) -> void:
+    if _hold_slot == null:
+        set_process(false)
+        return
+    if not _hold_slot.is_inside_tree() or not visible or (_item_overlay != null and _item_overlay.visible):
+        _cancel_item_hold()
+        return
+    if Time.get_ticks_msec() - _hold_since_ms >= 1000:
+        var chosen := _hold_item.duplicate(true)
+        _cancel_item_hold()
+        show_server_item_details(chosen)
+
+func _create_item_overlay() -> void:
+    # Root-level centered popup; never a PanelContainer child stretched by
+    # the original character frame. Fixed-height scroll prevents long blank
+    # black cards on portrait phones and tablets.
+    _item_overlay = ColorRect.new()
+    _item_overlay.name = "PPAOriginalCharacterItemDetail"
+    _item_overlay.color = Color(0.0, 0.0, 0.0, 0.74)
+    _item_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _item_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    _item_overlay.z_index = 120
+    add_child(_item_overlay)
+    var centered := CenterContainer.new()
+    centered.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    centered.mouse_filter = Control.MOUSE_FILTER_STOP
+    _item_overlay.add_child(centered)
+    var popup := PanelContainer.new()
+    popup.name = "PPACompactItemDetailsPopup"
+    popup.custom_minimum_size.x = 294.0
+    popup.mouse_filter = Control.MOUSE_FILTER_STOP
+    popup.add_theme_stylebox_override("panel", _style_box(Color("#10161B"), Color("#A16B2B"), 9, 2))
+    centered.add_child(popup)
+    var margins := MarginContainer.new()
+    for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+        margins.add_theme_constant_override(side, 10)
+    popup.add_child(margins)
+    var scroller := ScrollContainer.new()
+    scroller.name = "PPACompactItemAttributeScroll"
+    scroller.custom_minimum_size = Vector2(270.0, 324.0)
+    scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    margins.add_child(scroller)
+    _item_contents = VBoxContainer.new()
+    _item_contents.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _item_contents.add_theme_constant_override("separation", 7)
+    scroller.add_child(_item_contents)
+    _item_overlay.visible = false
+
+func show_server_item_details(item: Dictionary) -> void:
+    # This view is invoked only from the same authenticated, verified save.
+    if item.is_empty() or _item_contents == null or not _server_inventory_verified:
+        return
+    _cancel_item_hold()
+    for child in _item_contents.get_children():
+        _item_contents.remove_child(child)
+        child.queue_free()
+    if _book_overlay != null:
+        _book_overlay.visible = false
+    var heading := _text("ПРЕДМЕТ PPA · ПРОСМОТР", 12, GOLD)
+    heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _item_contents.add_child(heading)
+    var image_holder := CenterContainer.new()
+    image_holder.custom_minimum_size.y = 112.0
+    _item_contents.add_child(image_holder)
+    var picture := _button(SERVER_VIEW.symbol(item), 13)
+    picture.custom_minimum_size = Vector2(106.0, 106.0)
+    picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    image_holder.add_child(picture)
+    _bind_item_icon(item, picture)
+    var item_name := _text(SERVER_VIEW.title(item), 13, Color("#E9BD6C"))
+    item_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    item_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _item_contents.add_child(item_name)
+    var qty := _text("Количество: " + str(SERVER_VIEW.item_count(item)), 10, Color("#D6DEE1"))
+    _item_contents.add_child(qty)
+    var original_rarity := SERVER_VIEW.rarity(item)
+    var translated := {
+        "common":"Обычный", "uncommon":"Необычный",
+        "rare":"Редкий", "epic":"Эпический", "legendary":"Легендарный"
+    }
+    var rarity_line := _text("Редкость: " + str(translated.get(original_rarity, original_rarity)), 10,
+        RARITIES.get(original_rarity, Color("#B3B7B9")))
+    _item_contents.add_child(rarity_line)
+    var attributes: Array = ATTRIBUTE_VIEW.lines_for_item(item)
+    var attribute_heading := _text("ХАРАКТЕРИСТИКИ", 10, GOLD)
+    attribute_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _item_contents.add_child(attribute_heading)
+    if attributes.is_empty():
+        var empty_stats := _text("У этого предмета нет переданных характеристик в облачном сохранении. Числа из тестового клиента не используются.", 9, MUTED)
+        empty_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        _item_contents.add_child(empty_stats)
+    else:
+        for line_text in attributes:
+            var stat := _text(str(line_text), 10, Color("#D0DBDD"))
+            stat.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+            _item_contents.add_child(stat)
+    var message := _text("PPA · сохранение сервера · только просмотр", 8, MUTED)
+    message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _item_contents.add_child(message)
+    var close_btn := _button("НАЗАД К ПЕРСОНАЖУ", 10)
+    close_btn.custom_minimum_size.y = 32.0
+    close_btn.pressed.connect(func(): _item_overlay.visible = false)
+    _item_contents.add_child(close_btn)
+    _item_overlay.visible = true
+
 func _create_book_overlay() -> void:
     _book_overlay = ColorRect.new()
     _book_overlay.name = "OriginalPPAGrimoirePopup"
@@ -923,47 +1258,62 @@ func _open_grimoire_popup(skill: Dictionary, passive: bool, class_title: String)
     _book_scroll.scroll_vertical = 0
 
 func _draw_runes() -> void:
-    _section("РУНЫ")
-    _page_container.add_child(_text(
-        "Слоты открываются каждые 10 уровней · +1 слот за перерождение",
-        8, Color("#9AA0A4")
-    ))
+    _section("РУНЫ · PPA")
+    if not _server_inventory_verified:
+        _page_container.add_child(_text("Ожидаем подтверждённое сохранение PPA.", 9, MUTED))
+        return
+    var save: Dictionary = _server_inventory.get("save", {})
+    var real := SERVER_VIEW.rune_view_from_save(save)
+    var available: Array = real.get("inventory", [])
+    var equipped: Array = real.get("slots", [])
+    var unlocked := int(real.get("unlocked", 0))
+    _page_container.add_child(_text("Открыто слотов: " + str(unlocked) + " / 10 · каждые 10 уровней + перерождения", 8, Color("#A4A9AE")))
     var sockets := GridContainer.new()
     sockets.columns = 5
     sockets.add_theme_constant_override("h_separation", 6)
     sockets.add_theme_constant_override("v_separation", 6)
     _page_container.add_child(sockets)
     for i in range(10):
-        var slot := _button("◇\n" + str(i + 1), 10)
-        slot.custom_minimum_size = Vector2(53, 62)
+        var item: Dictionary = SERVER_VIEW.item_at(equipped, i)
+        var locked := i >= unlocked
+        var label_text := "🔒\n" + str(i + 1) if locked else ("◇\n" + str(i + 1) if item.is_empty() else str(item.get("icon", "ᚱ")))
+        var slot := _button(label_text, 10)
+        slot.custom_minimum_size = Vector2(53.0, 62.0)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        slot.disabled = true
-        slot.add_theme_stylebox_override("disabled", _style_box(Color("#15100D"), Color("#8B632A"), 7, 2))
+        slot.add_theme_stylebox_override("normal", _style_box(Color("#15100D"), RARITIES.get(SERVER_VIEW.rarity(item), Color("#8B632A")), 7, 2))
+        slot.add_theme_stylebox_override("disabled", _style_box(Color("#15100D"), Color("#50402B"), 7, 1))
+        slot.disabled = locked or item.is_empty()
+        if not item.is_empty() and not locked:
+            slot.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
+            slot.pressed.connect(show_server_item_details.bind(item))
+            _bind_item_icon(item, slot)
         sockets.add_child(slot)
-    _section("ДОСТУПНЫЕ РУНЫ")
+    _section("ДОСТУПНЫЕ РУНЫ · " + str(available.size()) + " ВИДОВ")
     var inv := GridContainer.new()
     inv.columns = 4
     inv.add_theme_constant_override("h_separation", 6)
     inv.add_theme_constant_override("v_separation", 6)
     _page_container.add_child(inv)
-    var rune_count := 0
-    for i in range(stash.bag.size()):
-        var item: Dictionary = stash.bag[i]
-        if str(item.get("kind", "")) != "rune" and str(item.get("id", "")) != "test_rune":
+    for raw in available:
+        if not (raw is Dictionary):
             continue
-        rune_count += 1
-        var button := _button(str(item.get("short", "ᚱ")) + "\n" + str(item.get("name", "Руна")), 10)
-        button.custom_minimum_size = Vector2(58, 66)
+        var item: Dictionary = raw
+        var button := _button(str(item.get("icon", "ᚱ")) + "\n×" + str(item.get("count", 1)), 9)
+        button.custom_minimum_size = Vector2(58.0, 66.0)
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        button.pressed.connect(func(): select_item_requested.emit("bag", i))
+        button.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
+        button.add_theme_stylebox_override("normal", _style_box(Color("#111418"), RARITIES.get(SERVER_VIEW.rarity(item), EDGE), 7, 2))
+        button.pressed.connect(show_server_item_details.bind(item))
         inv.add_child(button)
-    if rune_count == 0:
-        _page_container.add_child(_text("Рун пока нет. Обычные–эпические можно выбить, легендарные продаются только в Black Market.", 8))
+        _bind_item_icon(item, button)
+    if available.is_empty():
+        _page_container.add_child(_text("В сохранении персонажа нет свободных рун. Установленные руны отображаются выше.", 8, MUTED))
     var info := PanelContainer.new()
     info.custom_minimum_size.y = 38
     info.add_theme_stylebox_override("panel", _style_box(Color("#13110E"), Color("#65421F"), 5))
     _page_container.add_child(info)
-    var label := _text("Нажми на руну, чтобы вставить её в первый свободный слот.", 8, Color("#B48B45"))
+    var label := _text("Руны получены из общего сохранения PPA · только просмотр. Установка/слияние пока отключены.", 8, Color("#B48B45"))
+    label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     info.add_child(label)
