@@ -30,6 +30,14 @@ static func items_for_picker(save: Dictionary) -> Array:
         # The old local item picker requires a non-empty id and numeric slot.
         # These are VIEW-ONLY locators and must never be sent to the server.
         item["id"] = "ppa-view-only:" + str(result.size())
+        # The NPC picker uses numeric slot indices, while Telegram PPA
+        # records equipment in string slots (armor, weapon, etc). Preserve
+        # the real slot before adding the UI-only index.
+        var original_slot: Variant = item.get("slot", item.get("equipSlot", ""))
+        if original_slot is String:
+            item["ppaEquipmentSlot"] = original_slot
+            if not item.has("equipSlot"):
+                item["equipSlot"] = original_slot
         item["slot"] = result.size()
         item["qty"] = INV.item_count(item)
         result.append(item)
