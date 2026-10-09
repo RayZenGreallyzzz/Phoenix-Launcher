@@ -3,6 +3,7 @@ extends RefCounted
 # Single authenticated player-save snapshot -> DRAW-ONLY views for every
 # native menu. No server mutations, invented inventory, or separate database.
 const INV = preload("res://scripts/ppa_server_inventory_view.gd")
+const ATTR = preload("res://scripts/ppa_item_attribute_view.gd")
 
 static func _number(save: Dictionary, key: String) -> Variant:
     var raw: Variant = save.get(key, null)
@@ -10,11 +11,11 @@ static func _number(save: Dictionary, key: String) -> Variant:
 
 static func money(save: Dictionary) -> Dictionary:
     return {
-        "gold": _number(save, "gold"),
-        "ppa": _number(save, "ppa"),
-        "gram": _number(save, "gram"),
-        "clanCoins": _number(save, "clanCoins"),
-        "arenaTokens": _number(save, "arenaTokens")
+        "gold": ATTR.resolved_money_value(save, ["gold", "goldBalance"]),
+        "ppa": ATTR.resolved_money_value(save, ["ppa", "ppaBalance"]),
+        "gram": ATTR.resolved_money_value(save, ["gram", "gramBalance"]),
+        "clanCoins": ATTR.resolved_money_value(save, ["clanCoins"]),
+        "arenaTokens": ATTR.resolved_money_value(save, ["arenaTokens"])
     }
 
 static func items_for_picker(save: Dictionary) -> Array:
