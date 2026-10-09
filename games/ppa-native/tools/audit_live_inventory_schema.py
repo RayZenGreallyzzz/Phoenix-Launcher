@@ -69,4 +69,8 @@ for term in ("function runeUiState()", "function runeUiState(", "function ppaBui
     at = PAGE.find(term)
     print("PPA_PUBLIC_LIVE_SCHEMA", term, "found=", at >= 0,
           "excerpt=", repr(PAGE[at:at+7300]) if at >= 0 else "", flush=True)
+for term in ("function runeDefByKey(", "function runeUnlockedSlots(", "function normalizeRuneState(", "var RUNE_TYPES=", "const RUNE_TYPES=", "var RUNE_RARITIES=", "const RUNE_RARITIES=", "var RUNE_ART=", "var RUNE_IMG=", "function runeKey("):
+    at = PAGE.find(term)
+    print("PPA_PUBLIC_RUNE_DEFINITION", term, "found=", at >= 0,
+          "excerpt=", repr(PAGE[at:at+2400]) if at >= 0 else "", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
