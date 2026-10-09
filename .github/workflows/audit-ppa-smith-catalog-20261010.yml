@@ -1,0 +1,44 @@
+name: Audit original PPA smith catalog (public read only)
+
+on:
+  push:
+    branches: ["feature/godot-server-readonly-20261009"]
+    paths: [".github/workflows/audit-ppa-smith-catalog-20261010.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect PUBLIC live PPA blacksmith catalog (no auth, no writes)
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import urlopen, Request
+          import re, html
+          class I(HTMLParser):
+              def __init__(self):super().__init__(convert_charrefs=True);self.frames=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="iframe":
+                      a=dict(attrs);self.frames.append((a.get("id",""),a.get("srcdoc","")))
+          data=urlopen(Request("https://ppa-phoenixpixarena.1988stella1988.workers.dev/?godot_smith_public_catalog_audit=20261010",headers={"User-Agent":"PPA-Smith-Public-Audit/1"}),timeout=50).read(8000000).decode("utf-8")
+          parser=I();parser.feed(data)
+          print("PPA_PUBLIC_IFRAMES",[(k,len(v)) for k,v in parser.frames],flush=True)
+          for name,src in parser.frames:
+              if not (re.search("smith|black",name,re.I) or ("ЗАТОЧКА" in src and "КУЗНЕЦ" in src)):
+                  continue
+              source=html.unescape(src)
+              print("PPA_SMITH_FRAME",name,len(source),flush=True)
+              for pat in [r"(?:const|let|var)\s+[A-Z_]{4,}\s*=",r"function\s+\w*(?:Craft|craft|Recipe|recipe|Smith|smith)\w*\s*\(",r"(?:const|var)\s+[^;\n]{0,80}(?:recipe|recipes|рецепт)",r"(?:\bCRAFT\b|\bRECIPES\b|\bRECIPE\b)",r"(?:ЭПИЧЕСКИЙ|ЛЕГЕНДАРНЫЙ|АКСЕССУАРЫ|ПЕТЫ|КРЫЛЬЯ)"]:
+                  m=list(re.finditer(pat,source,re.I))
+                  print("PPA_SMITH_MATCH",repr(pat),"count",len(m),flush=True)
+                  for x in m[:12]:
+                      start=max(0,x.start()-230);end=min(len(source),x.end()+560)
+                      print("PPA_SMITH_SOURCE",x.start(),re.sub(r"\s+"," ",source[start:end])[:850],flush=True)
+          print("PPA_SMITH_AUDIT_OK public_html_only=1 no_auth=1 no_game_writes=1",flush=True)
+          PY
