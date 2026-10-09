@@ -9,6 +9,7 @@ const SHOP_CATALOG = preload("res://scripts/test_shop_catalog.gd")
 const CANONICAL_CHARACTER = preload("res://scripts/ppa_character_screen.gd")
 const NPC_SCREEN = preload("res://scripts/ppa_npc_screen.gd")
 const GLOBAL_HUB = preload("res://scripts/ppa_global_hub.gd")
+const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 
 signal change_class_requested
 # Future server adapter listens to this and returns a verified read-only NPC snapshot.
@@ -43,6 +44,26 @@ var _smith_tab := "enhance"
 var _page_notice_default := "PPA · ТЕСТОВЫЙ КЛИЕНТ · СЕРВЕРНЫЕ ПОКУПКИ ОТКЛЮЧЕНЫ"
 var _selected_item_index := -1
 var _selected_item_source := "bag"
+var _verified_save: Dictionary = {}
+var _has_verified_save := false
+
+func apply_readonly_snapshot(payload: Dictionary) -> void:
+    if payload.get("readOnly", false) != true or not (payload.get("state") is Dictionary):
+        return
+    _verified_save = (payload["state"] as Dictionary).duplicate(true)
+    _has_verified_save = true
+    if _character_screen != null:
+        _character_screen.apply_readonly_save(_verified_save)
+    if _panel != null and _panel.visible:
+        _refresh()
+
+func clear_readonly_snapshot() -> void:
+    _verified_save.clear()
+    _has_verified_save = false
+    if _character_screen != null:
+        _character_screen.clear_readonly_save()
+    if _panel != null and _panel.visible:
+        _refresh()
 
 
 func configure(profile: Dictionary, selected_class: String) -> void:
@@ -558,6 +579,19 @@ func _open_item(source_name: String, index: int) -> void:
     open_page("item")
 
 func _show_item_details() -> void:
+    if _has_verified_save:
+        var server_inventory := SERVER_VIEW.from_save(_verified_save)
+        var server_bag: Array = server_inventory.get("bag", [])
+        var real_item: Dictionary = SERVER_VIEW.item_at(server_bag, _selected_item_index)
+        _line(SERVER_VIEW.title(real_item), false, true)
+        _line("Количество: " + str(SERVER_VIEW.item_count(real_item)))
+        _line("Редкость: " + SERVER_VIEW.rarity(real_item), true)
+        _line("Настоящий предмет PPA. Действия будут доступны после серверного подключения.", true)
+        var back_to_bag := Button.new()
+        back_to_bag.text = "НАЗАД"
+        back_to_bag.pressed.connect(open_page.bind("bag"))
+        _list.add_child(back_to_bag)
+        return
     var from_bag := _selected_item_source == "bag"
     var items: Array = stash.bag if from_bag else stash.warehouse
     if _selected_item_index < 0 or _selected_item_index >= items.size():
