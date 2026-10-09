@@ -25,7 +25,8 @@ func fetch_once() -> void:
     if loading or http == null:
         return
     # Never reuse a former hero's save across scene transitions or accounts.
-    get_tree().remove_meta("ppa_readonly_snapshot")
+    if get_tree().has_meta("ppa_readonly_snapshot"):
+        get_tree().remove_meta("ppa_readonly_snapshot")
     var bearer: String = str(get_tree().get_meta("ppa_native_game_session", ""))
     if bearer.is_empty():
         snapshot_failed.emit("NO_GAME_SESSION")
@@ -49,7 +50,8 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
     last_status = response_code
     # An auth error, partial response or wrong identity must never leave an
     # earlier account's inventory/stats available in SceneTree metadata.
-    get_tree().remove_meta("ppa_readonly_snapshot")
+    if get_tree().has_meta("ppa_readonly_snapshot"):
+        get_tree().remove_meta("ppa_readonly_snapshot")
     if result != HTTPRequest.RESULT_SUCCESS:
         snapshot_failed.emit("TRANSPORT_" + str(result))
         return
