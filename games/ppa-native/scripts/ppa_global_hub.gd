@@ -10,6 +10,7 @@ signal dungeon_visual_test_requested
 signal arena_requested
 
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
+const ORIGINAL_PREMIUM = preload("res://scripts/ppa_premium_catalog_generated.gd")
 const CATEGORIES := [
     {"id":"premium", "title":"ПРЕМИУМ МАГАЗИН"},
     {"id":"wallet", "title":"КОШЕЛЁК"},
@@ -264,14 +265,53 @@ func _locked(label_text: String) -> void:
     b.name = "GlobalServerActionLocked"
     _body.add_child(b)
 
+func _original_premium_cards(title_text: String, offers: Array) -> void:
+    _section(title_text, "Реальный ассортимент Telegram PPA · цены из оригинального магазина")
+    var cards := GridContainer.new()
+    cards.name = "OriginalPpaPremiumGrid_" + title_text.replace(" ", "_")
+    cards.columns = 2 if size.x < 780.0 else 3
+    cards.add_theme_constant_override("h_separation", 6)
+    cards.add_theme_constant_override("v_separation", 7)
+    _body.add_child(cards)
+    for raw in offers:
+        if not (raw is Dictionary):
+            continue
+        var item: Dictionary = raw
+        var tile := PanelContainer.new()
+        tile.add_theme_stylebox_override("panel", _style(Color("#171A1E"), LINE))
+        tile.custom_minimum_size.y = 125.0
+        cards.add_child(tile)
+        var column := VBoxContainer.new()
+        column.add_theme_constant_override("separation", 4)
+        tile.add_child(column)
+        var art := str(item.get("img", ""))
+        if art.begins_with("res://") and ResourceLoader.exists(art):
+            var picture := TextureRect.new()
+            picture.texture = load(art) as Texture2D
+            picture.custom_minimum_size = Vector2(60.0, 55.0)
+            picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+            picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+            column.add_child(picture)
+        var name_label := _label(str(item.get("name", "")), 12, WHITE)
+        name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        column.add_child(name_label)
+        column.add_child(_label(str(item.get("price", "?")) + " Gram", 12, GOLD))
+        var details := _label(str(item.get("desc","")), 10, MUTED)
+        details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        column.add_child(details)
+    if offers.is_empty():
+        _section("НЕТ ПРЕДЛОЖЕНИЙ", "Публичный каталог игры пуст, выдуманные товары не показываем.")
+
 func _premium() -> void:
-    _section("ПРЕМИУМ PPA", "Подписки и игровые услуги. Наличие, цены и ограничения должны поступать из настоящего магазина Telegram PPA.")
-    _section("ПОДПИСКИ", "Срок действия, бонусы и текущий статус — данные игрового сервера.")
-    _locked("ОФОРМИТЬ ПОДПИСКУ")
-    _section("ИГРОВЫЕ УСЛУГИ", "Смена класса, разблокировки и другие покупки не осуществляются в тестовом клиенте.")
-    _locked("ПЕРЕЙТИ К ПОКУПКЕ")
-    _section("ПРЕМИУМ ПРЕДМЕТЫ", "Заточки, руны, расходники, кирки. Без выдуманных остатков и цен.")
-    _locked("КУПИТЬ ПРЕДМЕТ")
+    _section("ПРЕМИУМ PPA", "Все товары, наборы и тарифы ниже извлечены из работающего Telegram PPA. Покупки пока защищённо отключены.")
+    _section("ВАШИ GRAM · СЕРВЕРНЫЙ БАЛАНС",
+        str(_player_data_readonly.get("gramDisplay", "— · нет подтверждённого баланса")))
+    var catalog: Dictionary = ORIGINAL_PREMIUM.CATALOG
+    _original_premium_cards("ПРЕМИУМ ПРЕДМЕТЫ И УСЛУГИ", catalog.get("goods", []))
+    _original_premium_cards("ГОТОВЫЕ НАБОРЫ", catalog.get("bundles", []))
+    _original_premium_cards("ПРЕМИУМ ПОДПИСКИ", catalog.get("subscriptions", []))
+    _locked("КУПИТЬ · ТОЛЬКО ПОСЛЕ СЕРВЕРНОЙ ПРОВЕРКИ")
+    _section("БЕЗОПАСНОСТЬ", "Показ цены не является оплатой. Реальные Gram и выдача вещей должны проверяться общим сервером PPA.")
 
 func _wallet() -> void:
     _section("TON CONNECT · КОШЕЛЁК PPA", "Кошелёк нельзя подключить простой имитацией кнопки в Godot. Требуется безопасный TON Connect и серверная проверка переводов.")
