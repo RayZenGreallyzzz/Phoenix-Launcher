@@ -24,6 +24,8 @@ func _ready() -> void:
 func fetch_once() -> void:
     if loading or http == null:
         return
+    # Never reuse a former hero's save across scene transitions or accounts.
+    get_tree().remove_meta("ppa_readonly_snapshot")
     var bearer: String = str(get_tree().get_meta("ppa_native_game_session", ""))
     if bearer.is_empty():
         snapshot_failed.emit("NO_GAME_SESSION")
@@ -45,6 +47,9 @@ func fetch_once() -> void:
 func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     loading = false
     last_status = response_code
+    # An auth error, partial response or wrong identity must never leave an
+    # earlier account's inventory/stats available in SceneTree metadata.
+    get_tree().remove_meta("ppa_readonly_snapshot")
     if result != HTTPRequest.RESULT_SUCCESS:
         snapshot_failed.emit("TRANSPORT_" + str(result))
         return
@@ -73,6 +78,13 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
     if expected_tg.is_empty() or expected_tg == "<null>" or actual_tg != expected_tg:
         snapshot_failed.emit("TELEGRAM_ID_MISMATCH")
         return
+    var state: Dictionary = response["state"]
+    # The original PPA save includes these profile-bound IDs. Reject a
+    # contradictory saved identity even when the response profile matches.
+    for field in ["telegramId", "profileTelegramId"]:
+        if state.has(field) and str(state[field]) != expected_tg:
+            snapshot_failed.emit("SAVE_TELEGRAM_ID_MISMATCH")
+            return
     # Never persist any of this data or feed it back as an attempted save.
     var immutable_copy: Dictionary = response.duplicate(true)
     get_tree().set_meta("ppa_readonly_snapshot", immutable_copy)
