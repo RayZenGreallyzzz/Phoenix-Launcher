@@ -242,6 +242,13 @@ jobs:
           grep -q "PPA_ORIGINAL_CHARFRAME_EXTRACT_OK" /tmp/ppa-original-charframe.log
           test -s games/ppa-native/webview-plugin/src/main/assets/ppa_original/charFrame.html
 
+      - name: Audit original Telegram PPA virtual inventory stack schema (public code only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/audit_live_inventory_schema.py 2>&1 | tee /tmp/ppa-original-inventory-schema.log
+          grep -q 'PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK' /tmp/ppa-original-inventory-schema.log
+
       - name: Install Gradle 8.13 for Godot Android v2 WebView plugin
         uses: gradle/actions/setup-gradle@v4
         with:
