@@ -68,7 +68,7 @@ func _check() -> void:
     var child_names: Array[String] = []
     for child in npc._body.get_children():
         child_names.append(child.name)
-        if child.name == "NpcFullWidthPriceRow" and child is VBoxContainer:
+        if child.name.begins_with("NpcFullWidthPriceRow_") and child is VBoxContainer:
             price_rows += 1
     print("PPA_ARENA_PRICE_GRID_DIAG", "service=", npc.service, " tab=", npc.tab,
         " expected=", NPC.ORIGINAL_PVP_SHOP.size(), " actual=", price_rows,
