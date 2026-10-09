@@ -58,6 +58,8 @@ var _book_overlay: ColorRect
 var _book_dialog: PanelContainer
 var _book_container: VBoxContainer
 var _book_scroll: ScrollContainer
+var _item_overlay: ColorRect
+var _item_contents: VBoxContainer
 var _gesture_scroll: ScrollContainer
 var _original_skill_card_count := 0
 # Mirrors the original iframe's renderSkills(sk): the absence of verified
@@ -143,6 +145,7 @@ func _ready() -> void:
     _mono.font_names = PackedStringArray(["monospace", "Courier New"])
     _create_frame()
     _create_book_overlay()
+    _create_item_overlay()
     _fit_to_viewport()
     visible = false
 
@@ -367,6 +370,8 @@ func open_index(index: int) -> void:
     _page = posmod(index, 5)
     if _book_overlay != null:
         _book_overlay.visible = false
+    if _item_overlay != null:
+        _item_overlay.visible = false
     visible = true
     _fit_to_viewport()
     _draw_page()
@@ -942,6 +947,78 @@ func _book_picture(path: String, dimensions: Vector2) -> TextureRect:
     if ResourceLoader.exists(path):
         picture.texture = load(path) as Texture2D
     return picture
+
+# Inspection stays inside the original five-page native character screen.
+# Never open the generic old dark test "ПРЕДМЕТ · ИНВЕНТАРЬ" window.
+func _create_item_overlay() -> void:
+    _item_overlay = ColorRect.new()
+    _item_overlay.name = "PPAOriginalCharacterItemDetail"
+    _item_overlay.color = Color(0.0, 0.0, 0.0, 0.77)
+    _item_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _item_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    _item_overlay.z_index = 21
+    _frame.add_child(_item_overlay)
+    var popup := PanelContainer.new()
+    popup.anchor_left = 0.5
+    popup.anchor_right = 0.5
+    popup.anchor_top = 0.5
+    popup.anchor_bottom = 0.5
+    popup.offset_left = -135.0
+    popup.offset_right = 135.0
+    popup.offset_top = -175.0
+    popup.offset_bottom = 175.0
+    popup.mouse_filter = Control.MOUSE_FILTER_STOP
+    var sb := _style_box(Color("#10161B"), Color("#A16B2B"), 9, 2)
+    sb.set_content_margin_all(12.0)
+    popup.add_theme_stylebox_override("panel", sb)
+    _item_overlay.add_child(popup)
+    _item_contents = VBoxContainer.new()
+    _item_contents.add_theme_constant_override("separation", 9)
+    popup.add_child(_item_contents)
+    _item_overlay.visible = false
+
+func show_server_item_details(item: Dictionary) -> void:
+    # This view is invoked only from the same authenticated, verified save.
+    if item.is_empty() or _item_contents == null or not _server_inventory_verified:
+        return
+    for child in _item_contents.get_children():
+        _item_contents.remove_child(child)
+        child.queue_free()
+    if _book_overlay != null:
+        _book_overlay.visible = false
+    var heading := _text("ПРЕДМЕТ PPA · ПРОСМОТР", 12, GOLD)
+    heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _item_contents.add_child(heading)
+    var image_holder := CenterContainer.new()
+    image_holder.custom_minimum_size.y = 112.0
+    _item_contents.add_child(image_holder)
+    var picture := _button(SERVER_VIEW.symbol(item), 13)
+    picture.custom_minimum_size = Vector2(106.0, 106.0)
+    picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    image_holder.add_child(picture)
+    _bind_item_icon(item, picture)
+    var item_name := _text(SERVER_VIEW.title(item), 13, Color("#E9BD6C"))
+    item_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    item_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _item_contents.add_child(item_name)
+    var qty := _text("Количество: " + str(SERVER_VIEW.item_count(item)), 10, Color("#D6DEE1"))
+    _item_contents.add_child(qty)
+    var original_rarity := SERVER_VIEW.rarity(item)
+    var translated := {
+        "common":"Обычный", "uncommon":"Необычный",
+        "rare":"Редкий", "epic":"Эпический", "legendary":"Легендарный"
+    }
+    var rarity_line := _text("Редкость: " + str(translated.get(original_rarity, original_rarity)), 10,
+        RARITIES.get(original_rarity, Color("#B3B7B9")))
+    _item_contents.add_child(rarity_line)
+    var message := _text("Это настоящий предмет персонажа на общем сервере PPA. Изменение и использование предметов в тестовом Godot пока отключено.", 8, MUTED)
+    message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _item_contents.add_child(message)
+    var close_btn := _button("НАЗАД К ПЕРСОНАЖУ", 10)
+    close_btn.custom_minimum_size.y = 32.0
+    close_btn.pressed.connect(func(): _item_overlay.visible = false)
+    _item_contents.add_child(close_btn)
+    _item_overlay.visible = true
 
 func _create_book_overlay() -> void:
     _book_overlay = ColorRect.new()
