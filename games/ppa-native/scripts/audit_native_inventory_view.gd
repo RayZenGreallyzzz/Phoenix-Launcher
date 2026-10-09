@@ -62,5 +62,8 @@ func _run() -> void:
     if VIEW.item_count({"qty":13})!=13 or VIEW.rarity(legendary)!="legendary":
         _fail("Quantity or rarity changed")
         return
+    if VIEW.symbol({"name":"Серый сундук новичка","ic":""})!="Серый сун":
+        _fail("Missing Telegram fallback icons must reveal original item name")
+        return
     print("PPA_NATIVE_SERVER_ITEMS_VIEW_OK server_bag=1 art=original-only ring=preserved external_url=blocked writes=0")
     quit(0)
