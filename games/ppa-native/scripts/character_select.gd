@@ -37,6 +37,13 @@ const CLASS_NAMES := {
     "priest": "ЖРЕЦ"
 }
 
+func _account_string(key: String) -> String:
+    var raw = account.get(key, null)
+    return str(raw) if typeof(raw) == TYPE_STRING else ""
+
+func _registered_hero() -> bool:
+    return not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
+
 func set_account(value: Dictionary) -> void:
     account = value.duplicate(true)
     if is_node_ready():
@@ -262,10 +269,10 @@ func _build_ui() -> void:
 func _refresh_account() -> void:
     if _name_label == null:
         return
-    var server_key := str(account.get("classKey", "")).to_lower().strip_edges()
-    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not server_key.is_empty()
-    _nickname_input.visible = not registered and not str(account.get("telegramId", "")).is_empty()
-    _name_label.text = "СОЗДАНИЕ ГЕРОЯ" if not registered else str(account.get("ppaNickname", ""))
+    var server_key := _account_string("classKey").to_lower().strip_edges()
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not server_key.is_empty()
+    _nickname_input.visible = not registered and not _account_string("telegramId").is_empty()
+    _name_label.text = "СОЗДАНИЕ ГЕРОЯ" if not registered else _account_string("ppaNickname")
     _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА" if not registered else "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
     if not HERO_CATALOG.valid_key(server_key):
         server_key = "gnome"
@@ -283,7 +290,7 @@ func _choose_class(key: String) -> void:
         return
     _selected_class_key = key
     var hero: Dictionary = HERO_CATALOG.hero_info(key)
-    var nickname := str(account.get("ppaNickname", ""))
+    var nickname := _account_string("ppaNickname")
     _name_label.text = nickname if not nickname.is_empty() else "НОВЫЙ ГЕРОЙ"
     _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
     var description := str(hero.get("description", ""))
@@ -295,7 +302,7 @@ func _choose_class(key: String) -> void:
         description += "\nРеальный прогресс загружен только для чтения. Сумка тестового мира пока локальная."
     else:
         description += "\n\nТЕСТ: классы, сумка и склад локальные, НЕ синхронизированы с Telegram."
-    if str(account.get("ppaNickname", "")).strip_edges().is_empty() and str(account.get("telegramId", "")).is_empty():
+    if _account_string("ppaNickname").strip_edges().is_empty() and _account_string("telegramId").is_empty():
         description += "\n\nEmail уже авторизован. Создание первого героя откроем после безопасной миграции серверных идентификаторов."
     _info_label.text = description
     _refresh_enter_button()
@@ -310,14 +317,14 @@ func _choose_class(key: String) -> void:
 func _refresh_enter_button() -> void:
     if _enter_button == null:
         return
-    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not str(account.get("classKey", "")).strip_edges().is_empty()
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
     if registered:
         _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
         _enter_button.disabled = false
     else:
         _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА"
         var candidate := _nickname_input.text.strip_edges() if _nickname_input != null else ""
-        _enter_button.disabled = str(account.get("telegramId", "")).is_empty() or candidate.length() < 3 or candidate.length() > 18
+        _enter_button.disabled = _account_string("telegramId").is_empty() or candidate.length() < 3 or candidate.length() > 18
 
 func show_registration_error(message: String) -> void:
     if _status_label != null:
@@ -328,16 +335,16 @@ func show_registration_error(message: String) -> void:
 func _confirm_preview() -> void:
     if account.is_empty():
         return
-    var registered := not str(account.get("ppaNickname", "")).strip_edges().is_empty() and not str(account.get("classKey", "")).strip_edges().is_empty()
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
     if not registered:
-        if str(account.get("telegramId", "")).is_empty():
+        if _account_string("telegramId").is_empty():
             show_registration_error("Email-only регистрация ждёт миграцию игрового ID.")
             return
         _enter_button.disabled = true
         registration_requested.emit(_nickname_input.text.strip_edges(), _selected_class_key)
         return
     # Never enter with a visual class that conflicts with the real server hero.
-    if not verified_state.is_empty() and _selected_class_key != str(account.get("classKey", "")).to_lower():
+    if not verified_state.is_empty() and _selected_class_key != _account_string("classKey").to_lower():
         _status_label.text = "Класс должен совпадать с сохранённым героем."
         return
     # Only in SceneTree memory. The server never receives this class choice.
