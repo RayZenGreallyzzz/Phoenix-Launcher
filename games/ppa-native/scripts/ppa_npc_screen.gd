@@ -622,7 +622,8 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         elif not str(item.get("icon", "")).is_empty():
             inner.add_child(_label(str(item.get("icon", "")), 23, GOLD))
         inner.add_child(_label(str(item.get("name", "")), 12, TEXT))
-        var currency := " PPA" if str(item.get("currency", "")) == "ppa" else " Gold"
+        var currency_code := str(item.get("currency", "gold")).to_lower()
+        var currency := " Gram" if currency_code == "gram" else (" PPA" if currency_code == "ppa" else " Gold")
         inner.add_child(_label(str(item.get("price", 0)) + currency, 12, GOLD))
         var choice := _button("ПОДРОБНЕЕ")
         choice.name = "SelectNpcItem_" + id
@@ -643,7 +644,11 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
     if item.has("img"):
         _body.add_child(_item_picture(str(item.get("img", "")), 82))
     _body.add_child(_label(str(item.get("desc", "")), 13))
-    var suffix := " PPA" if str(item.get("currency", "")) == "ppa" else " Gold"
+    var currency_code := str(item.get("currency", "gold")).to_lower()
+    var suffix := " Gram" if currency_code == "gram" else (" PPA" if currency_code == "ppa" else " Gold")
+    if item.has("limit"):
+        var left := maxi(0, int(item.get("limit",1)) - int(item.get("bought",0)))
+        _mini_row("Дневной лимит", "осталось " + str(left))
     _body.add_child(_label("Цена: " + str(item.get("price", 0)) + suffix, 15, GOLD))
     if with_quantity:
         var row := HBoxContainer.new()
@@ -682,10 +687,33 @@ func _show_blackmarket() -> void:
         _locked_action("ПРОДАТЬ")
         return
     var listed: Array = []
+    var personal := false
     if has_verified_state and authoritative.get("offers", null) is Array:
         listed = authoritative.get("offers", [])
+        personal = true
     else:
-        _message("СПРАВОЧНЫЙ АССОРТИМЕНТ", "Ниже показаны известные постоянные позиции. Это не текущие лоты персонажа.")
+        # The ORIGINAL Telegram client persists each character's daily stock
+        # under state.blackMarket. Use it ONLY from the authenticated save,
+        # preserving real purchase limits; never invent random new offers.
+        var raw_bm: Variant = _player_save_readonly.get("blackMarket", null)
+        if raw_bm is Dictionary:
+            var saved_bm: Dictionary = raw_bm
+            var stored_offers: Variant = saved_bm.get("offers", null)
+            var refresh_at := float(saved_bm.get("refreshAt",0))
+            if stored_offers is Array and refresh_at > Time.get_unix_time_from_system() * 1000.0:
+                var bought: Dictionary = saved_bm.get("bought", {}) if saved_bm.get("bought", {}) is Dictionary else {}
+                for stored in stored_offers:
+                    if not (stored is Dictionary):
+                        continue
+                    var offer: Dictionary = (stored as Dictionary).duplicate(true)
+                    offer["bought"] = bought.get(str(offer.get("id","")), 0)
+                    listed.append(offer)
+                personal = true
+                _mini_row("ОБНОВЛЕНИЕ АССОРТИМЕНТА", Time.get_datetime_string_from_unix_time(int(refresh_at / 1000.0)).replace("T"," "))
+            elif stored_offers is Array:
+                _message("АССОРТИМЕНТ УСТАРЕЛ", "Дневные предложения должны быть обновлены в оригинальной PPA. Старые лоты не выдаём за доступные.")
+    if not personal:
+        _message("СПРАВОЧНЫЙ АССОРТИМЕНТ", "Постоянные позиции оригинальной PPA. Текущие персональные лоты ещё не синхронизированы.")
         listed = SHOP.BLACK_MARKET_REFERENCE
     var filtered: Array = []
     for entry in listed:
