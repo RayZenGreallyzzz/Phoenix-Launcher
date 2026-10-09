@@ -52,7 +52,15 @@ func _run() -> void:
         quit(1)
         return
     print("PPA_HERO_HUD_DEDUP_OK hero_button=0 hub_button=1")
+    # Telegram and Godot must read one shared save when the hero is reopened.
+    # No request is allowed merely from scrolling/changing character pages.
+    var character_refreshes := {"count":0}
+    menu.refresh_readonly_save_requested.connect(func(): character_refreshes["count"] = int(character_refreshes["count"]) + 1)
     menu.open_page("character")
+    if character_refreshes["count"] != 1:
+        push_error("PPA_SHARED_SAVE_REFRESH: character entry must request one authenticated GET")
+        quit(1)
+        return
     if not menu.is_open():
         push_error("PPA_UI_SMOKE: character panel did not open")
         quit(1)
@@ -102,6 +110,10 @@ func _run() -> void:
 
     for page in range(5):
         original_char.open_index(page)
+        if character_refreshes["count"] != 1:
+            push_error("PPA_SHARED_SAVE_REFRESH: page switches must never trigger extra GET")
+            quit(1)
+            return
         if str(original_char._caption.text) != str(original_char.CAPTIONS[page]):
             push_error("PPA_UI_SMOKE: PPA character page caption mismatch: " + str(page))
             quit(1)
