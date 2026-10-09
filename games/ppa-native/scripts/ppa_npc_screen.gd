@@ -10,6 +10,7 @@ signal authoritative_state_requested(service: String)
 signal dungeon_visual_test_requested
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
+const LIVE_FORGE = preload("res://scripts/ppa_forge_catalog_generated.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
@@ -47,6 +48,7 @@ var _asking_price := 1
 var _asking_quantity := 1
 var _asking_currency := "PPA"
 var _forge_filter := "equipment"
+var _craft_rarity := "all"
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
@@ -292,6 +294,7 @@ func open_npc(source: Dictionary) -> void:
     _asking_quantity = 1
     _asking_currency = "PPA"
     _forge_filter = "equipment"
+    _craft_rarity = "all"
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     authoritative.clear()
     has_verified_state = false
@@ -362,6 +365,7 @@ func _select_tab(key: String) -> void:
     tab = key
     selected_id = ""
     quantity = 1
+    _craft_rarity = "all"
     _render()
 
 func _select_item(id: String) -> void:
@@ -615,6 +619,8 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         # Do not suppress Black Market artwork when it is available.
         if not str(item.get("img", "")).is_empty():
             inner.add_child(_readonly_icon_item(item, 50))
+        elif not str(item.get("icon", "")).is_empty():
+            inner.add_child(_label(str(item.get("icon", "")), 23, GOLD))
         inner.add_child(_label(str(item.get("name", "")), 12, TEXT))
         var currency := " PPA" if str(item.get("currency", "")) == "ppa" else " Gold"
         inner.add_child(_label(str(item.get("price", 0)) + currency, 12, GOLD))
@@ -811,15 +817,105 @@ func _show_forge() -> void:
             _readonly_owned_grid("ВАШИ РУНЫ", runes.get("inventory", []))
         _locked_action("СЛИТЬ РУНЫ")
     else:
-        var names := {"equipment":"СНАРЯЖЕНИЕ", "legendary":"ЛЕГЕНДАРНОЕ",
-            "accessories":"АКСЕССУАРЫ", "pets":"ПЕТЫ"}
-        _message(str(names.get(tab, "КРАФТ")), "Точные рецепты и стоимость подключим из оригинального PPA-каталога.")
-        if _player_view_readonly.is_empty():
-            _message("НЕТ СЕРВЕРНОГО СНИМКА", "Ожидаем настоящее сохранение персонажа.")
-        else:
-            _readonly_owned_grid("ВАШИ МАТЕРИАЛЫ И ЭКИПИРОВКА", _inventory_items())
-        _locked_action("СОЗДАТЬ")
+        _show_original_forge_recipes()
     _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
+
+# Original live PPA blacksmithFrame catalog (generated at build from its public
+# srcdoc). Inventory/balances are ONLY from the authenticated game-state save.
+# This intentionally never emits a craft/enhance/spend request.
+func _set_craft_rarity(key: String) -> void:
+    _craft_rarity = key
+    selected_id = ""
+    _render()
+
+func _forge_owned_material(material_name: String) -> Variant:
+    if _player_view_readonly.is_empty():
+        return null
+    if material_name == "Перо Феникса":
+        var feathers: Variant = _player_save_readonly.get("feathers", null)
+        if feathers is Dictionary:
+            return (feathers as Dictionary).get("phoenix", null)
+        return null
+    var stored: Variant = _player_save_readonly.get("materials", null)
+    if stored is Dictionary:
+        return (stored as Dictionary).get(material_name, null)
+    return null
+
+func _show_original_forge_recipes() -> void:
+    var descriptions := {
+        "equipment":"ЭПИЧЕСКОЕ СНАРЯЖЕНИЕ",
+        "legendary":"ЛЕГЕНДАРНЫЕ АКСЕССУАРЫ",
+        "accessories":"КРЫЛЬЯ · ПЛАЩИ · ОЖЕРЕЛЬЯ · АРТЕФАКТЫ",
+        "pets":"ПИТОМЦЫ"
+    }
+    _section(str(descriptions.get(tab, "КРАФТ PPA")),
+        "Подлинные рецепты кузнеца из работающей Telegram PPA · актуальная цена в PPA")
+    if tab == "accessories" or tab == "pets":
+        var rarities: Array = [
+            {"key":"all","label":"ВСЕ"}, {"key":"common","label":"СЕРЫЕ"},
+            {"key":"uncommon","label":"ЗЕЛЁНЫЕ"}, {"key":"rare","label":"СИНИЕ"}
+        ]
+        if tab == "accessories":
+            rarities.append({"key":"epic","label":"ЭПИК"})
+        _choice_tiles(rarities, _craft_rarity, _set_craft_rarity)
+    var offers: Array = []
+    for raw in LIVE_FORGE.CATALOG.get("rows", []):
+        if not (raw is Dictionary):
+            continue
+        var row: Dictionary = raw
+        if str(row.get("tab","")) != tab:
+            continue
+        if _craft_rarity != "all" and str(row.get("rarity","")) != _craft_rarity:
+            continue
+        offers.append(row)
+    _product_grid(offers, false)
+    if offers.is_empty():
+        _message("НЕТ РЕЦЕПТОВ", "В оригинальном каталоге PPA таких рецептов нет.")
+        return
+    var chosen: Dictionary = {}
+    for entry in offers:
+        if str(entry.get("id","")) == selected_id:
+            chosen = entry
+            break
+    if chosen.is_empty():
+        _message("ВЫБЕРИ РЕЦЕПТ",
+            "Нажми «Подробнее»: увидишь цену, бонус, каждый материал и остаток в сумке.")
+        return
+    _section("РЕЦЕПТ · " + str(chosen.get("name","")),
+        str(chosen.get("desc","")) + " · " + str(chosen.get("rarity","")).to_upper())
+    var art := str(chosen.get("img", ""))
+    if not art.is_empty() and ResourceLoader.exists(art):
+        _body.add_child(_item_picture(art, 88))
+    var money: Dictionary = _player_view_readonly.get("money", {})
+    var balance: Variant = money.get("ppa", null)
+    var price := int(chosen.get("price",0))
+    _mini_row("Цена · PPA",
+        str(price) + (" · есть " + str(balance) if balance != null else " · баланс не загружен"))
+    var enough := balance != null and float(balance) >= float(price)
+    var all_known := balance != null
+    for raw_material in chosen.get("materials", []):
+        if not (raw_material is Dictionary):
+            continue
+        var entry: Dictionary = raw_material
+        var material_name := str(entry.get("name",""))
+        var required := int(entry.get("count",0))
+        var owned: Variant = _forge_owned_material(material_name)
+        if owned == null:
+            all_known = false
+        elif int(owned) < required:
+            enough = false
+        _mini_row(material_name + " ×" + str(required),
+            "есть " + str(owned) if owned != null else "нет данных")
+    if not all_known:
+        _body.add_child(_label("Не все остатки удалось прочитать из подтверждённого сохранения PPA.", 11, SUB))
+    elif not enough:
+        _body.add_child(_label("Не хватает валюты или материалов для выбранного рецепта.", 11, Color("#E2A17C")))
+    else:
+        _body.add_child(_label("Ресурсов достаточно по последнему снимку; сервер всё равно должен проверить их заново.", 11, GOLD))
+    _locked_action("СОЗДАТЬ")
+    _body.add_child(_label(
+        "Предпросмотр 1:1 · создание появится только после атомарной серверной операции.",
+        11, SUB))
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
