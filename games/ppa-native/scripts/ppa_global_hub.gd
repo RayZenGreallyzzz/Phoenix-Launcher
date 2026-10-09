@@ -7,13 +7,15 @@ signal close_requested
 signal character_requested
 signal snapshot_requested(section: String)
 signal dungeon_visual_test_requested
+signal arena_requested
 
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const CATEGORIES := [
     {"id":"premium", "title":"ПРЕМИУМ МАГАЗИН"},
     {"id":"wallet", "title":"КОШЕЛЁК"},
     {"id":"events", "title":"СОБЫТИЯ"},
-    {"id":"locations", "title":"ЛОКАЦИИ"}
+    {"id":"locations", "title":"ЛОКАЦИИ"},
+    {"id":"arena", "title":"АРЕНА"}
 ]
 const EVENT_GROUPS := [
     {"id":"game", "title":"ИГРОВЫЕ"},
@@ -175,7 +177,7 @@ func clear_player_save_readonly() -> void:
         _render()
 
 func open_section(which: String = "events") -> void:
-    if not ["premium", "wallet", "events", "locations"].has(which):
+    if not ["premium", "wallet", "events", "locations", "arena"].has(which):
         return
     section = which
     subsection = "game" if which == "events" else "all"
@@ -226,13 +228,14 @@ func _render() -> void:
         b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _tabs.add_child(b)
     var caption := {"premium":"ПРЕМИУМ МАГАЗИН", "wallet":"КОШЕЛЁК",
-        "events":"ЦЕНТР СОБЫТИЙ", "locations":"КАРТА И ЛОКАЦИИ"}
+        "events":"ЦЕНТР СОБЫТИЙ", "locations":"КАРТА И ЛОКАЦИИ", "arena":"АРЕНА PPA"}
     _heading.text = str(caption[section])
     match section:
         "premium": _premium()
         "wallet": _wallet()
         "events": _events()
         "locations": _locations()
+        "arena": _arena()
     _scroll.set_deferred("scroll_vertical", 0)
 
 func _section(title: String, detail: String) -> void:
@@ -274,7 +277,7 @@ func _wallet() -> void:
     _section("КАЗНА", "Игровой банк PPA не является автоматическим TON-выводом.")
 
 func _events() -> void:
-    _section("ЦЕНТР СОБЫТИЙ", "Категории сверены с Telegram PPA. Активность, таймеры, билеты и награды станут видны после серверной синхронизации.")
+    _section("ЦЕНТР СОБЫТИЙ", "Утверждённые события PPA. Живые таймеры и билеты требуют отдельного серверного статуса.")
     var nav := GridContainer.new()
     nav.name = "GlobalEventGroups"
     nav.columns = 2 if size.y > size.x else 4
@@ -299,10 +302,25 @@ func _events() -> void:
         _body.add_child(b)
         if selected_event == id:
             _section(str(event_item["title"]), str(event_item["detail"]))
+            if id == "titan":
+                var shards: Variant = _player_data_readonly.get("titanShards", null)
+                _section("ОСКОЛКИ КРИСТАЛЬНОГО ТИТАНА", str(shards) if shards != null else "— · нет сохранённых данных")
             _section("СТАТУС / ВРЕМЯ", "— · требуется подтверждение от сервера PPA")
             _locked("ВОЙТИ / ПОЛУЧИТЬ НАГРАДУ")
     if found == 0:
         _section("КЛАНОВЫЕ СОБЫТИЯ", "В Telegram-центре событий пока нет отдельных событий этой категории.")
+
+func _arena() -> void:
+    _section("PVP И ИСПЫТАНИЯ", "Общая арена PPA. Игроки, рейтинг и бой должны обслуживаться оригинальным сервером.")
+    var tokens: Variant = _player_data_readonly.get("arenaTokens", null)
+    _section("⚔ ЖЕТОНЫ АРЕНЫ", str(tokens) if tokens != null else "— · нет данных")
+    for mode in ["1×1 PVP", "3×3 PVP", "5×5 PVP", "ВОЛНЫ И ИСПЫТАНИЯ", "РЕЙТИНГ", "МАГАЗИН АРЕНЫ"]:
+        _section(mode, "Информация и доступность матча должны поступать из сервера PPA")
+    var open_ui := _button("ОТКРЫТЬ МЕНЮ МЕЧНИКА АРЕНЫ")
+    open_ui.name = "OpenExistingArenaNpcMenu"
+    open_ui.pressed.connect(func(): arena_requested.emit())
+    _body.add_child(open_ui)
+    _section("ОБЩИЙ ОНЛАЙН", "Вход в матч остаётся выключен до защищённого native WebSocket-билета и серверного подбора.")
 
 func _locations() -> void:
     _section("МИР PPA", "Тестовая карта подземелья уже доступна без сервера. Полный игровой вход с монстрами и наградами подключим позднее.")
