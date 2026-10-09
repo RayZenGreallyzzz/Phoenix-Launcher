@@ -325,6 +325,14 @@ jobs:
           grep -q 'PPA_CANONICAL_FORGE_CATALOG_OK' /tmp/ppa-forge-catalog.log
           test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
 
+      - name: Generate original Telegram PPA premium shop goods and packs (display only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_premium_catalog.py 2>&1 | tee /tmp/ppa-premium-catalog.log
+          grep -q 'PPA_ORIGINAL_PREMIUM_CATALOG_OK' /tmp/ppa-premium-catalog.log
+          test -s games/ppa-native/scripts/ppa_premium_catalog_generated.gd
+
       - name: Import native PPA project
         shell: bash
         run: |
