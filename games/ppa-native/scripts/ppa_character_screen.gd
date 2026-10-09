@@ -1156,48 +1156,62 @@ func _open_grimoire_popup(skill: Dictionary, passive: bool, class_title: String)
     _book_scroll.scroll_vertical = 0
 
 func _draw_runes() -> void:
-    _section("РУНЫ")
-    _page_container.add_child(_text(
-        "Слоты открываются каждые 10 уровней · +1 слот за перерождение",
-        8, Color("#9AA0A4")
-    ))
+    _section("РУНЫ · PPA")
+    if not _server_inventory_verified:
+        _page_container.add_child(_text("Ожидаем подтверждённое сохранение PPA.", 9, MUTED))
+        return
+    var save: Dictionary = _server_inventory.get("save", {})
+    var real := SERVER_VIEW.rune_view_from_save(save)
+    var available: Array = real.get("inventory", [])
+    var equipped: Array = real.get("slots", [])
+    var unlocked := int(real.get("unlocked", 0))
+    _page_container.add_child(_text("Открыто слотов: " + str(unlocked) + " / 10 · каждые 10 уровней + перерождения", 8, Color("#A4A9AE")))
     var sockets := GridContainer.new()
     sockets.columns = 5
     sockets.add_theme_constant_override("h_separation", 6)
     sockets.add_theme_constant_override("v_separation", 6)
     _page_container.add_child(sockets)
     for i in range(10):
-        var slot := _button("◇\n" + str(i + 1), 10)
-        slot.custom_minimum_size = Vector2(53, 62)
+        var item: Dictionary = SERVER_VIEW.item_at(equipped, i)
+        var locked := i >= unlocked
+        var label_text := "🔒\n" + str(i + 1) if locked else ("◇\n" + str(i + 1) if item.is_empty() else str(item.get("icon", "ᚱ")))
+        var slot := _button(label_text, 10)
+        slot.custom_minimum_size = Vector2(53.0, 62.0)
         slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        slot.disabled = true
-        slot.add_theme_stylebox_override("disabled", _style_box(Color("#15100D"), Color("#8B632A"), 7, 2))
+        slot.add_theme_stylebox_override("normal", _style_box(Color("#15100D"), RARITIES.get(SERVER_VIEW.rarity(item), Color("#8B632A")), 7, 2))
+        slot.add_theme_stylebox_override("disabled", _style_box(Color("#15100D"), Color("#50402B"), 7, 1))
+        slot.disabled = locked or item.is_empty()
+        if not item.is_empty() and not locked:
+            slot.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
+            slot.pressed.connect(show_server_item_details.bind(item))
+            _bind_item_icon(item, slot)
         sockets.add_child(slot)
-    _section("ДОСТУПНЫЕ РУНЫ")
+    _section("ДОСТУПНЫЕ РУНЫ · " + str(available.size()) + " ВИДОВ")
     var inv := GridContainer.new()
     inv.columns = 4
     inv.add_theme_constant_override("h_separation", 6)
     inv.add_theme_constant_override("v_separation", 6)
     _page_container.add_child(inv)
-    var rune_count := 0
-    var rune_bag := _real_bag()
-    for i in range(rune_bag.size()):
-        var item: Dictionary = SERVER_VIEW.item_at(rune_bag, i)
-        if str(item.get("kind", "")) != "rune" and str(item.get("id", "")) != "test_rune":
+    for raw in available:
+        if not (raw is Dictionary):
             continue
-        rune_count += 1
-        var button := _button(str(item.get("short", "ᚱ")) + "\n" + str(item.get("name", "Руна")), 10)
-        button.custom_minimum_size = Vector2(58, 66)
+        var item: Dictionary = raw
+        var button := _button(str(item.get("icon", "ᚱ")) + "\n×" + str(item.get("count", 1)), 9)
+        button.custom_minimum_size = Vector2(58.0, 66.0)
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        button.pressed.connect(func(): select_item_requested.emit("bag", i))
+        button.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
+        button.add_theme_stylebox_override("normal", _style_box(Color("#111418"), RARITIES.get(SERVER_VIEW.rarity(item), EDGE), 7, 2))
+        button.pressed.connect(show_server_item_details.bind(item))
         inv.add_child(button)
-    if rune_count == 0:
-        _page_container.add_child(_text("Рун пока нет. Обычные–эпические можно выбить, легендарные продаются только в Black Market.", 8))
+        _bind_item_icon(item, button)
+    if available.is_empty():
+        _page_container.add_child(_text("В сохранении персонажа нет свободных рун. Установленные руны отображаются выше.", 8, MUTED))
     var info := PanelContainer.new()
     info.custom_minimum_size.y = 38
     info.add_theme_stylebox_override("panel", _style_box(Color("#13110E"), Color("#65421F"), 5))
     _page_container.add_child(info)
-    var label := _text("Нажми на руну, чтобы вставить её в первый свободный слот.", 8, Color("#B48B45"))
+    var label := _text("Руны получены из общего сохранения PPA · только просмотр. Установка/слияние пока отключены.", 8, Color("#B48B45"))
+    label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     info.add_child(label)
