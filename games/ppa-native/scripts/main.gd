@@ -214,6 +214,21 @@ func _load_profile() -> void:
     if err != OK:
         _show_error("Не удалось проверить игровую сессию: %s" % error_string(err))
 
+func _register_character(nickname: String, class_key: String) -> void:
+    if session_token.is_empty():
+        _show_error("Сессия регистрации отсутствует.")
+        return
+    request_mode = "register"
+    var headers := PackedStringArray([
+        "Content-Type: application/json",
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var payload := JSON.stringify({"nickname": nickname, "classKey": class_key})
+    var err := http.request(API_BASE + "/api/game/character/register", headers, HTTPClient.METHOD_POST, payload)
+    if err != OK and selection_screen != null:
+        selection_screen.show_registration_error("Ошибка запроса: %s" % error_string(err))
+
 func _load_game_state() -> void:
     if session_token.is_empty():
         _show_error("Сессия Godot отсутствует.")
@@ -231,6 +246,13 @@ func _load_game_state() -> void:
 func _on_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     var body_text := body.get_string_from_utf8()
     var parsed = JSON.parse_string(body_text)
+    if request_mode == "register" and (response_code < 200 or response_code >= 300):
+        var problem := "Регистрация персонажа недоступна (HTTP %d)" % response_code
+        if typeof(parsed) == TYPE_DICTIONARY:
+            problem = str(parsed.get("message", problem))
+        if selection_screen != null:
+            selection_screen.show_registration_error(problem)
+        return
     if request_mode == "state" and response_code == 404:
         # Backend deliberately defaults this feature OFF until the owner approves it.
         # The native test gallery may still be used, but never claim a synced save.
@@ -251,6 +273,19 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    if request_mode == "register":
+        var p: Dictionary = data.get("profile", {})
+        var created_nick := str(p.get("nickname", ""))
+        var created_class := str(p.get("classKey", ""))
+        if created_nick.is_empty() or created_class.is_empty():
+            if selection_screen != null:
+                selection_screen.show_registration_error("Сервер не подтвердил нового героя.")
+            return
+        account["ppaNickname"] = created_nick
+        account["classKey"] = created_class
+        account["characterId"] = str(data.get("characterId", ""))
+        _load_game_state()
+        return
     if request_mode == "exchange":
         var session: Dictionary = data.get("session", {})
         session_token = str(session.get("token", ""))
@@ -286,6 +321,10 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         status_label.add_theme_color_override("font_color", Color("#53CDAB"))
         _show_character_selection()
 
+func _nullable_account_text(key: String) -> String:
+    var raw = account.get(key, null)
+    return str(raw) if typeof(raw) == TYPE_STRING else ""
+
 func _show_connected() -> void:
     var nickname := str(account.get("nickname", "Phoenix"))
     var ppa_nickname := str(account.get("ppaNickname", nickname))
@@ -306,6 +345,11 @@ func _show_connected() -> void:
 
     play_button.disabled = false
     retry_button.visible = false
+    if _nullable_account_text("ppaNickname").is_empty() or _nullable_account_text("classKey").is_empty():
+        # A legitimate fresh Phoenix account needs an onboarding screen.
+        # Email-only users remain blocked until canonical server storage works.
+        _show_character_selection()
+        return
     # Player selection is a real mandatory step after account verification.
     # Never let the native client silently create/change the live hero class.
     _load_game_state()
@@ -322,6 +366,7 @@ func _show_character_selection() -> void:
     selection_screen.set_verified_state(authoritative_state if state_read_available else {})
     selection_screen.character_confirmed.connect(_enter_native_world)
     selection_screen.account_switch_requested.connect(_return_to_launcher)
+    selection_screen.registration_requested.connect(_register_character)
 
 func _return_to_launcher() -> void:
     _clear_saved_session()
@@ -345,7 +390,7 @@ func _retry() -> void:
 func _enter_native_world() -> void:
     # The selection is server-owned. A client-side class preview is NEVER
     # permission to enter with an unregistered or different character.
-    if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
+    if _nullable_account_text("ppaNickname").strip_edges().is_empty() or _nullable_account_text("classKey").strip_edges().is_empty():
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
     # Native world is still a local beta; it must not write the immutable snapshot.
