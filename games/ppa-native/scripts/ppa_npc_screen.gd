@@ -13,6 +13,8 @@ const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
+const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
+const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 const GOLD := Color("#F6C66F")
@@ -41,6 +43,7 @@ var authoritative: Dictionary = {}
 var has_verified_state := false
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
+var _preview_icons: Node
 var _shade: ColorRect
 var _frame: PanelContainer
 var _heading: Label
@@ -57,6 +60,9 @@ func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _create_shell()
+    _preview_icons = ORIGINAL_ITEM_ICONS.new()
+    _preview_icons.name = "PPAOriginalNpcProductIconLoader"
+    add_child(_preview_icons)
     visible = false
     resized.connect(_fit)
 
@@ -492,6 +498,54 @@ func _item_picture(path: String, side: float = 64.0) -> TextureRect:
         p.texture = load(path) as Texture2D
     return p
 
+func _readonly_icon_item(item: Dictionary, side: float = 62.0) -> Button:
+    # One icon resolver for inventory, warehouse, forge and arena. This is
+    # not a purchase button and never transmits anything to PPA.
+    var button := _button("◆")
+    button.custom_minimum_size = Vector2(side, side)
+    button.disabled = true
+    button.tooltip_text = str(item.get("name", "Предмет PPA"))
+    button.add_theme_stylebox_override("disabled", _style(Color("#14191F"), GOLD, 5))
+    var img: String = str(item.get("img", ""))
+    if img.begins_with("res://") and ResourceLoader.exists(img):
+        button.icon = load(img) as Texture2D
+        button.expand_icon = true
+        button.text = ""
+    elif _preview_icons != null:
+        _preview_icons.bind_button(item, "", button)
+    return button
+
+func _readonly_owned_grid(title: String, items: Array, limit: int = 24) -> void:
+    _section(title, "Подлинные предметы этого персонажа из D1 · только просмотр")
+    var grid := GridContainer.new()
+    grid.name = "NpcServerOwnedItems"
+    grid.columns = 4 if size.x < 570.0 else 6
+    grid.add_theme_constant_override("h_separation", 7)
+    grid.add_theme_constant_override("v_separation", 7)
+    _body.add_child(grid)
+    var count := 0
+    for raw in items:
+        if not(raw is Dictionary):
+            continue
+        var item: Dictionary = raw
+        if item.is_empty():
+            continue
+        var tile := VBoxContainer.new()
+        tile.custom_minimum_size.x = 65.0
+        tile.add_theme_constant_override("separation", 2)
+        grid.add_child(tile)
+        tile.add_child(_readonly_icon_item(item, 61))
+        var label := _label(str(item.get("name","")).left(17), 9, SUB)
+        label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        tile.add_child(label)
+        var amount := maxi(1,int(item.get("qty",item.get("count",1))))
+        tile.add_child(_label("×" + str(amount), 9, GOLD))
+        count += 1
+        if count >= limit:
+            break
+    if count == 0:
+        _message("НЕТ ПРЕДМЕТОВ", "Этот список пуст в подтверждённом сохранении PPA.")
+
 func _slot_grid(container: VBoxContainer, count: int, tag: String = "") -> void:
     var grid := GridContainer.new()
     grid.name = "NpcItemSlotGrid_" + tag
@@ -528,8 +582,10 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         var inner := VBoxContainer.new()
         inner.add_theme_constant_override("separation", 4)
         tile.add_child(inner)
-        if is_merchant:
-            inner.add_child(_item_picture(str(item.get("img", "")), 50))
+        # Original images are the same APK-bundled assets used in hero bag.
+        # Do not suppress Black Market artwork when it is available.
+        if not str(item.get("img", "")).is_empty():
+            inner.add_child(_readonly_icon_item(item, 50))
         inner.add_child(_label(str(item.get("name", "")), 12, TEXT))
         var currency := " PPA" if str(item.get("currency", "")) == "ppa" else " Gold"
         inner.add_child(_label(str(item.get("price", 0)) + currency, 12, GOLD))
@@ -718,14 +774,21 @@ func _show_forge() -> void:
         _mini_row("Шанс успеха / ресурсы", "рассчитывает сервер")
         _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
     elif tab == "rune_fusion":
-        _message("СЛИЯНИЕ РУН", "Используется отдельная сумка рун. После подключения появится выбор двух рун.")
-        _slot_grid(_body, 10, "runebag")
+        _message("СЛИЯНИЕ РУН", "Отображаются реальные руны из отдельной сумки персонажа. Слияние пока не выполняется.")
+        if _player_view_readonly.is_empty():
+            _message("НЕТ СЕРВЕРНОГО СНИМКА", "Ожидаем настоящее сохранение персонажа.")
+        else:
+            var runes: Dictionary = ORIGINAL_ITEM_VIEWS.rune_view_from_save(_player_save_readonly)
+            _readonly_owned_grid("ВАШИ РУНЫ", runes.get("inventory", []))
         _locked_action("СЛИТЬ РУНЫ")
     else:
         var names := {"equipment":"СНАРЯЖЕНИЕ", "legendary":"ЛЕГЕНДАРНОЕ",
             "accessories":"АКСЕССУАРЫ", "pets":"ПЕТЫ"}
-        _message(str(names.get(tab, "КРАФТ")), "Рецепты и материалы придут из утверждённого каталога PPA.")
-        _slot_grid(_body, 10, "forge")
+        _message(str(names.get(tab, "КРАФТ")), "Точные рецепты и стоимость подключим из оригинального PPA-каталога.")
+        if _player_view_readonly.is_empty():
+            _message("НЕТ СЕРВЕРНОГО СНИМКА", "Ожидаем настоящее сохранение персонажа.")
+        else:
+            _readonly_owned_grid("ВАШИ МАТЕРИАЛЫ И ЭКИПИРОВКА", _inventory_items())
         _locked_action("СОЗДАТЬ")
     _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
 
@@ -914,6 +977,10 @@ func _show_clan() -> void:
 
 func _show_arena() -> void:
     _section("МЕЧНИК АРЕНЫ", "Telegram PPA · испытания, PvP и рейтинг")
+    var wallet: Dictionary = _player_view_readonly.get("money", {})
+    var tokens: Variant = wallet.get("arenaTokens", null)
+    _mini_row("⚔ ЖЕТОНЫ АРЕНЫ · ЛИЧНЫЙ СЕЙВ D1",
+        str(tokens) if tokens != null else "— · нет данных")
     match tab:
         "fights":
             _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
@@ -927,7 +994,7 @@ func _show_arena() -> void:
         "rating":
             _message("РЕЙТИНГ PVP", "Бои, победы, позиции и таблица лидеров должны совпадать с Telegram.")
         "shop":
-            _message("МАГАЗИН АРЕНЫ", "Жетоны и доступные предметы загрузятся из серверного каталога.")
+            _message("МАГАЗИН АРЕНЫ", "Жетоны отображаются из реального сейва. Предложения и дневные остатки требуют отдельного подтверждённого каталога.")
             _locked_action("КУПИТЬ")
         "history":
             _message("ИСТОРИЯ БОЁВ", "Исходы матчей и награды по подтверждённым серверным записям.")
