@@ -57,6 +57,10 @@ func apply_readonly_snapshot(payload: Dictionary) -> void:
         _character_screen.apply_readonly_save(
             _verified_save, payload.get("version", null), payload.get("updatedAt", null)
         )
+    if _npc_screen != null:
+        _npc_screen.apply_player_save_readonly(_verified_save)
+    if _global_hub != null:
+        _global_hub.apply_player_save_readonly(_verified_save)
     if _panel != null and _panel.visible:
         _refresh()
 
@@ -65,6 +69,10 @@ func clear_readonly_snapshot() -> void:
     _has_verified_save = false
     if _character_screen != null:
         _character_screen.clear_readonly_save()
+    if _npc_screen != null:
+        _npc_screen.clear_player_save_readonly()
+    if _global_hub != null:
+        _global_hub.clear_player_save_readonly()
     if _panel != null and _panel.visible:
         _refresh()
 
