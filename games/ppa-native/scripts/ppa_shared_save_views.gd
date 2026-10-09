@@ -76,6 +76,11 @@ static func global_player_view(save: Dictionary) -> Dictionary:
         "gramDisplay": str(currency["gram"]) if currency["gram"] != null else "— · нет данных",
         "goldDisplay": str(currency["gold"]) if currency["gold"] != null else "— · нет данных",
         "ppaDisplay": str(currency["ppa"]) if currency["ppa"] != null else "— · нет данных",
+        "arenaTokens": currency["arenaTokens"],
+        "titanShards": null,
         "readOnlySave": true
     }
+    var mats: Variant = save.get("materials", null)
+    if mats is Dictionary:
+        result["titanShards"] = maxi(0,int((mats as Dictionary).get("Осколок Кристального Титана",0)))
     return result
