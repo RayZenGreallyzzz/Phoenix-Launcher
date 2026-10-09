@@ -5,23 +5,23 @@ extends RefCounted
 const ATTRIBUTES := {
     "attack":"Атака", "atk":"Атака", "atkMin":"Мин. атака", "atkMax":"Макс. атака",
     "minAtk":"Мин. атака", "maxAtk":"Макс. атака",
-    "def":"Защита", "defense":"Защита", "armor":"Броня",
+    "def":"Защита", "defense":"Защита", "armor":"Броня", "magicResist":"Магическая защита",
     "hp":"HP", "maxHp":"Макс. HP", "hpBonus":"Бонус HP",
     "mp":"MP", "maxMp":"Макс. MP", "mpBonus":"Бонус MP",
     "str":"Сила", "strength":"Сила", "agi":"Ловкость", "agility":"Ловкость",
     "int":"Интеллект", "intellect":"Интеллект",
     "crit":"Крит. шанс", "critChance":"Крит. шанс",
     "critDamage":"Крит. урон", "critDmg":"Крит. урон",
-    "dodge":"Уворот", "evasion":"Уворот",
-    "speed":"Скорость", "atkSpeed":"Скорость атаки",
+    "dodge":"Уворот", "evasion":"Уворот", "controlResist":"Сопротивление контролю", "slowResist":"Сопротивление замедлению",
+    "speed":"Скорость", "spd":"Скорость", "spdFlat":"Бонус скорости", "atkSpeed":"Скорость атаки",
     "attackSpeed":"Скорость атаки", "moveSpeed":"Скорость передвижения",
     "vampirism":"Вампиризм", "lifesteal":"Вампиризм",
     "magic":"Магия", "magicPower":"Сила магии", "heal":"Лечение",
     "upgrade":"Заточка", "enhance":"Заточка", "enhancement":"Заточка",
-    "plus":"Заточка", "upgradeLevel":"Заточка",
+    "plus":"Заточка", "enh":"Заточка", "upgradeLevel":"Заточка", "bm":"Боевая мощь",
     "requiredLevel":"Требуемый уровень", "levelRequired":"Требуемый уровень",
     "minLevel":"Требуемый уровень", "lvlReq":"Требуемый уровень",
-    "valueText":"Эффект", "bonusText":"Бонус"
+    "valueText":"Эффект", "bonusText":"Бонус", "hpPct":"HP (%)", "mpPct":"MP (%)", "atkPct":"Атака (%)", "defPct":"Защита (%)", "critDmg":"Крит. урон"
 }
 const NESTED := ["stats", "baseStats", "bonuses", "bonus", "extraStats", "attributes", "effects"]
 const DESCRIPTIONS := ["description", "desc", "effectText", "useText", "bonusText", "valueText", "skillDescription"]
