@@ -85,6 +85,7 @@ def main() -> None:
                 if sid in grimoire_art:
                     grimoire_titles[sid] = {
                         "name": skill.get("n",""),
+                        "description": skill.get("d",""),
                         "classKey": cls,
                         "type": kind,
                         "card": grimoire_art[sid].get("card", ""),
