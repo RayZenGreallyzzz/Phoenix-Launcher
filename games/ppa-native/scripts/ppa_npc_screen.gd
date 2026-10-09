@@ -607,7 +607,11 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         var item: Dictionary = entry
         var id := str(item.get("id", ""))
         var tile := PanelContainer.new()
-        tile.name = "NpcProduct_" + id
+        # Live recipe IDs contain ':' (e.g. acc:ring:legendary), which Godot
+        # forbids in Node.name. Preserve the exact ID as metadata while giving
+        # the control a lossless, valid ASCII node name for QA and inspection.
+        tile.name = "NpcProduct_" + id.to_utf8_buffer().hex_encode()
+        tile.set_meta("ppa_original_offer_id", id)
         tile.custom_minimum_size.y = 140
         tile.add_theme_stylebox_override("panel", _style(Color("#161B1F"),
             GOLD if id == selected_id else Color("#5E4B35"), 7))
