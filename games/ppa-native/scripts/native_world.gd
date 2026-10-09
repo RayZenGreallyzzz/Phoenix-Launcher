@@ -98,8 +98,10 @@ var _anim_state := ""
 
 func _ready() -> void:
     profile = get_tree().get_meta("phoenix_account", {})
-    var preview_key := str(get_tree().get_meta("ppa_native_test_class", profile.get("classKey", "gnome"))).to_lower()
-    selected_visual_class = preview_key if HERO_CATALOG.valid_key(preview_key) else "gnome"
+    # The 3D hero in the actual native world is the account's SERVER class.
+    # Previewing another model in the gallery never changes this character.
+    var server_key := str(profile.get("classKey", "")).to_lower().strip_edges()
+    selected_visual_class = server_key if HERO_CATALOG.valid_key(server_key) else "gnome"
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     set_process_input(true)
 
