@@ -23,6 +23,14 @@ assert 'state_read_available = false' in main
 assert 'account_switch_requested.connect(_return_to_launcher)' in main
 assert 'func _return_to_launcher()' in main
 assert 'get_tree().quit()' in main
+assert 'registration_requested.emit(' in select, "Native new-hero UI must collect nickname and class"
+assert 'LineEdit.new()' in select, "Nickname field must exist for new players"
+assert 'signal registration_requested' in select
+assert 'selection_screen.registration_requested.connect(_register_character)' in main
+assert '/api/game/character/register' in main, "Native must use server-owned registration only"
+assert 'HTTPClient.METHOD_POST' in main
+assert '_nullable_account_text' in main, "Null Email provider must not look like registered hero"
+assert 'Email-only регистрация ждёт миграцию' in select, "Email-only saves must not fabricate Telegram IDs"
 assert 'button.disabled = locked' in select, "Real characters cannot swap class just by clicking a visual preview"
 assert 'ТЕСТ: классы, сумка и склад локальные' in select, "Unconnected beta inventory must be disclosed"
 assert 'Сумка тестового мира пока локальная' in select, "Read-only server snapshot is not yet real inventory integration"
