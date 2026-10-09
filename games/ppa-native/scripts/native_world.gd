@@ -389,6 +389,8 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     var save = payload.get("state", {})
     if not (save is Dictionary):
         return
+    if test_menu != null:
+        test_menu.call("apply_readonly_snapshot", payload)
     # Display real values exactly as received; never replace with fabricated
     # class stats or mutate a save from this visual 3D testing client.
     var level_text := str(save.get("lvl", save.get("level", "—")))
@@ -404,6 +406,8 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         " linked=1 server_writes=0")
 
 func _on_readonly_snapshot_failed(code: String) -> void:
+    if test_menu != null:
+        test_menu.call("clear_readonly_snapshot")
     # An unavailable backend must never silently switch to fake stats, create
     # another character, override inventory or block local map/asset QA.
     if _server_snapshot_status != null:
