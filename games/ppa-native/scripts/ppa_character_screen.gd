@@ -429,6 +429,10 @@ func is_open() -> bool:
 func _input(event: InputEvent) -> void:
     if not visible or _frame == null:
         return
+    # The inspected server item owns the touch surface. A swipe must not
+    # unexpectedly switch underlying character pages or trigger the joystick.
+    if _item_overlay != null and _item_overlay.visible:
+        return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
         if touch.pressed:
@@ -1051,6 +1055,11 @@ func show_server_item_details(item: Dictionary) -> void:
     var rarity_line := _text("Редкость: " + str(translated.get(original_rarity, original_rarity)), 10,
         RARITIES.get(original_rarity, Color("#B3B7B9")))
     _item_contents.add_child(rarity_line)
+    var extra_text := str(item.get("useText", item.get("bonusText", ""))).strip_edges()
+    if not extra_text.is_empty():
+        var description := _text(extra_text.left(360), 8, Color("#B5C0C6"))
+        description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        _item_contents.add_child(description)
     var message := _text("Это настоящий предмет персонажа на общем сервере PPA. Изменение и использование предметов в тестовом Godot пока отключено.", 8, MUTED)
     message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _item_contents.add_child(message)
