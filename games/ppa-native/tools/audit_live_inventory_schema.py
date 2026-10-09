@@ -65,4 +65,8 @@ for term in ("function classGearArt", "function refreshGearArt",
     print("PPA_PUBLIC_GEAR_SCHEMA", term, "found=", at>=0,
           "excerpt=", repr(_unescape(PAGE[at:at+2700])) if at>=0 else "",
           flush=True)
+for term in ("function runeUiState()", "function runeUiState(", "function ppaBuildSaveObject()", "function sendInvState()", "function renderRunes("):
+    at = PAGE.find(term)
+    print("PPA_PUBLIC_LIVE_SCHEMA", term, "found=", at >= 0,
+          "excerpt=", repr(PAGE[at:at+7300]) if at >= 0 else "", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
