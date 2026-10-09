@@ -116,6 +116,10 @@ jobs:
           sed -i 's|keystore/debug=""|keystore/debug="'"$HOME"'/.android/ppa-native-debug.keystore"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_user=""|keystore/debug_user="androiddebugkey"|' games/ppa-native/export_presets.cfg
           sed -i 's|keystore/debug_password=""|keystore/debug_password="android"|' games/ppa-native/export_presets.cfg
+          # Isolated installable beta: never upgrade/replace the user's real PPA.
+          sed -i 's|package/unique_name="com.phoenixgames.ppa"|package/unique_name="com.phoenixgames.ppa.beta"|' games/ppa-native/export_presets.cfg
+          sed -i 's|package/name="Phoenix Pix Arena"|package/name="Phoenix Pix Arena Beta"|' games/ppa-native/export_presets.cfg
+          grep -q 'package/unique_name="com.phoenixgames.ppa.beta"' games/ppa-native/export_presets.cfg
 
       - name: Stamp monotonic native version for in-launcher updates
         shell: bash
@@ -318,6 +322,9 @@ jobs:
           test -s build/PhoenixPixArena-native-debug.apk
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
           "$APKSIGNER" verify --verbose build/PhoenixPixArena-native-debug.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "package: name='com.phoenixgames.ppa.beta'"
+          echo "PPA_BETA_ISOLATED_APK_OK package=com.phoenixgames.ppa.beta original_package_untouched=1"
           unzip -l build/PhoenixPixArena-native-debug.apk | grep -q 'assets/ppa_original/charFrame.html'
           AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
           test -x "$AAPT"
@@ -327,7 +334,7 @@ jobs:
       - name: Upload signed Godot beta APK as a GitHub Actions artifact ONLY
         uses: actions/upload-artifact@v4
         with:
-          name: PPA-Godot-BETA-not-release
+          name: PPA-Godot-BETA-separate-install
           path: build/PhoenixPixArena-native-debug.apk
           if-no-files-found: error
           retention-days: 14
