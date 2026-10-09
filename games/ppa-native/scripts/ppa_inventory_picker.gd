@@ -2,6 +2,8 @@ extends VBoxContainer
 signal item_chosen(key: String)
 
 const SLOT_COUNT := 100
+const PPA_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
+var _icon_loader: Node
 const GEAR := ["weapon", "helmet", "armor", "gloves", "legs", "boots", "ring", "necklace", "pants", "shield", "amulet"]
 const MATERIAL := ["stone", "sharpening", "upgrade_stone", "enhancement", "sharpening_stone"]
 var entries: Dictionary = {}
@@ -10,6 +12,12 @@ var mode := "all"
 var selected := ""
 var grid: GridContainer
 var scroller: ScrollContainer
+
+func _ready() -> void:
+    if _icon_loader == null:
+        _icon_loader = PPA_ITEM_ICONS.new()
+        _icon_loader.name = "PPAOriginalNpcPickerIconLoader"
+        add_child(_icon_loader)
 
 func configure(items: Array, worn: Dictionary, category: String, selected_key: String) -> void:
     entries.clear()
@@ -63,6 +71,10 @@ func _slot(item: Dictionary, key: String, index_label: String) -> Button:
     b.add_theme_color_override("font_disabled_color", Color("#777C7C"))
     if valid:
         b.pressed.connect(func(): item_chosen.emit(key))
+    # Reuse the exact same approved asset resolver as the hero's bag.
+    # No screenshots, demo inventory or extra per-slot network service.
+    if _icon_loader != null and not item.is_empty():
+        _icon_loader.bind_button(item, str(item.get("classKey", "")), b)
     return b
 
 func _draw_content() -> void:
