@@ -14,6 +14,8 @@ signal refresh_readonly_save_requested
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
 const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
 const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
+const ATTRIBUTE_VIEW = preload("res://scripts/ppa_item_attribute_view.gd")
+const SHARED_SAVE = preload("res://scripts/ppa_shared_save_views.gd")
 const ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 
 const CAPTIONS := [
@@ -60,6 +62,10 @@ var _book_container: VBoxContainer
 var _book_scroll: ScrollContainer
 var _item_overlay: ColorRect
 var _item_contents: VBoxContainer
+var _hold_slot: Button
+var _hold_item: Dictionary = {}
+var _hold_since_ms := 0
+var _hold_origin := Vector2.ZERO
 var _gesture_scroll: ScrollContainer
 var _original_skill_card_count := 0
 # Mirrors the original iframe's renderSkills(sk): the absence of verified
@@ -186,6 +192,7 @@ func _ready() -> void:
     _create_frame()
     _create_book_overlay()
     _create_item_overlay()
+    set_process(false)
     _fit_to_viewport()
     visible = false
 
@@ -558,6 +565,9 @@ func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Butt
     # These server-owned items are inspect-only until authoritative
     # equipment operations are connected to the original PPA backend.
     _bind_item_icon(equipped, b)
+    if filled and _server_inventory_verified:
+        b.pressed.connect(show_server_item_details.bind(equipped))
+        b.gui_input.connect(_watch_item_hold.bind(b, equipped))
     return b
 
 func _draw_inventory() -> void:
@@ -617,6 +627,18 @@ func _draw_inventory() -> void:
     profession.add_child(cls)
 
     _section("ИНВЕНТАРЬ")
+    var real_save: Dictionary = _server_inventory.get("save", {}) if _server_inventory_verified else {}
+    var wallet: Dictionary = SHARED_SAVE.money(real_save)
+    var money_bar := _text(
+        "GOLD: " + (str(wallet["gold"]) if wallet.get("gold", null) != null else "—") +
+        "    PPA: " + (str(wallet["ppa"]) if wallet.get("ppa", null) != null else "—") +
+        "    GRAM: " + (str(wallet["gram"]) if wallet.get("gram", null) != null else "—"),
+        9, Color("#E8BA70")
+    )
+    money_bar.name = "PPAUnifiedSavedBalances"
+    money_bar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    money_bar.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _page_container.add_child(money_bar)
     var bag_line := HBoxContainer.new()
     bag_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _page_container.add_child(bag_line)
@@ -709,6 +731,7 @@ func _draw_inventory() -> void:
         slot.add_theme_stylebox_override("disabled", slot_style)
         slot.disabled = locked or not _server_inventory_verified
         if not item.is_empty() and _server_inventory_verified:
+            slot.gui_input.connect(_watch_item_hold.bind(slot, item))
             if is_virtual:
                 slot.pressed.connect(select_item_requested.emit.bind("resource", virtual_index))
             else:
@@ -994,37 +1017,99 @@ func _book_picture(path: String, dimensions: Vector2) -> TextureRect:
 
 # Inspection stays inside the original five-page native character screen.
 # Never open the generic old dark test "ПРЕДМЕТ · ИНВЕНТАРЬ" window.
+func _cancel_item_hold() -> void:
+    _hold_slot = null
+    _hold_item.clear()
+    _hold_since_ms = 0
+    set_process(false)
+
+func _watch_item_hold(event: InputEvent, slot: Button, item: Dictionary) -> void:
+    if item.is_empty() or not _server_inventory_verified:
+        return
+    if event is InputEventScreenTouch:
+        var touch := event as InputEventScreenTouch
+        if touch.pressed and (_hold_slot == null or _hold_slot == slot):
+            _hold_slot = slot
+            _hold_item = item.duplicate(true)
+            _hold_since_ms = Time.get_ticks_msec()
+            _hold_origin = touch.position
+            set_process(true)
+        elif not touch.pressed and _hold_slot == slot:
+            _cancel_item_hold()
+    elif event is InputEventMouseButton:
+        var mouse := event as InputEventMouseButton
+        if mouse.button_index == MOUSE_BUTTON_LEFT:
+            if mouse.pressed and (_hold_slot == null or _hold_slot == slot):
+                _hold_slot = slot
+                _hold_item = item.duplicate(true)
+                _hold_since_ms = Time.get_ticks_msec()
+                _hold_origin = mouse.position
+                set_process(true)
+            elif not mouse.pressed and _hold_slot == slot:
+                _cancel_item_hold()
+    elif event is InputEventScreenDrag and _hold_slot == slot:
+        var drag := event as InputEventScreenDrag
+        if drag.position.distance_to(_hold_origin) > 16.0:
+            _cancel_item_hold()
+    elif event is InputEventMouseMotion and _hold_slot == slot:
+        var motion := event as InputEventMouseMotion
+        if motion.position.distance_to(_hold_origin) > 16.0:
+            _cancel_item_hold()
+
+func _process(_delta: float) -> void:
+    if _hold_slot == null:
+        set_process(false)
+        return
+    if not _hold_slot.is_inside_tree() or not visible or (_item_overlay != null and _item_overlay.visible):
+        _cancel_item_hold()
+        return
+    if Time.get_ticks_msec() - _hold_since_ms >= 1000:
+        var chosen := _hold_item.duplicate(true)
+        _cancel_item_hold()
+        show_server_item_details(chosen)
+
 func _create_item_overlay() -> void:
+    # Root-level centered popup; never a PanelContainer child stretched by
+    # the original character frame. Fixed-height scroll prevents long blank
+    # black cards on portrait phones and tablets.
     _item_overlay = ColorRect.new()
     _item_overlay.name = "PPAOriginalCharacterItemDetail"
-    _item_overlay.color = Color(0.0, 0.0, 0.0, 0.77)
+    _item_overlay.color = Color(0.0, 0.0, 0.0, 0.74)
     _item_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _item_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-    _item_overlay.z_index = 21
-    _frame.add_child(_item_overlay)
+    _item_overlay.z_index = 120
+    add_child(_item_overlay)
+    var centered := CenterContainer.new()
+    centered.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    centered.mouse_filter = Control.MOUSE_FILTER_STOP
+    _item_overlay.add_child(centered)
     var popup := PanelContainer.new()
-    popup.anchor_left = 0.5
-    popup.anchor_right = 0.5
-    popup.anchor_top = 0.5
-    popup.anchor_bottom = 0.5
-    popup.offset_left = -135.0
-    popup.offset_right = 135.0
-    popup.offset_top = -175.0
-    popup.offset_bottom = 175.0
+    popup.name = "PPACompactItemDetailsPopup"
+    popup.custom_minimum_size.x = 294.0
     popup.mouse_filter = Control.MOUSE_FILTER_STOP
-    var sb := _style_box(Color("#10161B"), Color("#A16B2B"), 9, 2)
-    sb.set_content_margin_all(12.0)
-    popup.add_theme_stylebox_override("panel", sb)
-    _item_overlay.add_child(popup)
+    popup.add_theme_stylebox_override("panel", _style_box(Color("#10161B"), Color("#A16B2B"), 9, 2))
+    centered.add_child(popup)
+    var margins := MarginContainer.new()
+    for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+        margins.add_theme_constant_override(side, 10)
+    popup.add_child(margins)
+    var scroller := ScrollContainer.new()
+    scroller.name = "PPACompactItemAttributeScroll"
+    scroller.custom_minimum_size = Vector2(270.0, 324.0)
+    scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    margins.add_child(scroller)
     _item_contents = VBoxContainer.new()
-    _item_contents.add_theme_constant_override("separation", 9)
-    popup.add_child(_item_contents)
+    _item_contents.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _item_contents.add_theme_constant_override("separation", 7)
+    scroller.add_child(_item_contents)
     _item_overlay.visible = false
 
 func show_server_item_details(item: Dictionary) -> void:
     # This view is invoked only from the same authenticated, verified save.
     if item.is_empty() or _item_contents == null or not _server_inventory_verified:
         return
+    _cancel_item_hold()
     for child in _item_contents.get_children():
         _item_contents.remove_child(child)
         child.queue_free()
@@ -1055,12 +1140,20 @@ func show_server_item_details(item: Dictionary) -> void:
     var rarity_line := _text("Редкость: " + str(translated.get(original_rarity, original_rarity)), 10,
         RARITIES.get(original_rarity, Color("#B3B7B9")))
     _item_contents.add_child(rarity_line)
-    var extra_text := str(item.get("useText", item.get("bonusText", ""))).strip_edges()
-    if not extra_text.is_empty():
-        var description := _text(extra_text.left(360), 8, Color("#B5C0C6"))
-        description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-        _item_contents.add_child(description)
-    var message := _text("Это настоящий предмет персонажа на общем сервере PPA. Изменение и использование предметов в тестовом Godot пока отключено.", 8, MUTED)
+    var attributes: Array = ATTRIBUTE_VIEW.lines_for_item(item)
+    var attribute_heading := _text("ХАРАКТЕРИСТИКИ", 10, GOLD)
+    attribute_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _item_contents.add_child(attribute_heading)
+    if attributes.is_empty():
+        var empty_stats := _text("У этого предмета нет переданных характеристик в облачном сохранении. Числа из тестового клиента не используются.", 9, MUTED)
+        empty_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        _item_contents.add_child(empty_stats)
+    else:
+        for line_text in attributes:
+            var stat := _text(str(line_text), 10, Color("#D0DBDD"))
+            stat.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+            _item_contents.add_child(stat)
+    var message := _text("PPA · сохранение сервера · только просмотр", 8, MUTED)
     message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _item_contents.add_child(message)
     var close_btn := _button("НАЗАД К ПЕРСОНАЖУ", 10)
