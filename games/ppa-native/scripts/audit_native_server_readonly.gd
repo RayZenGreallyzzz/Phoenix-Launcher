@@ -43,15 +43,26 @@ func _run() -> void:
     if got_snapshot or last_failure != "TELEGRAM_ID_MISMATCH":
         _fail("received a different Telegram account's saved state")
         return
+    if has_meta("ppa_readonly_snapshot"):
+        _fail("cached snapshot survived foreign-profile rejection")
+        return
+    got_snapshot = false
+    last_failure = ""
+    saved["profile"]["telegramId"] = "test-own-user"
+    saved["state"]["telegramId"] = "other-user"
+    client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
+    if got_snapshot or last_failure != "SAVE_TELEGRAM_ID_MISMATCH" or has_meta("ppa_readonly_snapshot"):
+        _fail("a foreign save identity was accepted or stale data was retained")
+        return
     got_snapshot=false
     last_failure=""
     client._on_completed(HTTPRequest.RESULT_SUCCESS,401,headers,JSON.stringify({"ok":false,"code":"GAME_SESSION_EXPIRED"}).to_utf8_buffer())
-    if got_snapshot or not last_failure.begins_with("SERVER_HTTP_401_"):
-        _fail("rejected/expired game session was erroneously accepted")
+    if got_snapshot or not last_failure.begins_with("SERVER_HTTP_401_") or has_meta("ppa_readonly_snapshot"):
+        _fail("expired game session left a readable or cached save")
         return
     if client.ENDPOINT != "/api/game/state" or client.API_BASE.begins_with("http://"):
         _fail("unsafe or wrong server endpoint")
         return
-    print("PPA_NATIVE_AUTH_READONLY_SMOKE_OK own_snapshot=1 hp=412 inventory=1 cross_user=blocked expired_session=blocked server_writes=0")
+    print("PPA_NATIVE_AUTH_READONLY_SMOKE_OK own_snapshot=1 hp=412 inventory=1 cross_user=blocked stale_cache=cleared expired_session=blocked server_writes=0")
     client.queue_free()
     quit(0)
