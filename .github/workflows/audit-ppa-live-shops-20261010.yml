@@ -1,0 +1,42 @@
+name: Audit live PPA shops reference (public read only)
+
+on:
+  push:
+    branches: ["feature/godot-server-readonly-20261009"]
+    paths: [".github/workflows/audit-ppa-live-shops-20261010.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect current public PPA merchant, premium and blackmarket (no auth)
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          import re,html,json
+          class I(HTMLParser):
+              def __init__(self):super().__init__(convert_charrefs=True);self.frames={}
+              def handle_starttag(self,tag,attrs):
+                  if tag=="iframe":
+                      a=dict(attrs);self.frames[a.get("id","")]=a.get("srcdoc","")
+          page=urlopen(Request("https://ppa-phoenixpixarena.1988stella1988.workers.dev/?native_shop_public_audit=20261010",headers={"User-Agent":"PPA-Shops-Public-Audit/1"}),timeout=60).read(8000000).decode()
+          parser=I();parser.feed(page)
+          for name in ("premiumShopFrame","blackmarketFrame","merchantFrame"):
+              source=html.unescape(parser.frames[name])
+              print("PPA_SHOP_FRAME",name,len(source),flush=True)
+              for pattern in (r"(?:const|var|let)\s+[A-Z_]{3,}\s*=",r"function\s+[A-Za-z_]*(?:buy|Buy|purchase|Purchase|render|Render|offer|Offer)\w*\s*\(",r"\b(?:PRODUCTS|OFFERS|ITEMS|SUBSCRIPTIONS|PACKS|DEALS)\b"):
+                  hits=list(re.finditer(pattern,source))
+                  print("PPA_SHOP_PATTERN",name,pattern,len(hits),flush=True)
+                  for m in hits[:13]:
+                      frag=source[max(0,m.start()-65):m.start()+430]
+                      frag=re.sub(r"\s+"," ",frag)
+                      frag=re.sub(r"data:image/[^,]+,[a-zA-Z0-9+/=]{100,}","<embedded_asset_omitted>",frag)
+                      print("PPA_SHOP_SOURCE",name,m.start(),frag[:430],flush=True)
+          print("PPA_SHOP_PUBLIC_AUDIT_OK no_player_data=1 no_writes=1",flush=True)
+          PY
