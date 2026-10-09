@@ -399,6 +399,14 @@ jobs:
           godot --headless --path games/ppa-native --script res://scripts/audit_native_inventory_view.gd --quit-after 600 2>&1 | tee /tmp/ppa-server-item-view.log
           grep -q 'PPA_NATIVE_SERVER_ITEMS_VIEW_OK' /tmp/ppa-server-item-view.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-server-item-view.log; then exit 1; fi
+      - name: Verify real PPA active/passive skill ranks, grimoire books, rune slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_skill_rune_view.gd --quit-after 600 2>&1 | tee /tmp/ppa-skill-rune-view.log
+          grep -q 'PPA_NATIVE_SKILL_RUNE_VIEW_OK' /tmp/ppa-skill-rune-view.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-skill-rune-view.log; then exit 1; fi
+
       - name: Build native PPA APK
         shell: bash
         run: |
