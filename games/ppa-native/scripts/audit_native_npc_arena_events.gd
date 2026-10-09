@@ -65,8 +65,14 @@ func _check() -> void:
     npc._render()
     await process_frame
     var price_rows := 0
-    for node in npc.find_children("NpcFullWidthPriceRow", "VBoxContainer", true, false):
-        price_rows += 1
+    var child_names: Array[String] = []
+    for child in npc._body.get_children():
+        child_names.append(child.name)
+        if child.name == "NpcFullWidthPriceRow" and child is VBoxContainer:
+            price_rows += 1
+    print("PPA_ARENA_PRICE_GRID_DIAG", "service=", npc.service, " tab=", npc.tab,
+        " expected=", NPC.ORIGINAL_PVP_SHOP.size(), " actual=", price_rows,
+        " nodes=", ",".join(child_names))
     if price_rows < 6:
         fail("Original PPA six Arena offers lost or price text still squeezed into tiny right column")
         return
