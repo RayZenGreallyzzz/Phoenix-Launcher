@@ -16,6 +16,7 @@ signal change_class_requested
 signal npc_snapshot_requested(service: String)
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
+signal refresh_readonly_save_requested
 
 
 var account: Dictionary = {}
@@ -53,7 +54,9 @@ func apply_readonly_snapshot(payload: Dictionary) -> void:
     _verified_save = (payload["state"] as Dictionary).duplicate(true)
     _has_verified_save = true
     if _character_screen != null:
-        _character_screen.apply_readonly_save(_verified_save)
+        _character_screen.apply_readonly_save(
+            _verified_save, payload.get("version", null), payload.get("updatedAt", null)
+        )
     if _panel != null and _panel.visible:
         _refresh()
 
@@ -90,6 +93,9 @@ func _ready() -> void:
         _character_screen.close_requested.connect(close_menu)
         _character_screen.select_item_requested.connect(_open_item)
         _character_screen.unequip_requested.connect(_on_character_unequip)
+        _character_screen.refresh_readonly_save_requested.connect(
+            func(): refresh_readonly_save_requested.emit()
+        )
         _character_screen.visible = false
     _panel.visible = false
     _background.visible = false
