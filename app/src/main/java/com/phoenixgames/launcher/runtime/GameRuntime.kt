@@ -26,7 +26,9 @@ object GameRuntime {
         val ticket = PhoenixAuth.createGameTicket(context, PPA_GAME_ID)
 
         launchIntent
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            // A different Phoenix account must NEVER resume a previous Godot process.
+            // New one-time ticket => new task/scene/session, not onNewIntent on an old hero.
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             .putExtra(EXTRA_GAME_TICKET, ticket)
             .putExtra(EXTRA_GAME_ID, PPA_GAME_ID)
 
