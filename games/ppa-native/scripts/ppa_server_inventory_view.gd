@@ -88,7 +88,14 @@ static func title(item: Dictionary) -> String:
     return str(item.get("name", item.get("title", "Предмет PPA")))
 
 static func symbol(item: Dictionary) -> String:
-    return str(item.get("ic", item.get("icon", item.get("short", "◆")))).substr(0, 3)
+    # Telegram PPA stores some equipment with an empty 'ic' while its real
+    # image lives in 'img'. Never show only '×1' if artwork is still loading.
+    for key in ["ic", "icon", "short"]:
+        var value := str(item.get(key, "")).strip_edges()
+        if not value.is_empty() and value != "<null>":
+            return value.substr(0, 3)
+    var item_title := title(item).strip_edges()
+    return item_title.substr(0, 8) if not item_title.is_empty() else "◆"
 
 static func level(save: Dictionary) -> String:
     return str(save.get("lvl", save.get("level", "—")))
