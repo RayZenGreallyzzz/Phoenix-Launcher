@@ -385,6 +385,16 @@ func _build_server_readonly_bridge() -> void:
     _server_snapshot_loader.snapshot_failed.connect(_on_readonly_snapshot_failed)
     _server_snapshot_loader.call("fetch_once")
 
+func _refresh_server_readonly_save() -> void:
+    # Authenticated GET only, no save writes. Never cache another character.
+    if _server_snapshot_loader == null:
+        return
+    if _server_snapshot_loader.loading:
+        return
+    if _server_snapshot_status != null:
+        _server_snapshot_status.text = "PPA СЕРВЕР · перепроверяем облачное сохранение…"
+    _server_snapshot_loader.fetch_once()
+
 func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     var save = payload.get("state", {})
     if not (save is Dictionary):
@@ -508,6 +518,7 @@ func _build_test_menu() -> void:
     test_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     test_menu.change_class_requested.connect(_back_to_character_select)
     test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
+    test_menu.refresh_readonly_save_requested.connect(_refresh_server_readonly_save)
 
 func _open_dungeon_map_test() -> void:
     # Native visual test only. Never writes scene, loot or entry permissions
