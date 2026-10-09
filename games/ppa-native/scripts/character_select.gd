@@ -279,7 +279,7 @@ func _refresh_account() -> void:
     _choose_class(server_key)
     # A verified PPA save has exactly ONE authoritative class. Other GLB
     # previews are for the disconnected beta gallery only.
-    var locked := not verified_state.is_empty()
+    var locked := registered and HERO_CATALOG.valid_key(server_key)
     for id in _class_buttons.keys():
         var button := _class_buttons[id] as Button
         if button != null:
@@ -344,7 +344,7 @@ func _confirm_preview() -> void:
         registration_requested.emit(_nickname_input.text.strip_edges(), _selected_class_key)
         return
     # Never enter with a visual class that conflicts with the real server hero.
-    if not verified_state.is_empty() and _selected_class_key != _account_string("classKey").to_lower():
+    if registered and _selected_class_key != _account_string("classKey").to_lower():
         _status_label.text = "Класс должен совпадать с сохранённым героем."
         return
     # Only in SceneTree memory. The server never receives this class choice.
