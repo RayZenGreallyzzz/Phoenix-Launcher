@@ -102,8 +102,9 @@ func _check() -> void:
             _fail("Canonical smith catalog does not include " + cat)
             return
         var item_id := str(canonical.get("id", ""))
-        if npc.find_child("NpcProduct_" + item_id, true, false) == null:
-            _fail("Canonical smith " + cat + " offer is not rendered: " + item_id)
+        var product_node := npc.find_child("NpcProduct_" + item_id.to_utf8_buffer().hex_encode(), true, false)
+        if product_node == null or str(product_node.get_meta("ppa_original_offer_id", "")) != item_id:
+            _fail("Canonical smith " + cat + " offer ID was lost in Godot UI: " + item_id)
             return
         npc._select_item(item_id)
         await process_frame
