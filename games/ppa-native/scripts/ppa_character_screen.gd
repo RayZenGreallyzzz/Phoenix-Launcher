@@ -9,6 +9,7 @@ extends Control
 signal close_requested
 signal select_item_requested(source_name: String, index: int)
 signal unequip_requested(slot: String)
+signal refresh_readonly_save_requested
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
 const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
@@ -66,11 +67,17 @@ var _server_skills_received := false
 var _server_skills: Dictionary = {}
 var _server_inventory: Dictionary = {}
 var _server_inventory_verified := false
+var _server_save_version: Variant = null
+var _server_saved_at: Variant = null
+var _server_diagnostics: Dictionary = {}
 var _icon_loader: Node
 
-func apply_readonly_save(save: Dictionary) -> void:
+func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_at: Variant = null) -> void:
     # This is a VIEW only. Never merge with the local test bag/equipment.
     _server_inventory = SERVER_VIEW.from_save(save)
+    _server_diagnostics = SERVER_VIEW.diagnose(save)
+    _server_save_version = save_version
+    _server_saved_at = saved_at
     _server_inventory_verified = true
     var actual_class := str(save.get("classKey", save.get("cls", account.get("classKey", "")))).to_lower()
     if ["tank", "paladin", "barbarian", "assassin", "gnome", "archer", "mage", "priest"].has(actual_class):
@@ -80,6 +87,9 @@ func apply_readonly_save(save: Dictionary) -> void:
 
 func clear_readonly_save() -> void:
     _server_inventory.clear()
+    _server_diagnostics.clear()
+    _server_save_version = null
+    _server_saved_at = null
     _server_inventory_verified = false
     clear_authoritative_skill_snapshot()
     if is_node_ready() and visible:
@@ -574,6 +584,36 @@ func _draw_inventory() -> void:
     count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     count.size_flags_horizontal = Control.SIZE_SHRINK_END
     bag_line.add_child(count)
+
+    # Temporary read-only reconciliation display. This exposes only numeric
+    # counts of server save fields, never items, Telegram IDs or account data.
+    # Unlike the inventory slot count it also shows the unparsed cloud shape,
+    # so a stale D1 save can be distinguished from a broken Godot renderer.
+    if _server_inventory_verified:
+        var diag := _server_diagnostics
+        var version_text := str(_server_save_version) if _server_save_version != null else "—"
+        var saved_text := "—"
+        if _server_saved_at != null and float(_server_saved_at) > 0.0:
+            saved_text = Time.get_datetime_string_from_unix_time(
+                int(float(_server_saved_at) / 1000.0), true
+            ).replace("T", " ") + " UTC"
+        var d1_line := _text("СЕЙВ D1 v" + version_text + " · " + saved_text, 8, Color("#9CBBC0"))
+        d1_line.name = "PPACloudSaveVersionDiagnostic"
+        _page_container.add_child(d1_line)
+        var counts_line := _text(
+            "D1 корень: сумка " + str(diag.get("root_bag_text", "—")) +
+            " / надето " + str(diag.get("root_equipped_text", "—")) +
+            "\nвлож. inventory: сумка " + str(diag.get("nested_bag_text", "—")) +
+            " / надето " + str(diag.get("nested_equipped_text", "—")),
+            8, Color("#9CBBC0")
+        )
+        counts_line.name = "PPACloudRawFieldsDiagnostic"
+        _page_container.add_child(counts_line)
+        var refresh := _button("↻ ПЕРЕЧИТАТЬ СЕРВЕР PPA (ТОЛЬКО ЧТЕНИЕ)", 8)
+        refresh.name = "PPARefreshCloudSave"
+        refresh.custom_minimum_size.y = 26
+        refresh.pressed.connect(func(): refresh_readonly_save_requested.emit())
+        _page_container.add_child(refresh)
 
     var grid := GridContainer.new()
     grid.name = "OriginalPPABagGrid"
