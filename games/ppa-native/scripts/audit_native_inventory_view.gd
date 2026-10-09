@@ -25,6 +25,24 @@ func _run() -> void:
         "inventory":{"bag":[legendary,ring,null],"equipped":{"weapon":legendary}}
     }
     var snap := VIEW.from_save(source)
+    # The actual Telegram PPA cloud save keeps the canonical bag/equipment at
+    # the top level; nested inventories may contain unrelated UI/test data.
+    var cloud := {
+        "bag": [{"uid":"cloud-armor","name":"Броня лучника"}],
+        "equipped": {"weapon":{"uid":"cloud-bow","name":"Лук лучника"}},
+        "storage": {"personal":[]},
+        "inventory": {
+            "bag": [{"uid":"stale-test-item"}],
+            "equipped": {"weapon":{"uid":"incorrect-local-bow"}}
+        }
+    }
+    var canonical := VIEW.from_save(cloud)
+    if VIEW.item_at(canonical["bag"],0).get("uid","")!="cloud-armor":
+        _fail("Nested inventory took priority over canonical Telegram bag")
+        return
+    if canonical["equipped"].get("weapon",{}).get("uid","")!="cloud-bow":
+        _fail("Nested inventory took priority over canonical Telegram equipped weapon")
+        return
     if not snap.get("has_bag",false) or snap.get("bag",[]).size()!=3:
         _fail("Original bag shape was lost")
         return
