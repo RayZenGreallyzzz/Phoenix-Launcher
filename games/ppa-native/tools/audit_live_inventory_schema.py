@@ -78,4 +78,10 @@ for term in ("function ppaBuildSaveObject()", "function sendInvState()", "functi
     at = PAGE.find(term)
     print("PPA_PUBLIC_MONEY_ATTR_SCHEMA", term, "found=", at >= 0,
           "excerpt=", repr(PAGE[at:at+4500]) if at >= 0 else "", flush=True)
+# Review all live public UI catalogs without reading private saves. This
+# shows which native NPC/arena/event panels are mere placeholders.
+for term in ("ARENA_SHOP", "arenaShop", "arenaTokens", "arenaAttempts", "arenaPvp", "EVENT_CATALOG", "eventItems", "mimicSombrero", "titanShard", "WORLD_BOSS_SHARD_NAME", "merchantFrame", "arenaFrame", "eventsFrame", "EVENTS", "PPA_EVENT", "eventTimer", "arenaHistory"):
+    at = PAGE.find(term)
+    print("PPA_ORIGINAL_ARENA_EVENT_SCHEMA", term, "found=", at >= 0,
+          "excerpt=", repr(PAGE[max(0,at-200):at+1900]) if at >= 0 else "", flush=True)
 print("PPA_ORIGINAL_INVENTORY_SCHEMA_AUDIT_OK no_player_access=1", flush=True)
