@@ -1,6 +1,7 @@
 extends SceneTree
 
 const CLIENT = preload("res://scripts/ppa_server_readonly_snapshot.gd")
+const CLASS_GALLERY = preload("res://scripts/character_select.gd")
 var got_snapshot := false
 var last_failure := ""
 
@@ -63,6 +64,19 @@ func _run() -> void:
     if client.ENDPOINT != "/api/game/state" or client.API_BASE.begins_with("http://"):
         _fail("unsafe or wrong server endpoint")
         return
+    # Preview art must not change the class of the authenticated hero.
+    # A player may browse Archer art, but PPA must still open their actual
+    # registered Gnome when "Enter City" is pressed.
+    var gallery := CLASS_GALLERY.new()
+    gallery.account = {"classKey":"gnome", "ppaNickname":"TestHero"}
+    root.add_child(gallery)
+    gallery._choose_class("archer")
+    gallery._confirm_preview()
+    if str(get_meta("ppa_native_test_class", "")) != "gnome":
+        _fail("3D preview class replaced real PPA server character class")
+        return
+    gallery.queue_free()
+    print("PPA_NATIVE_SERVER_CLASS_PIN_OK preview=archer gameplay=gnome class_writes=0")
     print("PPA_NATIVE_AUTH_READONLY_SMOKE_OK own_snapshot=1 hp=412 inventory=1 cross_user=blocked stale_cache=cleared expired_session=blocked server_writes=0")
     client.queue_free()
     quit(0)
