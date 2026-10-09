@@ -126,6 +126,11 @@ func _ready() -> void:
     _global_hub.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _global_hub.close_requested.connect(close_menu)
     _global_hub.character_requested.connect(func(): open_page("character"))
+    _global_hub.arena_requested.connect(func():
+        # Navigate to existing native arena NPC UI, without spawning a fake
+        # arena or starting a server match.
+        open_npc({"id":"existing-arena-menu", "service":"arena", "name":"Мечник арены"})
+    )
     _global_hub.snapshot_requested.connect(func(section: String): global_snapshot_requested.emit(section))
     _global_hub.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     # Optional A/B comparison of the untouched Telegram character iframe.
