@@ -219,6 +219,14 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    # Both existing PPA auth endpoints must identify the same server game.
+    # Do not accept a successful HTTP response with another game's account.
+    if data.get("ok", false) != true or str(data.get("gameId", "")) != GAME_ID:
+        _show_error("Ответ сервера относится к другой игре или не подтверждён.")
+        return
+    if not (data.get("account") is Dictionary):
+        _show_error("Сервер не подтвердил аккаунт Phoenix.")
+        return
     if request_mode == "exchange":
         var session: Dictionary = data.get("session", {})
         session_token = str(session.get("token", ""))
