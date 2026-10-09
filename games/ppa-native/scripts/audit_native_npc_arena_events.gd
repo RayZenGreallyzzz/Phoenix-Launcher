@@ -61,6 +61,15 @@ func _check() -> void:
     if not npc.is_open():
         fail("Original native arena NPC menu failed to open")
         return
+    npc.tab = "shop"
+    npc._render()
+    await process_frame
+    var price_rows := 0
+    for node in npc.find_children("NpcFullWidthPriceRow", "VBoxContainer", true, false):
+        price_rows += 1
+    if price_rows < 6:
+        fail("Original PPA six Arena offers lost or price text still squeezed into tiny right column")
+        return
     # The storage screenshot showed original item names but no icons:
     # virtualized cells must now reuse the same approved bundled textures.
     var test_scroll := ScrollContainer.new()
