@@ -13,6 +13,7 @@ const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
+const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 const GOLD := Color("#F6C66F")
 const TEXT := Color("#E5E4DE")
@@ -38,6 +39,8 @@ var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
+var _player_save_readonly: Dictionary = {}
+var _player_view_readonly: Dictionary = {}
 var _shade: ColorRect
 var _frame: PanelContainer
 var _heading: Label
@@ -237,6 +240,21 @@ func _outside(event: InputEvent) -> void:
 func is_open() -> bool:
     return visible
 
+func apply_player_save_readonly(save: Dictionary) -> void:
+    # The authenticated save read by /api/game/state is NOT a signed
+    # quote, market order, clan permission or combat state. Project only
+    # the current player's possessions and balances into all NPC pages.
+    _player_save_readonly = save.duplicate(true)
+    _player_view_readonly = SAVE_VIEWS.npc_player_view(save)
+    if visible:
+        _render()
+
+func clear_player_save_readonly() -> void:
+    _player_save_readonly.clear()
+    _player_view_readonly.clear()
+    if visible:
+        _render()
+
 func set_preview_stash(storage: RefCounted) -> void:
     # This private local stash is not Telegram or the game server.
     preview_stash = storage
@@ -388,8 +406,10 @@ func _render() -> void:
         "dungeon": _show_dungeon()
         "fartzone": _show_fartzone()
     _status.text = "PPA · серверные операции заблокированы до синхронизации"
+    if not _player_view_readonly.is_empty():
+        _status.text = "PPA · реальные вещи и баланс из D1 · операции заблокированы"
     if has_verified_state:
-        _status.text = "PPA · данные получены · операции пока недоступны"
+        _status.text = "PPA · подтверждённые данные сервиса · операции пока недоступны"
     _scroll.set_deferred("scroll_vertical", 0)
 
 
@@ -558,7 +578,11 @@ func _show_merchant() -> void:
             filtered.append(entry)
     _product_grid(filtered, true)
     _selected_details(filtered, true)
-    _body.add_child(_label("Баланс Gold / PPA: — · будет получен с сервера", 11, SUB))
+    var money: Dictionary = _player_view_readonly.get("money", {})
+    _body.add_child(_label("Ваш баланс D1 · Gold: " +
+        (str(money["gold"]) if money.get("gold", null) != null else "—") +
+        " / PPA: " +
+        (str(money["ppa"]) if money.get("ppa", null) != null else "—"), 11, SUB))
 
 func _show_blackmarket() -> void:
     _section("БЛЕК МАРКЕТ", "Telegram PPA · индивидуальные предложения и скупка")
@@ -588,6 +612,8 @@ func _show_blackmarket() -> void:
 
 
 func _inventory_items() -> Array:
+    if not _player_view_readonly.is_empty():
+        return _player_view_readonly.get("inventory", [])
     if has_verified_state:
         var from_server = authoritative.get("inventory", [])
         return from_server if from_server is Array else []
@@ -596,6 +622,8 @@ func _inventory_items() -> Array:
     return []
 
 func _worn_items() -> Dictionary:
+    if not _player_view_readonly.is_empty():
+        return _player_view_readonly.get("equipment", {})
     if has_verified_state:
         var equipped = authoritative.get("equipment", {})
         return equipped if equipped is Dictionary else {}
@@ -623,8 +651,8 @@ func _add_picker(mode: String, selected_key: String, destination: Callable) -> v
     _body.add_child(picker)
     picker.item_chosen.connect(destination)
     picker.configure(_inventory_items(), _worn_items(), mode, selected_key)
-    if not has_verified_state:
-        _body.add_child(_label("ЛОКАЛЬНЫЙ ТЕСТ · реальные предметы появятся после входа на сервер PPA.", 11, SUB))
+    if _player_view_readonly.is_empty() and not has_verified_state:
+        _body.add_child(_label("Ожидаем авторизованное сохранение PPA · тестовую сумку не выдаём за реальные вещи.", 11, SUB))
 
 func _details(key: String) -> void:
     var item := _chosen_item(key)
@@ -714,7 +742,24 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
         "ЛИЧНЫЙ СКЛАД" if scope == "personal" else (
         "КЛАНОВЫЙ СКЛАД" if scope == "clan" else "ПРЕМИУМ СКЛАД"))
     panel.add_child(_label(heading, 12, GOLD))
-    panel.add_child(_label("— / " + str(cap) + " · данные сервера", 10, SUB))
+    var saved_items: Array = []
+    var known := false
+    if not _player_view_readonly.is_empty():
+        if scope == "inventory":
+            saved_items = _player_view_readonly.get("inventory", [])
+            known = true
+        else:
+            var scopes: Dictionary = _player_view_readonly.get("storage", {})
+            var seen: Dictionary = _player_view_readonly.get("storageFieldsPresent", {})
+            if bool(seen.get(scope, false)):
+                saved_items = scopes.get(scope, [])
+                known = true
+    var occupied := 0
+    for raw in saved_items:
+        if raw is Dictionary and not (raw as Dictionary).is_empty():
+            occupied += 1
+    panel.add_child(_label((str(occupied) if known else "—") + " / " + str(cap) +
+        (" · подтверждено D1" if known else " · серверные данные недоступны"), 10, SUB))
     var shell := PanelContainer.new()
     shell.name = "NpcStorageFrame_" + scope
     shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -734,6 +779,8 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
         (_frame.offset_right - _frame.offset_left) / 2.0 - 56.0) if size.x >= 570.0 else maxf(150.0, _frame.offset_right - _frame.offset_left - 60.0)
     scrolling.add_child(grid)
     grid.configure(scope, scrolling, 5 if size.x >= 570.0 else 4)
+    if known:
+        grid.call("apply_items_readonly", saved_items)
 
 func _storage_pair(scope: String) -> void:
     # Two independent, smooth scrolls. The whole 500-slot area uses just
