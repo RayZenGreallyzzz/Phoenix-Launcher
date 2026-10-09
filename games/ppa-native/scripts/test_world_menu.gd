@@ -588,7 +588,12 @@ func _show_item_details() -> void:
     if _has_verified_save:
         var server_inventory := SERVER_VIEW.from_save(_verified_save)
         var server_bag: Array = server_inventory.get("bag", [])
-        var real_item: Dictionary = SERVER_VIEW.item_at(server_bag, _selected_item_index)
+        var resource_stacks: Array = server_inventory.get("resource_items", [])
+        var source_items: Array = resource_stacks if _selected_item_source == "resource" else server_bag
+        var real_item: Dictionary = SERVER_VIEW.item_at(source_items, _selected_item_index)
+        if real_item.is_empty():
+            open_page("bag")
+            return
         _line(SERVER_VIEW.title(real_item), false, true)
         _line("Количество: " + str(SERVER_VIEW.item_count(real_item)))
         _line("Редкость: " + SERVER_VIEW.rarity(real_item), true)
