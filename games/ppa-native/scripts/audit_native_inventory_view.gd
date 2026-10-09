@@ -43,6 +43,24 @@ func _run() -> void:
     if canonical["equipped"].get("weapon",{}).get("uid","")!="cloud-bow":
         _fail("Nested inventory took priority over canonical Telegram equipped weapon")
         return
+    var root_diag := VIEW.diagnose(cloud)
+    if root_diag.get("root_bag",-1)!=1 or root_diag.get("root_equipped",-1)!=1:
+        _fail("Wrong raw root cloud-save diagnostic")
+        return
+    if root_diag.get("nested_bag",-1)!=1 or root_diag.get("nested_equipped",-1)!=1:
+        _fail("Wrong untrusted nested inventory diagnostic")
+        return
+    if root_diag.get("shown_bag",-1)!=1 or root_diag.get("shown_equipped",-1)!=1:
+        _fail("Godot interpreted wrong inventory source")
+        return
+    var cloud_only := {"bag":[{"name":"Сундук 1"}, {"name":"Руна 2"}],"equipped":{"ring":{"name":"Кольцо"}}}
+    var cloud_only_diag := VIEW.diagnose(cloud_only)
+    if cloud_only_diag.get("root_bag",-1)!=2 or cloud_only_diag.get("root_equipped",-1)!=1:
+        _fail("Bad D1 actual root counters")
+        return
+    if cloud_only_diag.get("nested_bag",0)!=-1:
+        _fail("A missing nested inventory should not look like zero items")
+        return
     if not snap.get("has_bag",false) or snap.get("bag",[]).size()!=3:
         _fail("Original bag shape was lost")
         return
