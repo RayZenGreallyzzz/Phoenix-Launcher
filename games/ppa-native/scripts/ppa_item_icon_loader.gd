@@ -109,6 +109,7 @@ func bind_button(item: Dictionary, actual_class: String, button: Button) -> void
     button.tooltip_text = str(item.get("name", item.get("title", "Предмет PPA")))
     button.set_meta("ppa_icon_path", path)
     button.set_meta("ppa_icon_qty", VIEW.item_count(item))
+    button.set_meta("ppa_icon_virtual", item.get("ppa_native_virtual", false) == true)
     button.set_meta("ppa_icon_upgrade", int(item.get("upgrade", item.get("plus", 0))))
     if _cache.has(path):
         _show_icon(button, path, _cache[path])
@@ -137,7 +138,7 @@ func _show_icon(button: Button, path: String, texture: Texture2D) -> void:
     # Icons must not hide the actual server stack count and upgrade.
     for key in ["qty", "upgrade"]:
         var amount: int = int(button.get_meta("ppa_icon_" + key, 0))
-        if amount <= 0 or (key == "qty" and amount == 1):
+        if amount <= 0 or (key == "qty" and amount == 1 and button.get_meta("ppa_icon_virtual", false) != true):
             continue
         var label := Label.new()
         label.name = "PPAReal" + key.capitalize()
