@@ -44,5 +44,11 @@ jobs:
               for index in offsets:
                   frag=re.sub(r"\s+"," ",page[max(0,index-210):index+1400])
                   print("PPA_BLACKMARKET_SOURCE",index,frag[:1250],flush=True)
+          for needle in ("function blackMarketBuildState(", "function blackMarketUiOffer(", "blackMarket:","blackMarketState:", "blackMarketSaved", "blackMarketDaily", "blackMarketRefresh", "marketBought", "bmBought", "function ppaBuildSaveObject("):
+              offsets=[m.start() for m in list(re.finditer(re.escape(needle),page,re.I))[:3]]
+              print("PPA_BM_SOURCE_RULE",needle,len(offsets),flush=True)
+              for offset in offsets:
+                  snippet=re.sub(r"\s+"," ",page[max(0,offset-160):offset+2300])
+                  print("PPA_BM_RULE_SNIPPET",offset,snippet[:2160],flush=True)
           print("PPA_SHOP_PUBLIC_AUDIT_OK no_player_data=1 no_writes=1",flush=True)
           PY
