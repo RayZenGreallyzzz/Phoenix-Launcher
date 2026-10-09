@@ -316,6 +316,8 @@ func open_global_section(which: String) -> void:
     _background.visible = false
     current_page = "global_" + which
     _global_hub.open_section(which)
+    # Refresh the one shared save on menu entry, not one request per tab.
+    refresh_readonly_save_requested.emit()
 
 func _on_character_unequip(slot: String) -> void:
     var result: String = stash.unequip_test_item(slot)
@@ -348,6 +350,9 @@ func open_npc(npc: Dictionary) -> void:
         _global_hub.close_global()
     current_page = "npc_" + valid_service
     _npc_screen.open_npc(npc)
+    # Same authenticated D1 save is shared with character, forge, warehouse,
+    # auction and currencies. Do not re-GET for every picker/scroll event.
+    refresh_readonly_save_requested.emit()
 
 func set_near_npc(npc: Dictionary) -> void:
     # Preserve the NPC whose shop is currently open, even if the player moves.
