@@ -213,7 +213,7 @@ static func rune_view_from_save(save: Dictionary) -> Dictionary:
     equipped.resize(10)
     var progress := _raw_dictionary(save, "runeProgress")
     var level_slots := maxi(_positive_count(progress.get("levelSlots", 0)),
-        _positive_count(save.get("lvl", save.get("level", 0))) / 10)
+        floori(float(_positive_count(save.get("lvl", save.get("level", 0)))) / 10.0))
     var rebirth_slots := maxi(_positive_count(progress.get("rebirthSlots", 0)),
         _positive_count(save.get("rebirths", 0)))
     return {
