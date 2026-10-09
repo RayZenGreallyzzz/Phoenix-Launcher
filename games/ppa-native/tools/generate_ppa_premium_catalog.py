@@ -88,6 +88,14 @@ def static_object(source: str,name: str):
                 pos+=len(key.group()
                 )
             continue
+        # JS boolean/null literals occur in the original premium offers.
+        # Rewrite only outside quotes, so item titles and descriptions stay exact.
+        keyword=re.match(r"(true|false|null)\\b",raw[pos:])
+        if keyword:
+            token=keyword.group(1)
+            transformed.append({"true":"True","false":"False","null":"None"}[token])
+            pos+=len(token)
+            continue
         transformed.append(ch)
         pos+=1
     value=ast.literal_eval("".join(transformed))
