@@ -101,6 +101,14 @@ func _run() -> void:
     if VIEW.item_at(snap["bag"],0).get("id","")!="actual-server-gear":
         _fail("Cloud item ID was lost")
         return
+    var common_archer := {"name":"Броня лучника","slot":"armor","classKey":"archer","rarity":"common"}
+    if not ART.art_path(common_archer,"archer").begins_with("/assets/"):
+        _fail("Save-compacted common Archer armor must restore exact Telegram PPA art")
+        return
+    var epic_archer := {"name":"Эпическая броня лучника","slot":"armor","classKey":"archer","rarity":"epic"}
+    if not ART.art_path(epic_archer,"archer").begins_with("/assets/"):
+        _fail("Save-compacted epic Archer armor must restore exact Telegram PPA art")
+        return
     if ART.art_path(legendary,"gnome")!="/assets/legendary/gnome-weapon.webp?v=v514":
         _fail("Legendary approved item art mapping broken")
         return
