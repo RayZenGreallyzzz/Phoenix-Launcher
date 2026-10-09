@@ -3,7 +3,6 @@ extends Control
 const API_BASE := "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
 const GAME_ID := "phoenix-pix-arena"
 const CHARACTER_SELECT_SCRIPT = preload("res://scripts/character_select.gd")
-const SESSION_FILE := "user://phoenix_game_session.json"
 const TICKET_EXTRA := "phoenix_game_ticket"
 const GAME_ID_EXTRA := "phoenix_game_id"
 
@@ -11,6 +10,9 @@ var http: HTTPRequest
 var request_mode := ""
 var session_token := ""
 var account: Dictionary = {}
+var authoritative_state: Dictionary = {}
+var verified_save_version := -1
+var state_read_available := false
 
 var status_label: Label
 var title_label: Label
@@ -22,6 +24,9 @@ var selection_screen: Control
 
 func _ready() -> void:
     _build_ui()
+    # Never reuse a game session across Phoenix Launcher accounts.
+    # Every native process launch requires a fresh account-bound one-time ticket.
+    _clear_saved_session()
     http = HTTPRequest.new()
     http.timeout = 20.0
     add_child(http)
@@ -37,10 +42,7 @@ func _ready() -> void:
         _exchange_ticket(ticket)
         return
 
-    if _restore_saved_session():
-        _load_profile()
-    else:
-        _show_error("Открой Phoenix Pix Arena через Phoenix Launcher, чтобы получить игровую сессию.")
+    _show_error("Запусти PPA из Phoenix Launcher: вход в прошлый аккаунт без нового билета запрещён.")
 
 func _build_ui() -> void:
     var background := TextureRect.new()
@@ -182,6 +184,12 @@ func _android_extra(key: String) -> String:
     return str(value)
 
 func _exchange_ticket(ticket: String) -> void:
+    # A ticket from another account always replaces every local auth reference.
+    _clear_saved_session()
+    account.clear()
+    authoritative_state.clear()
+    state_read_available = false
+    verified_save_version = -1
     request_mode = "exchange"
     status_label.text = "Проверяем одноразовый game ticket…"
     status_label.add_theme_color_override("font_color", Color("#7E848B"))
@@ -206,9 +214,71 @@ func _load_profile() -> void:
     if err != OK:
         _show_error("Не удалось проверить игровую сессию: %s" % error_string(err))
 
+func _register_character(nickname: String, class_key: String) -> void:
+    if session_token.is_empty():
+        _show_error("Сессия регистрации отсутствует.")
+        return
+    request_mode = "register"
+    var headers := PackedStringArray([
+        "Content-Type: application/json",
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var payload := JSON.stringify({"nickname": nickname, "classKey": class_key})
+    var err := http.request(API_BASE + "/api/game/character/register", headers, HTTPClient.METHOD_POST, payload)
+    if err != OK and selection_screen != null:
+        selection_screen.show_registration_error("Ошибка запроса: %s" % error_string(err))
+
+func _load_character_identity() -> void:
+    request_mode = "character"
+    status_label.text = "Проверяем единого владельца персонажа PPA…"
+    var headers := PackedStringArray([
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var err := http.request(API_BASE + "/api/game/character", headers, HTTPClient.METHOD_GET)
+    if err != OK:
+        _show_error("Не удалось проверить владельца героя: %s" % error_string(err))
+
+func _load_game_state() -> void:
+    if session_token.is_empty():
+        _show_error("Сессия Godot отсутствует.")
+        return
+    request_mode = "state"
+    status_label.text = "Читаем исходное сохранение PPA (только чтение)…"
+    var headers := PackedStringArray([
+        "Accept: application/json",
+        "Authorization: Bearer " + session_token
+    ])
+    var err := http.request(API_BASE + "/api/game/state", headers, HTTPClient.METHOD_GET)
+    if err != OK:
+        _show_error("Не удалось запросить сохранение PPA: %s" % error_string(err))
+
 func _on_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     var body_text := body.get_string_from_utf8()
     var parsed = JSON.parse_string(body_text)
+    if request_mode == "character" and response_code == 404:
+        # Older production Worker does not yet expose the optional identity
+        # registry. Fall back to the separately gated read-only save route.
+        _load_game_state()
+        return
+    if request_mode == "register" and (response_code < 200 or response_code >= 300):
+        var problem := "Регистрация персонажа недоступна (HTTP %d)" % response_code
+        if typeof(parsed) == TYPE_DICTIONARY:
+            problem = str(parsed.get("message", problem))
+        if selection_screen != null:
+            selection_screen.show_registration_error(problem)
+        return
+    if request_mode == "state" and response_code == 404:
+        # Backend deliberately defaults this feature OFF until the owner approves it.
+        # The native test gallery may still be used, but never claim a synced save.
+        state_read_available = false
+        authoritative_state.clear()
+        verified_save_version = -1
+        status_label.text = "Сервер не открыл сохранения для Godot. Доступна только тестовая галерея."
+        status_label.add_theme_color_override("font_color", Color("#FBA66D"))
+        _show_character_selection()
+        return
     if response_code < 200 or response_code >= 300 or typeof(parsed) != TYPE_DICTIONARY:
         var message := "Phoenix Server HTTP %d" % response_code
         if typeof(parsed) == TYPE_DICTIONARY:
@@ -219,13 +289,36 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    if request_mode == "character":
+        if data.get("needsCharacter", true) == true:
+            _show_error("Сервер не нашёл сохранённого персонажа этого аккаунта.")
+            return
+        var canonical_id := str(data.get("characterId", ""))
+        if canonical_id.is_empty():
+            _show_error("Не подтверждён внутренний ID персонажа.")
+            return
+        account["characterId"] = canonical_id
+        _load_game_state()
+        return
+    if request_mode == "register":
+        var p: Dictionary = data.get("profile", {})
+        var created_nick := str(p.get("nickname", ""))
+        var created_class := str(p.get("classKey", ""))
+        if created_nick.is_empty() or created_class.is_empty():
+            if selection_screen != null:
+                selection_screen.show_registration_error("Сервер не подтвердил нового героя.")
+            return
+        account["ppaNickname"] = created_nick
+        account["classKey"] = created_class
+        account["characterId"] = str(data.get("characterId", ""))
+        _load_game_state()
+        return
     if request_mode == "exchange":
         var session: Dictionary = data.get("session", {})
         session_token = str(session.get("token", ""))
         if session_token.is_empty():
             _show_error("Phoenix Server не вернул игровую сессию.")
             return
-        _save_session(session_token)
         account = data.get("account", {})
         _show_connected()
         return
@@ -233,12 +326,39 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
     if request_mode == "me":
         account = data.get("account", {})
         _show_connected()
+        return
+    if request_mode == "state":
+        if data.get("readOnly", false) != true or not (data.get("state") is Dictionary):
+            _show_error("Сервер вернул неподтверждённое состояние PPA.")
+            return
+        var p: Dictionary = data.get("profile", {})
+        var current_tg := str(account.get("telegramId", ""))
+        if current_tg.is_empty() or str(p.get("telegramId", "")) != current_tg:
+            _show_error("Сохранение принадлежит другому аккаунту.")
+            return
+        authoritative_state = (data.get("state") as Dictionary).duplicate(true)
+        verified_save_version = int(data.get("version", -1))
+        if verified_save_version < 1:
+            _show_error("Сервер не подтвердил версию сохранения.")
+            return
+        state_read_available = true
+        account["ppaNickname"] = str(p.get("nickname", ""))
+        account["classKey"] = str(p.get("classKey", ""))
+        status_label.text = "✓ Настоящее сохранение Telegram PPA прочитано (без записи)"
+        status_label.add_theme_color_override("font_color", Color("#53CDAB"))
+        _show_character_selection()
+
+func _nullable_account_text(key: String) -> String:
+    var raw = account.get(key, null)
+    return str(raw) if typeof(raw) == TYPE_STRING else ""
 
 func _show_connected() -> void:
-    var nickname := str(account.get("nickname", "Phoenix"))
-    var ppa_nickname := str(account.get("ppaNickname", nickname))
-    var class_key := str(account.get("classKey", ""))
-    var telegram_id := str(account.get("telegramId", ""))
+    var nickname := _nullable_account_text("nickname")
+    if nickname.is_empty():
+        nickname = "Phoenix"
+    var ppa_nickname := _nullable_account_text("ppaNickname")
+    var class_key := _nullable_account_text("classKey")
+    var telegram_id := _nullable_account_text("telegramId")
 
     status_label.text = "✓ Phoenix Account подключён · game ticket принят"
     status_label.add_theme_color_override("font_color", Color("#53CDAB"))
@@ -254,9 +374,14 @@ func _show_connected() -> void:
 
     play_button.disabled = false
     retry_button.visible = false
+    if _nullable_account_text("ppaNickname").is_empty() or _nullable_account_text("classKey").is_empty():
+        # A legitimate fresh Phoenix account needs an onboarding screen.
+        # Email-only users remain blocked until canonical server storage works.
+        _show_character_selection()
+        return
     # Player selection is a real mandatory step after account verification.
     # Never let the native client silently create/change the live hero class.
-    _show_character_selection()
+    _load_character_identity()
 
 func _show_character_selection() -> void:
     if selection_screen != null:
@@ -267,7 +392,14 @@ func _show_character_selection() -> void:
     add_child(selection_screen)
     selection_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     selection_screen.set_account(account)
+    selection_screen.set_verified_state(authoritative_state if state_read_available else {})
     selection_screen.character_confirmed.connect(_enter_native_world)
+    selection_screen.account_switch_requested.connect(_return_to_launcher)
+    selection_screen.registration_requested.connect(_register_character)
+
+func _return_to_launcher() -> void:
+    _clear_saved_session()
+    get_tree().quit()
 
 func _show_error(message: String) -> void:
     status_label.text = "✕ " + message
@@ -279,7 +411,7 @@ func _show_error(message: String) -> void:
 
 func _retry() -> void:
     retry_button.visible = false
-    if _restore_saved_session():
+    if not session_token.is_empty():
         _load_profile()
     else:
         _show_error("Нужен новый запуск через Phoenix Launcher.")
@@ -287,32 +419,24 @@ func _retry() -> void:
 func _enter_native_world() -> void:
     # The selection is server-owned. A client-side class preview is NEVER
     # permission to enter with an unregistered or different character.
-    if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
+    if _nullable_account_text("ppaNickname").strip_edges().is_empty() or _nullable_account_text("classKey").strip_edges().is_empty():
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
+    # Native world is still a local beta; it must not write the immutable snapshot.
+    get_tree().set_meta("ppa_native_snapshot_verified", state_read_available)
+    get_tree().set_meta("ppa_native_save_version", verified_save_version)
+    get_tree().set_meta("ppa_native_authoritative_state", authoritative_state.duplicate(true))
     get_tree().set_meta("phoenix_account", account.duplicate(true))
     var err := get_tree().change_scene_to_file("res://world.tscn")
     if err != OK:
         _show_error("Не удалось открыть native world: %s" % error_string(err))
 
-func _save_session(token: String) -> void:
-    var file := FileAccess.open(SESSION_FILE, FileAccess.WRITE)
-    if file:
-        file.store_string(JSON.stringify({"token": token}))
-
-func _restore_saved_session() -> bool:
-    if not FileAccess.file_exists(SESSION_FILE):
-        return false
-    var file := FileAccess.open(SESSION_FILE, FileAccess.READ)
-    if file == null:
-        return false
-    var parsed = JSON.parse_string(file.get_as_text())
-    if typeof(parsed) != TYPE_DICTIONARY:
-        return false
-    session_token = str(parsed.get("token", ""))
-    return not session_token.is_empty()
-
 func _clear_saved_session() -> void:
     session_token = ""
-    if FileAccess.file_exists(SESSION_FILE):
-        DirAccess.remove_absolute(ProjectSettings.globalize_path(SESSION_FILE))
+    authoritative_state.clear()
+    verified_save_version = -1
+    state_read_available = false
+    # Clean up historical beta sessions created by older native APKs.
+    var old_path := "user://phoenix_game_session.json"
+    if FileAccess.file_exists(old_path):
+        DirAccess.remove_absolute(ProjectSettings.globalize_path(old_path))

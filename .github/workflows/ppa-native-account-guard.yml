@@ -1,0 +1,38 @@
+name: Native PPA account boundary (no APK publication)
+on:
+  pull_request:
+    paths:
+      - 'games/ppa-native/scripts/main.gd'
+      - 'games/ppa-native/scripts/character_select.gd'
+      - 'games/ppa-native/tools/test_native_auth_boundary.py'
+      - 'app/src/main/java/com/phoenixgames/launcher/runtime/GameRuntime.kt'
+      - '.github/workflows/ppa-native-account-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-auth-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no stale session/foreign hero or fake synced inventory
+        run: python3 games/ppa-native/tools/test_native_auth_boundary.py
+      - name: Download official Godot 4.6 editor (no Android build)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 --max-time 160 -o /tmp/godot.zip "https://github.com/godotengine/godot-builds/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip"
+          mkdir -p /tmp/godot
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          chmod +x /tmp/godot/Godot_v4.6-stable_linux.x86_64
+      - name: Parse native hero onboarding scripts with Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT=/tmp/godot/Godot_v4.6-stable_linux.x86_64
+          "$GODOT" --headless --path games/ppa-native --check-only --script res://scripts/main.gd 2>&1 | tee /tmp/ppa-native-main-check.log
+          "$GODOT" --headless --path games/ppa-native --check-only --script res://scripts/character_select.gd 2>&1 | tee /tmp/ppa-native-select-check.log
+          ! grep -Eq 'SCRIPT ERROR|Parse Error|Cannot find script' /tmp/ppa-native-main-check.log /tmp/ppa-native-select-check.log
+          echo "PPA_NATIVE_GODOT_PARSE_OK"
+
