@@ -389,11 +389,11 @@ func _refresh_server_readonly_save() -> void:
     # Authenticated GET only, no save writes. Never cache another character.
     if _server_snapshot_loader == null:
         return
-    if _server_snapshot_loader.loading:
+    if bool(_server_snapshot_loader.get("loading")):
         return
     if _server_snapshot_status != null:
         _server_snapshot_status.text = "PPA СЕРВЕР · перепроверяем облачное сохранение…"
-    _server_snapshot_loader.fetch_once()
+    _server_snapshot_loader.call("fetch_once")
 
 func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     var save = payload.get("state", {})
