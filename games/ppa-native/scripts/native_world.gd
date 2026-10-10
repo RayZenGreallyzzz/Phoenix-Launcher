@@ -22,6 +22,7 @@ const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
 const CLAN_SERVICE = preload("res://scripts/ppa_native_clan_service.gd")
 const MERCHANT_SERVICE = preload("res://scripts/ppa_native_merchant_service.gd")
+const FORGE_SERVICE = preload("res://scripts/ppa_native_forge_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -92,6 +93,7 @@ var _server_snapshot_loader: Node
 var _npc_service_loader: Node
 var _clan_service: Node
 var _merchant_service: Node
+var _forge_service: Node
 var _pending_save_refresh := false
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
@@ -449,6 +451,15 @@ func _build_server_readonly_bridge() -> void:
         _on_merchant_notice(message)
         _refresh_server_readonly_save())
     _merchant_service.loading_changed.connect(_on_merchant_loading)
+    _forge_service = FORGE_SERVICE.new()
+    _forge_service.name = "PPACanonicalForgeService"
+    add_child(_forge_service)
+    _forge_service.state_ready.connect(_on_forge_state)
+    _forge_service.request_failed.connect(_on_forge_notice)
+    _forge_service.command_finished.connect(func(message: String):
+        _on_forge_notice(message)
+        _refresh_server_readonly_save())
+    _forge_service.loading_changed.connect(_on_forge_loading)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -468,6 +479,8 @@ func _build_server_readonly_bridge() -> void:
         test_menu.clan_retry_requested.connect(_clan_service.retry_pending)
         test_menu.merchant_action_requested.connect(_request_merchant_action)
         test_menu.merchant_retry_requested.connect(_merchant_service.retry_pending)
+        test_menu.forge_action_requested.connect(_request_forge_action)
+        test_menu.forge_retry_requested.connect(_forge_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
@@ -477,6 +490,8 @@ func _request_npc_service(service: String) -> void:
         _clan_service.request_state()
     elif service == "merchant":
         _merchant_service.request_state()
+    elif service == "forge":
+        _forge_service.request_state()
     else:
         _npc_service_loader.request_service(service)
 
@@ -520,6 +535,23 @@ func _on_merchant_loading(busy: bool) -> void:
 func _on_merchant_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_merchant_notice(message, _merchant_service.has_pending())
+
+func _request_forge_action(fields: Dictionary) -> void:
+    if _forge_service != null:
+        _forge_service.request_action("craft", fields)
+
+func _on_forge_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_forge(payload)
+        test_menu.set_forge_loading(false, _forge_service.has_pending())
+
+func _on_forge_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_forge_loading(busy, _forge_service.has_pending())
+
+func _on_forge_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_forge_notice(message, _forge_service.has_pending())
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
