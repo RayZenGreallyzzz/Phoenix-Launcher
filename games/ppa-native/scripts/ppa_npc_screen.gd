@@ -9,6 +9,7 @@ signal authoritative_state_requested(service: String)
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
+signal native_realtime_requested
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const LIVE_FORGE = preload("res://scripts/ppa_forge_catalog_generated.gd")
@@ -54,6 +55,7 @@ var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
+var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
 var _preview_icons: Node
@@ -431,6 +433,8 @@ func _render() -> void:
         _status.text = "PPA · реальные вещи и баланс из D1 · операции заблокированы"
     if has_verified_state:
         _status.text = "PPA · подтверждённые данные сервиса · операции пока недоступны"
+    if service == "arena":
+        _status.text += " · " + native_online_status
     _scroll.set_deferred("scroll_vertical", 0)
 
 
@@ -1139,6 +1143,16 @@ func _show_clan() -> void:
         "journal":
             _message("ЖУРНАЛ СОБЫТИЙ", "История клана, операции склада и результаты войн придут из PPA.")
 
+func set_online_presence(count: int, room_total: int) -> void:
+    native_online_status = "Всего игроков %d · Мирный город %d" % [count, room_total]
+    if service == "arena" and visible and _status != null:
+        _status.text = "PPA · данные сервера · " + native_online_status
+
+func set_online_failure(reason: String) -> void:
+    native_online_status = reason
+    if service == "arena" and visible and _status != null:
+        _status.text = "PPA · " + native_online_status
+
 func _show_arena() -> void:
     _section("МЕЧНИК АРЕНЫ", "Telegram PPA · испытания, PvP и рейтинг")
     var wallet: Dictionary = _player_view_readonly.get("money", {})
@@ -1169,6 +1183,12 @@ func _show_arena() -> void:
             practice.pressed.connect(func(): arena_training_requested.emit())
             _body.add_child(practice)
             _body.add_child(_label("Три движущихся ИИ-бота, атака, HP, победа и поражение. Тренировочный бой без сервера и наград.", 11, SUB))
+            var online := _button("🌐 ОБЩИЙ ОНЛАЙН · ПРОВЕРИТЬ ИГРОКОВ")
+            online.name = "NpcRealtimePresenceConnect"
+            online.custom_minimum_size.y = 44.0
+            online.pressed.connect(func(): native_realtime_requested.emit())
+            _body.add_child(online)
+            _body.add_child(_label("Это тот же сервер Telegram PPA. Вход заменит онлайн-соединение твоего героя в Telegram. Сетевые бои и награды здесь пока закрыты.", 11, SUB))
             _locked_action("БОЕВОЙ РЕЙТИНГ / СЕТЕВОЙ МАТЧ")
         "attempts":
             _message("PVP · ПОПЫТКИ", "Лимит, остаток попыток, жетоны арены и обновление доступны после синхронизации.")
