@@ -7,13 +7,17 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 # touching live server account class, inventory, progress or character ID.
 # One server character remains authoritative; this gallery is visual test only.
 signal character_confirmed
+signal account_switch_requested
+signal registration_requested(nickname: String, class_key: String)
 
 var account: Dictionary = {}
+var verified_state: Dictionary = {} # read-only snapshot; never changed here
 var _name_label: Label
 var _class_label: Label
 var _info_label: Label
 var _status_label: Label
 var _enter_button: Button
+var _nickname_input: LineEdit
 var _preview_host: TextureRect
 var _preview_viewport: SubViewport
 var _preview_camera: Camera3D
@@ -36,8 +40,20 @@ const CLASS_NAMES := {
     "priest": "ЖРЕЦ"
 }
 
+func _account_string(key: String) -> String:
+    var raw = account.get(key, null)
+    return str(raw) if typeof(raw) == TYPE_STRING else ""
+
+func _registered_hero() -> bool:
+    return not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
+
 func set_account(value: Dictionary) -> void:
     account = value.duplicate(true)
+    if is_node_ready():
+        _refresh_account()
+
+func set_verified_state(value: Dictionary) -> void:
+    verified_state = value.duplicate(true)
     if is_node_ready():
         _refresh_account()
 
@@ -168,7 +184,7 @@ func _build_ui() -> void:
     columns.add_child(details)
 
     var slot_heading := Label.new()
-    slot_heading.text = "ТЕСТ ВСЕХ 8 КЛАССОВ · ОБЩАЯ СУМКА И СКЛАД"
+    slot_heading.text = "ГЕРОЙ PPA · СЕРВЕРНЫЙ КЛАСС И ПРОГРЕСС"
     slot_heading.add_theme_font_size_override("font_size", 12)
     slot_heading.add_theme_color_override("font_color", Color("#F9A364"))
     details.add_child(slot_heading)
@@ -178,6 +194,13 @@ func _build_ui() -> void:
     _name_label.add_theme_color_override("font_color", Color.WHITE)
     _name_label.clip_text = true
     details.add_child(_name_label)
+
+    _nickname_input = LineEdit.new()
+    _nickname_input.placeholder_text = "Ник нового героя (3–18 символов)"
+    _nickname_input.max_length = 18
+    _nickname_input.visible = false
+    _nickname_input.text_changed.connect(func(_value: String): _refresh_enter_button())
+    details.add_child(_nickname_input)
 
     _class_label = Label.new()
     _class_label.add_theme_font_size_override("font_size", 16)
@@ -194,7 +217,7 @@ func _build_ui() -> void:
     details.add_child(_info_label)
 
     var classes_heading := Label.new()
-    classes_heading.text = "ВЫБЕРИ КЛАСС ДЛЯ ТЕСТА"
+    classes_heading.text = "ВЫБЕРИ КЛАСС · СЕРВЕР ПРОВЕРИТ ГЕРОЯ"
     classes_heading.add_theme_color_override("font_color", Color("#F9A364"))
     classes_heading.add_theme_font_size_override("font_size", 12)
     details.add_child(classes_heading)
@@ -236,9 +259,15 @@ func _build_ui() -> void:
     _enter_button.pressed.connect(_confirm_preview)
     _enter_button.disabled = true
     details.add_child(_enter_button)
+    var switch_account := Button.new()
+    switch_account.text = "СМЕНИТЬ АККАУНТ · В ЛАУНЧЕР"
+    switch_account.custom_minimum_size.y = 36
+    switch_account.add_theme_font_size_override("font_size", 11)
+    switch_account.pressed.connect(func(): account_switch_requested.emit())
+    details.add_child(switch_account)
 
     var footer := Label.new()
-    footer.text = "ТЕСТОВАЯ ГАЛЕРЕЯ: СМЕНА КЛАССА НЕ ЗАПИСЫВАЕТСЯ НА СЕРВЕР PPA"
+    footer.text = "BETA: ТОЛЬКО ЧТЕНИЕ PPA · ПОКУПКИ И СЕТЕВЫЕ БОИ ЗАБЛОКИРОВАНЫ"
     footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     footer.anchor_left = 0.0
     footer.anchor_right = 1.0
@@ -262,22 +291,43 @@ func _adapt_orientation() -> void:
 func _refresh_account() -> void:
     if _name_label == null:
         return
-    var server_key := str(account.get("classKey", "")).to_lower().strip_edges()
+    var server_key := _account_string("classKey").to_lower().strip_edges()
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not server_key.is_empty()
+    _nickname_input.visible = not registered and not _account_string("telegramId").is_empty()
+    _name_label.text = "СОЗДАНИЕ ГЕРОЯ" if not registered else _account_string("ppaNickname")
+    _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА" if not registered else "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
     if not HERO_CATALOG.valid_key(server_key):
         server_key = "gnome"
     _choose_class(server_key)
+    # A verified PPA save has exactly ONE authoritative class. Other GLB
+    # previews are for the disconnected beta gallery only.
+    var locked := registered and HERO_CATALOG.valid_key(server_key)
+    for id in _class_buttons.keys():
+        var button := _class_buttons[id] as Button
+        if button != null:
+            button.disabled = locked and str(id) != server_key
 
 func _choose_class(key: String) -> void:
     if not HERO_CATALOG.valid_key(key):
         return
     _selected_class_key = key
     var hero: Dictionary = HERO_CATALOG.hero_info(key)
-    var nickname := str(account.get("ppaNickname", account.get("nickname", "Phoenix")))
-    _name_label.text = nickname
+    var nickname := _account_string("ppaNickname")
+    _name_label.text = nickname if not nickname.is_empty() else "НОВЫЙ ГЕРОЙ"
     _class_label.text = str(hero.get("name", key)) + " · " + str(hero.get("role", ""))
-    _info_label.text = str(hero.get("description", "")) + "\n\nВсе классы используют одну локальную тестовую сумку и склад. Реальный класс и прогресс PPA не изменяются."
-    _enter_button.disabled = account.is_empty()
-    _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
+    var description := str(hero.get("description", ""))
+    if not verified_state.is_empty():
+        var level := int(verified_state.get("lvl", verified_state.get("level", 0)))
+        description += "\n\n✓ Сохранение PPA подтверждено сервером"
+        if level > 0:
+            description += " · Уровень %d" % level
+        description += "\nРеальный прогресс загружен только для чтения. Сумка тестового мира пока локальная."
+    else:
+        description += "\n\nТЕСТ: классы, сумка и склад локальные, НЕ синхронизированы с Telegram."
+    if _account_string("ppaNickname").strip_edges().is_empty() and _account_string("telegramId").is_empty():
+        description += "\n\nEmail уже авторизован. Создание первого героя откроем после безопасной миграции серверных идентификаторов."
+    _info_label.text = description
+    _refresh_enter_button()
     for id in _class_buttons.keys():
         var button := _class_buttons[id] as Button
         if button != null:
@@ -286,17 +336,41 @@ func _choose_class(key: String) -> void:
     # Delay heavy GLB imports until the user actually selects a class.
     call_deferred("_load_preview")
 
+func _refresh_enter_button() -> void:
+    if _enter_button == null:
+        return
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
+    if registered:
+        _enter_button.text = "ВОЙТИ В МИРНЫЙ ГОРОД · ТЕСТ"
+        _enter_button.disabled = false
+    else:
+        _enter_button.text = "СОЗДАТЬ ПЕРСОНАЖА"
+        var candidate := _nickname_input.text.strip_edges() if _nickname_input != null else ""
+        _enter_button.disabled = _account_string("telegramId").is_empty() or candidate.length() < 3 or candidate.length() > 18
+
+func show_registration_error(message: String) -> void:
+    if _status_label != null:
+        _status_label.text = message
+        _status_label.add_theme_color_override("font_color", Color("#F14D4C"))
+    _refresh_enter_button()
+
 func _confirm_preview() -> void:
     if account.is_empty():
         return
-    # The gallery can preview all eight GLBs, but pressing Enter must ALWAYS
-    # use the already registered Telegram PPA character's original class.
-    # Never impersonate another hero or send a client-selected class to PPA.
-    var server_class := str(account.get("classKey", "")).to_lower().strip_edges()
-    if not HERO_CATALOG.valid_key(server_class):
-        _status_label.text = "СЕРВЕР PPA НЕ ПОДТВЕРДИЛ КЛАСС"
+    var registered := not _account_string("ppaNickname").strip_edges().is_empty() and not _account_string("classKey").strip_edges().is_empty()
+    if not registered:
+        if _account_string("telegramId").is_empty():
+            show_registration_error("Email-only регистрация ждёт миграцию игрового ID.")
+            return
+        _enter_button.disabled = true
+        registration_requested.emit(_nickname_input.text.strip_edges(), _selected_class_key)
         return
-    get_tree().set_meta("ppa_native_test_class", server_class)
+    # Never enter with a visual class that conflicts with the real server hero.
+    if registered and _selected_class_key != _account_string("classKey").to_lower():
+        _status_label.text = "Класс должен совпадать с сохранённым героем."
+        return
+    # Only in SceneTree memory. The server never receives this class choice.
+    get_tree().set_meta("ppa_native_test_class", _selected_class_key)
     get_tree().set_meta("ppa_native_test_mode", true)
     character_confirmed.emit()
 
