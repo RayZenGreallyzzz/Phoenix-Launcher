@@ -38,6 +38,16 @@
 - Offline Godot test `test_native_command_receipt.gd` plus `test_native_command_receipt_probe.gd` checks receipt-only success, fresh state request, stale requestId, terminal refusal, and wrong-account snapshot. Verified green in Godot PR #33 CI.
 - Next NOT YET DONE: staging D1 / two real clients, old cached Telegram mini-app behaviour, installed APK signer and Android performance. Do not deploy Cloudflare, merge stacked PRs, enable economy write flags, or claim full shared-world PvE/PK/Arena based on headless CI.
 
+## APK QA checkpoint — successful Godot Android export (2026-10-10)
+
+- Godot client draft PR #33 compiled at source commit `11bfa67534961cbc96f6eb7e790e6627d23fc854`. Exact GitHub Actions run: [#38085646626](https://github.com/RayZenGreallyzzz/Phoenix-Launcher/actions/runs/38085646626), **SUCCESS** (all 51 steps).
+- Authenticated Godot 4.6 build verified original Android package `com.phoenixgames.ppa`, versionCode `600282` (higher than installed 0.3.152) and EXACT SAME signing certificate fingerprint enforced by workflow. APK signing, ZIP alignment, bundled original WebView UI and AndroidManifest all passed.
+- Artifact: `PPA-Godot-Original-HUD-Existing-Package-QA`, artifact ID `11682746212`; contains `PhoenixPixArena-native-debug.apk` (223,717,668 bytes; SHA-256 `f1aa6c25926750669170c7b249e8a3f649ef0b8e6cdec4e94c8ceef1e2cf4522`). GitHub retention through November 9, 2026.
+- CI confirmed 100-entry authentic UID auction selector (+7 kept), signed forge UI, legacy/NPC menu read-only safety, AI arena uses the SAME original combat HUD attack button, canonical action receipts, city realtime contract, save-only views and hero asset imports.
+- Fixed stale headless audits only: `audit_native_ui.gd`, `audit_native_npc_arena_events.gd`, `audit_native_arena_training.gd`. Production Telegram PPA and Cloudflare D1 were NOT changed or deployed.
+- **Not yet done:** install and manually test the APK on the user's tablet and phone; verify two CLIENTS on one character with server flags and D1 staging backup; full PvE/PK/arena realtime parity remains separate. Passing build and signer checks do not establish live cross-client shared combat.
+- The original base and feature PRs remain stacked/draft; do not merge into `main` or enable economy flags simply because QA APK was produced.
+
 ## How to resume after chat limit
 
 In a new chat, say:
