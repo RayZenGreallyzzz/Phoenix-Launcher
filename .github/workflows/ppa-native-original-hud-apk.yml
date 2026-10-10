@@ -344,15 +344,28 @@ jobs:
           test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
           python3 - <<'PY'
           from pathlib import Path
-          import re
+          import json
           file=Path('games/ppa-native/scripts/ppa_forge_catalog_generated.gd').read_text()
           sha='c3e1198fc8b3c87df44c075f97961b9b0334aa46fe11785cd6c67319a9550fbe'
-          assert '"recipe_sha256":"'+sha+'"' in file, "Godot/Telegram smith prices and material quantities changed"
-          for key in ['"id":"legend:gear:weapon"','"id":"acc:wings:legendary"',
-                      '"id":"pet:Лесной дракончик:rare"','"id":"acc:necklace:legendary"',
-                      '"id":"acc:cloak:epic"','"id":"acc:artifact:legendary"']:
-              assert key in file, "Missing original PPA recipe "+key
-          print('PPA_ORIGINAL_GODOT_ALL_FORGE_APK_OK recipes=58 economy_sha='+sha)
+          prefix='const CATALOG = '
+          assert prefix in file, 'Missing original blacksmith CATALOG'
+          catalog=json.loads(file.split(prefix,1)[1].strip())
+          assert catalog.get('recipe_sha256')==sha, 'Telegram/Godot original smith recipe SHA changed'
+          rows=catalog['rows']
+          assert len(rows)==58, 'Incomplete Godot blacksmith: expected all 58 recipes'
+          by_tab={}
+          for row in rows:
+              by_tab[row['tab']]=by_tab.get(row['tab'],0)+1
+              assert row['price']>=0 and row['currency']=='ppa'
+              assert row['materials'] and all(m['count']>0 for m in row['materials'])
+          assert by_tab=={'equipment':7,'legendary':11,'accessories':16,'pets':24}, by_tab
+          ids={row['id'] for row in rows}
+          assert len(ids)==58, 'Duplicate or missing original recipe IDs'
+          for key in ['legend:gear:weapon','acc:wings:legendary',
+                      'pet:Лесной дракончик:rare','acc:necklace:legendary',
+                      'acc:cloak:epic','acc:artifact:legendary']:
+              assert key in ids, 'Missing original PPA recipe '+key
+          print('PPA_ORIGINAL_GODOT_ALL_FORGE_APK_OK recipes=58 categories='+str(by_tab)+' economy_sha='+sha)
           PY
 
       - name: Generate original Telegram PPA premium shop goods and packs (display only)
