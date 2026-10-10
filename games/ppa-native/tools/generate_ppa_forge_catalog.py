@@ -200,6 +200,7 @@ def main() -> None:
     print("PPA_CANONICAL_FORGE_CATALOG_OK", "recipes="+str(len(rows)),
           "epic_gear="+str(len(gear)), "accessories="+str(len(acc)),
           "pets="+str(len(pets)), "source_sha256="+data["sha256"],
+          "recipe_sha256="+data["recipe_sha256"],
           "write_actions=0",flush=True)
 
 if __name__ == "__main__":
