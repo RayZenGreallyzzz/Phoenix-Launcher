@@ -407,6 +407,12 @@ func open_npc(npc: Dictionary) -> void:
         _global_hub.close_global()
     current_page = "npc_" + valid_service
     _npc_screen.open_npc(npc)
+    # First opening an NPC MUST fetch its own authenticated server service.
+    # Previously only the full save was requested: shop/forge state stayed
+    # empty until a separate manual refresh, so users saw blank catalogs.
+    # The World adapter routes merchant/clan to their canonical commands,
+    # and other NPCs to signed read-only state.
+    npc_snapshot_requested.emit(valid_service)
     # Same authenticated D1 save is shared with character, forge, warehouse,
     # auction and currencies. Do not re-GET for every picker/scroll event.
     refresh_readonly_save_requested.emit()
