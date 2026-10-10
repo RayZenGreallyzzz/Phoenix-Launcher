@@ -351,6 +351,11 @@ func close_npc() -> void:
     clan_actions.clear()
     merchant_state.clear()
     merchant_actions.clear()
+    forge_state.clear()
+    forge_actions.clear()
+    forge_notice = ""
+    forge_busy = false
+    forge_pending = false
 
 func apply_native_clan(payload: Dictionary) -> void:
     if not visible or service != "clan" or payload.get("gameId") != "phoenix-pix-arena" \
