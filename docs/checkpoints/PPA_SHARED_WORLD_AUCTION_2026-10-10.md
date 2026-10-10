@@ -48,6 +48,15 @@
 - **Not yet done:** install and manually test the APK on the user's tablet and phone; verify two CLIENTS on one character with server flags and D1 staging backup; full PvE/PK/arena realtime parity remains separate. Passing build and signer checks do not establish live cross-client shared combat.
 - The original base and feature PRs remain stacked/draft; do not merge into `main` or enable economy flags simply because QA APK was produced.
 
+## 2026-10-11 native-menu loading/performance QA after tablet video
+
+- Real Godot tablet QA confirmed NPC menus and original bag visuals, but noted repeated delay on reopening character and narrow premium cards; some NPC native API routes return `Game API route not found`.
+- Root cause A: city prefetch already calls `/api/game/state`, yet each character/global/NPC entry signaled a fresh GET, and every `open_index(0)` rebuilt the entire inventory UI. Branch-only fixes now reuse an authenticated RAM snapshot for **30 seconds**, do not queue a second GET during first load, force GET on all successful economy commands and explicit manual refresh, and preserve 100 rendered item slots on unchanged-page reopen. Failures and owner/session rotation clear cache. No on-disk save or Telegram economics changed.
+- Root cause B: premium catalog layout chose up to three columns from full device width, not inner window width. Now portrait uses one column; tablet landscape at most two. Original public goods, packs and subscriptions remain read-only.
+- Root cause C: `src/worker.js` in backend draft uses default-off environment gates for Godot NPC, state, merchant, forge, inventory, storage and auction. A deployed worker missing new routes OR a read-flag still disabled can return `404 NOT_FOUND`; not evidence of missing original item data. The Godot native command UI now displays an explanatory Russian message instead of raw English. **Do NOT** turn on write/settlement flags without backup, production deployment review, staged integration tests, and explicit operator approval.
+- Added offline CI in `test-native-clan-service.yml`: `test_native_save_menu_cache.gd` (city GET, no duplicate, manual force, owner/session isolation), `test_native_premium_card_layout.gd` (portrait/tablet). Full APK QA `audit_native_ui.gd` asserts identical inventory widget identity when reopening the same unchanged page.
+- Safe resume: monitor Godot PR #33 head CI, only offer an APK from the exact successful artifact head; previous successful signed APK was `11bfa675` / QA run `38085646626`, not the new optimizations. Server PR #34 remains separate and undeployed.
+
 ## How to resume after chat limit
 
 In a new chat, say:
