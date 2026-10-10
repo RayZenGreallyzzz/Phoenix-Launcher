@@ -10,6 +10,8 @@ signal clan_action_requested(action: String, fields: Dictionary)
 signal clan_retry_requested
 signal merchant_action_requested(fields: Dictionary)
 signal merchant_retry_requested
+signal forge_action_requested(fields: Dictionary)
+signal forge_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -70,6 +72,11 @@ var merchant_actions: Array = []
 var merchant_busy := false
 var merchant_pending := false
 var merchant_notice := ""
+var forge_state: Dictionary = {}
+var forge_actions: Array = []
+var forge_busy := false
+var forge_pending := false
+var forge_notice := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -292,6 +299,8 @@ func clear_player_save_readonly() -> void:
     clan_actions.clear()
     merchant_state.clear()
     merchant_actions.clear()
+    forge_state.clear()
+    forge_actions.clear()
     if visible:
         _render()
 
@@ -326,6 +335,9 @@ func open_npc(source: Dictionary) -> void:
     merchant_state.clear()
     merchant_actions.clear()
     merchant_notice = ""
+    forge_state.clear()
+    forge_actions.clear()
+    forge_notice = ""
     visible = true
     _fit()
     _render()
@@ -371,6 +383,35 @@ func apply_native_merchant(payload: Dictionary) -> void:
     merchant_state = state.duplicate(true)
     merchant_actions = payload["actions"].duplicate()
     _render()
+
+func apply_native_forge(payload: Dictionary) -> void:
+    if not visible or service != "forge" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-forge-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var owner_data: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(owner_data.get("telegramId", "")) if owner_data is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("offers") is Array) or not (state.get("wallet") is Dictionary) \
+        or int(state.get("version", 0)) < 1:
+        return
+    forge_state = state.duplicate(true)
+    forge_actions = payload["actions"].duplicate()
+    _render()
+
+func set_forge_loading(busy: bool, pending: bool) -> void:
+    forge_busy = busy
+    forge_pending = pending
+    if visible and service == "forge":
+        _render()
+
+func set_forge_notice(message: String, pending: bool) -> void:
+    forge_notice = message.left(240)
+    forge_pending = pending
+    if visible and service == "forge":
+        _render()
 
 func set_merchant_loading(busy: bool, pending: bool) -> void:
     merchant_busy = busy
@@ -1008,6 +1049,12 @@ func _show_forge() -> void:
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
     _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
+    if not forge_notice.is_empty():
+        _body.add_child(_label(forge_notice, 12, GOLD))
+    if forge_pending:
+        var retry := _button("ПРОВЕРИТЬ ТО ЖЕ СОЗДАНИЕ", not forge_busy)
+        retry.pressed.connect(func(): forge_retry_requested.emit())
+        _body.add_child(retry)
     var refresh := _button("ОБНОВИТЬ ОСТАТКИ С СЕРВЕРА PPA")
     refresh.pressed.connect(func(): authoritative_state_requested.emit("forge"))
     _body.add_child(refresh)
@@ -1063,6 +1110,11 @@ func _set_craft_rarity(key: String) -> void:
 func _forge_owned_material(material_name: String) -> Variant:
     # Most recent signed forge projection wins over a potentially stale
     # full save. No local stash/resource totals or invented zero values.
+    if service == "forge" and not forge_state.is_empty():
+        var live: Variant = forge_state.get("feathers", null) if material_name == "Перо Феникса" else forge_state.get("materials", null)
+        if live is Dictionary:
+            return (live as Dictionary).get("phoenix" if material_name == "Перо Феникса" else material_name, null)
+        return null
     if service == "forge" and has_verified_state \
         and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
         if material_name == "Перо Феникса":
@@ -1133,6 +1185,9 @@ func _show_original_forge_recipes() -> void:
         and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
         var live_currency: Variant = authoritative.get("currency", null)
         balance = (live_currency as Dictionary).get("ppa", null) if live_currency is Dictionary else null
+    if service == "forge" and not forge_state.is_empty():
+        var wallet: Variant = forge_state.get("wallet", null)
+        balance = (wallet as Dictionary).get("ppa", null) if wallet is Dictionary else null
     var price := int(chosen.get("price",0))
     _mini_row("Цена · PPA",
         str(price) + (" · есть " + str(balance) if balance != null else " · баланс не загружен"))
@@ -1157,10 +1212,36 @@ func _show_original_forge_recipes() -> void:
         _body.add_child(_label("Не хватает валюты или материалов для выбранного рецепта.", 11, Color("#E2A17C")))
     else:
         _body.add_child(_label("Ресурсов достаточно по последнему снимку; сервер всё равно должен проверить их заново.", 11, GOLD))
-    _locked_action("СОЗДАТЬ")
-    _body.add_child(_label(
-        "Предпросмотр 1:1 · создание появится только после атомарной серверной операции.",
-        11, SUB))
+    # Enable ONLY recipes advertised by the currently authenticated canonical
+    # PPA Forge server. Compare costs/materials with displayed original cards:
+    # stale catalogs or client-supplied prices can NEVER authorize a craft.
+    var offered := false
+    if tab == "equipment" and not forge_state.is_empty():
+        for server_row in forge_state.get("offers", []):
+            if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
+                and int(server_row.get("price", -1)) == price \
+                and server_row.get("currency") == "ppa" \
+                and server_row.get("materials") == chosen.get("materials", []):
+                offered = true
+                break
+    var can_craft := offered and forge_actions.has("craft") and not forge_busy \
+        and not forge_pending and all_known and enough \
+        and int(forge_state.get("version", 0)) > 0
+    if can_craft:
+        var create_button := _button("СОЗДАТЬ", true)
+        create_button.name = "PPARealForgeCraft"
+        create_button.pressed.connect(func():
+            if visible and service == "forge" and not forge_busy and not forge_pending \
+                and forge_actions.has("craft"):
+                forge_action_requested.emit({"id":selected_id,
+                    "version":int(forge_state.get("version", 0))}))
+        _body.add_child(create_button)
+    else:
+        _locked_action("СОЗДАТЬ")
+        if not offered:
+            _body.add_child(_label(
+                "Этот рецепт ещё не подтверждён общим сервером PPA.", 11, SUB))
+    _body.add_child(_label("Создание выполняет сервер PPA, не Godot.", 11, SUB))
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
