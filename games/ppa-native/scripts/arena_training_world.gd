@@ -79,7 +79,6 @@ func _build_city_2d() -> void:
     for i in range(72):
         var angle := TAU * float(i) / 72.0
         mark.add_point(CENTER + Vector2(cos(angle), sin(angle)) * 230.0)
-    mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.add_child(mark)
 
 func _build_city_npcs() -> void:
