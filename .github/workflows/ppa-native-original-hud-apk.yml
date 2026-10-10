@@ -2,7 +2,13 @@ name: PPA Godot original combat HUD existing APK QA
 
 on:
   push:
-    branches: [ "feature/ppa-godot-existing-apk-combat-hud-20261010", "feature/godot-shared-forge-material-view-20261010" ]
+    branches: [ "feature/ppa-godot-existing-apk-combat-hud-20261010" ]
+    paths:
+      - "games/ppa-native/**"
+      - ".github/workflows/ppa-native-original-hud-apk.yml"
+  # Stacked draft PR #33 gets ONE observable, isolated APK QA run. No release.
+  pull_request:
+    branches: [ "feature/godot-shared-clan-merchant-20261010" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/ppa-native-original-hud-apk.yml"
@@ -523,6 +529,14 @@ jobs:
           godot --headless --path games/ppa-native --script res://scripts/audit_native_shared_npc_actions.gd --quit-after 600 2>&1 | tee /tmp/ppa-shared-npc-actions.log
           grep -q 'PPA_SHARED_NPC_ACTIONS_OK' /tmp/ppa-shared-npc-actions.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:|TEST_FAIL' /tmp/ppa-native-clan-commands.log /tmp/ppa-shared-npc-actions.log; then exit 1; fi
+
+      - name: Verify signed NPC commands accept receipt-only responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s godot --headless --path games/ppa-native --script res://scripts/test_native_command_receipt.gd 2>&1 | tee /tmp/ppa-native-receipt.log
+          grep -q "PPA_NATIVE_RECEIPT_PARITY_OK" /tmp/ppa-native-receipt.log
+          if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:|PPA_NATIVE_RECEIPT_FAIL" /tmp/ppa-native-receipt.log; then exit 1; fi
 
       - name: Verify realtime presence from same PPA hub is opt-in only
         shell: bash
