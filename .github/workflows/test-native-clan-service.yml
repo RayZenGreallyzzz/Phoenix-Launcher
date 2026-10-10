@@ -11,6 +11,8 @@ on:
       - 'games/ppa-native/scripts/ppa_npc_screen.gd'
       - 'games/ppa-native/scripts/ppa_native_npc_service_bridge.gd'
       - 'games/ppa-native/scripts/test_native_forge_material_view.gd'
+      - 'games/ppa-native/scripts/test_native_forge_actions.gd'
+      - 'games/ppa-native/scripts/ppa_native_forge_service.gd'
       - 'games/ppa-native/scripts/test_world_menu.gd'
       - 'games/ppa-native/scripts/native_world.gd'
       - '.github/workflows/test-native-clan-service.yml'
@@ -47,6 +49,9 @@ jobs:
           cp games/ppa-native/scripts/*.gd /tmp/npc-test/scripts/
           printf '[application]\nconfig/name="PPA shared NPC controls test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/npc-test/project.godot
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd
+      - name: Test signed forge crafting without game server calls
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_actions.gd
       - name: Verify original forge uses only real PPA materials and feathers
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_material_view.gd
