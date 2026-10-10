@@ -5,7 +5,11 @@
 - `test_world_menu.open_npc(npc)` closes character, optional WebView and legacy test panel *before* opening the NPC. `open_page("character")` closes the NPC first; Back and the red close button release both.
 - The nine deployed Peace City service IDs are `forge`, `storage`, `auction`, `arena`, `clan`, `merchant`, `blackmarket`, `dungeon`, `fartzone`. Asset paths and original placement remain in `test_city_npcs.gd`.
 - `test_shop_catalog.gd` holds the **verified original** merchant catalog (12 items) and reference-only black market offers. No new prices, inventories, balances, slots, skill ranks or drops are fabricated.
-- All server-mutating buttons are disabled, not wired to local test `stash`, and do not call `/api/save`.
+- Verified clan and merchant buttons send typed authenticated commands to the common PPA server; they never mutate local test `stash` or post a client save to `/api/save`. Other transactions remain disabled.
+
+The October 10 clan/merchant contract, feature flags, tests and remaining parity
+work are recorded in [shared-world-parity-20261010.md](shared-world-parity-20261010.md).
+The old read-only NPC projection alone still cannot enable a transaction.
 
 ## Server integration before enabling any transaction
 1. Exchange the existing Phoenix game ticket using the already established launcher session; never grant authority from visual class preview.

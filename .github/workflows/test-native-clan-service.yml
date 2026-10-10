@@ -1,0 +1,47 @@
+name: Test Godot shared clan and merchant commands
+on:
+  pull_request:
+    paths:
+      - 'games/ppa-native/scripts/ppa_native_clan_service.gd'
+      - 'games/ppa-native/scripts/ppa_native_command_service.gd'
+      - 'games/ppa-native/scripts/ppa_native_merchant_service.gd'
+      - 'games/ppa-native/scripts/ppa_clan_menu_content.gd'
+      - 'games/ppa-native/scripts/test_native_clan_service.gd'
+      - 'games/ppa-native/scripts/audit_native_shared_npc_actions.gd'
+      - 'games/ppa-native/scripts/ppa_npc_screen.gd'
+      - 'games/ppa-native/scripts/test_world_menu.gd'
+      - 'games/ppa-native/scripts/native_world.gd'
+      - '.github/workflows/test-native-clan-service.yml'
+permissions:
+  contents: read
+jobs:
+  clan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Godot 4.6
+        run: |
+          curl -L --fail --retry 3 -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          chmod +x /tmp/godot/Godot_v4.6-stable_linux.x86_64
+      - name: Offline command, owner, restart and menu test
+        run: |
+          mkdir -p /tmp/clan-test/scripts
+          for file in ppa_native_command_service.gd ppa_native_clan_service.gd ppa_native_merchant_service.gd ppa_clan_menu_content.gd test_native_clan_service.gd; do
+            cp "games/ppa-native/scripts/$file" /tmp/clan-test/scripts/
+          done
+          printf '[application]\nconfig/name="PPA clan command test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/clan-test/project.godot
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/clan-test --script res://scripts/test_native_clan_service.gd
+      - name: Generate original public catalogs for complete NPC wiring
+        run: |
+          python3 games/ppa-native/tools/generate_ppa_item_catalog.py
+          python3 games/ppa-native/tools/generate_ppa_forge_catalog.py
+          python3 games/ppa-native/tools/generate_ppa_premium_catalog.py
+          python3 games/ppa-native/tools/fetch_ppa_grimoire_catalog.py
+      - name: Actual NPC controls and world wiring, no credentials or writes
+        run: |
+          mkdir -p /tmp/npc-test/scripts
+          cp games/ppa-native/scripts/*.gd /tmp/npc-test/scripts/
+          printf '[application]\nconfig/name="PPA shared NPC controls test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/npc-test/project.godot
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd

@@ -20,6 +20,8 @@ const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
+const CLAN_SERVICE = preload("res://scripts/ppa_native_clan_service.gd")
+const MERCHANT_SERVICE = preload("res://scripts/ppa_native_merchant_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -88,6 +90,10 @@ var coords_label: Label
 var input_label: Label
 var _server_snapshot_loader: Node
 var _npc_service_loader: Node
+var _clan_service: Node
+var _merchant_service: Node
+var _pending_save_refresh := false
+var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
 var _shared_city_players: Node
 var _server_snapshot_status: Label
@@ -403,7 +409,8 @@ func _on_hud_action(action: String, slot: int) -> void:
 
 
 func _build_server_readonly_bridge() -> void:
-    # Can be used by City and Dungeon. No save/write request is possible.
+    # Player saves remain read-only. Clan commands use the separate signed
+    # adapter and the same existing rules/tables as Telegram PPA.
     _server_snapshot_status = Label.new()
     _server_snapshot_status.name = "PPAReadOnlyServerSnapshotStatus"
     _server_snapshot_status.text = "СЕРВЕР: получаем данные персонажа…"
@@ -426,6 +433,22 @@ func _build_server_readonly_bridge() -> void:
     add_child(_npc_service_loader)
     _npc_service_loader.service_ready.connect(_on_npc_service_ready)
     _npc_service_loader.service_failed.connect(_on_npc_service_failed)
+    _clan_service = CLAN_SERVICE.new()
+    _clan_service.name = "PPACanonicalClanService"
+    add_child(_clan_service)
+    _clan_service.state_ready.connect(_on_clan_state)
+    _clan_service.request_failed.connect(_on_clan_notice)
+    _clan_service.command_finished.connect(_on_clan_notice)
+    _clan_service.loading_changed.connect(_on_clan_loading)
+    _merchant_service = MERCHANT_SERVICE.new()
+    _merchant_service.name = "PPACanonicalMerchantService"
+    add_child(_merchant_service)
+    _merchant_service.state_ready.connect(_on_merchant_state)
+    _merchant_service.request_failed.connect(_on_merchant_notice)
+    _merchant_service.command_finished.connect(func(message: String):
+        _on_merchant_notice(message)
+        _refresh_server_readonly_save())
+    _merchant_service.loading_changed.connect(_on_merchant_loading)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -441,12 +464,62 @@ func _build_server_readonly_bridge() -> void:
         _native_global_realtime.presence_connected.connect(_on_shared_city_connected)
     if test_menu != null:
         test_menu.npc_snapshot_requested.connect(_request_npc_service)
+        test_menu.clan_action_requested.connect(_request_clan_action)
+        test_menu.clan_retry_requested.connect(_clan_service.retry_pending)
+        test_menu.merchant_action_requested.connect(_request_merchant_action)
+        test_menu.merchant_retry_requested.connect(_merchant_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
     if _npc_service_loader == null or test_menu == null:
         return
-    _npc_service_loader.request_service(service)
+    if service == "clan":
+        _clan_service.request_state()
+    elif service == "merchant":
+        _merchant_service.request_state()
+    else:
+        _npc_service_loader.request_service(service)
+
+func _request_clan_action(action: String, fields: Dictionary) -> void:
+    if _clan_service != null:
+        _clan_service.request_action(action, fields)
+
+func _on_clan_state(payload: Dictionary) -> void:
+    var state: Dictionary = payload.get("state", {})
+    var clan: Variant = state.get("clan")
+    var identity := str(clan.get("id", "")) + ":" + str(clan.get("name", "")) if clan is Dictionary else "none"
+    if identity != _known_clan_identity:
+        _known_clan_identity = identity
+        if _supports_shared_city() and _native_global_realtime != null:
+            _native_global_realtime.refresh_clan_identity_if_connected()
+    if test_menu != null:
+        test_menu.apply_native_clan(payload)
+        test_menu.set_clan_loading(false, _clan_service.has_pending())
+
+func _on_clan_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_clan_loading(busy, _clan_service.has_pending())
+
+func _on_clan_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_clan_notice(message, _clan_service.has_pending())
+
+func _request_merchant_action(fields: Dictionary) -> void:
+    if _merchant_service != null:
+        _merchant_service.request_action("buy", fields)
+
+func _on_merchant_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_merchant(payload)
+        test_menu.set_merchant_loading(false, _merchant_service.has_pending())
+
+func _on_merchant_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_merchant_loading(busy, _merchant_service.has_pending())
+
+func _on_merchant_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_merchant_notice(message, _merchant_service.has_pending())
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
@@ -488,6 +561,7 @@ func _refresh_server_readonly_save() -> void:
     if _server_snapshot_loader == null:
         return
     if bool(_server_snapshot_loader.get("loading")):
+        _pending_save_refresh = true
         return
     if _server_snapshot_status != null:
         _server_snapshot_status.text = "PPA СЕРВЕР · перепроверяем облачное сохранение…"
@@ -514,6 +588,9 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         _server_snapshot_status.add_theme_color_override("font_color", Color("#76D4A0"))
     print("PPA_NATIVE_SAVE_READONLY_OK version=", payload.get("version", null),
         " linked=1 server_writes=0")
+    if _pending_save_refresh:
+        _pending_save_refresh = false
+        call_deferred("_refresh_server_readonly_save")
 
 func _on_readonly_snapshot_failed(code: String) -> void:
     if _combat_hud != null:
@@ -526,6 +603,9 @@ func _on_readonly_snapshot_failed(code: String) -> void:
         _server_snapshot_status.text = "PPA СЕРВЕР · нет снимка (" + code.left(50) + ")"
         _server_snapshot_status.add_theme_color_override("font_color", Color("#ECB477"))
     print("PPA_NATIVE_SAVE_READONLY_WAIT code=", code.left(56), " server_writes=0")
+    if _pending_save_refresh:
+        _pending_save_refresh = false
+        call_deferred("_refresh_server_readonly_save")
 
 func _input(event: InputEvent) -> void:
     # No virtual joystick or 3D click handlers may steal touches from
