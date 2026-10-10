@@ -1152,7 +1152,8 @@ func _show_authoritative_enhancement() -> void:
         return
     _section(str(selected.get("name", "Вещь")) + " · +" + str(selected.get("enh", 0)),
         "Заточка конкретного UID из исходного инвентаря Telegram PPA.")
-    var supplies: Dictionary = forge_state.get("stones", {})
+    var supplied_stones: Variant = forge_state.get("stones", null)
+    var supplies: Dictionary = supplied_stones as Dictionary if supplied_stones is Dictionary else {}
     _mini_row("Обычные камни", str(supplies.get("normal", "нет данных")))
     _mini_row("Премиум камни", str(supplies.get("premium", "нет данных")))
     _mini_row("Руны заточки", str(supplies.get("rune", "нет данных")))
@@ -1165,7 +1166,8 @@ func _show_authoritative_enhancement() -> void:
     var level := int(selected.get("enh", 0))
     var premium := _enhance_mode.begins_with("premium")
     var rune := _enhance_mode.ends_with("_rune")
-    var table_values: Variant = forge_state.get("enhanceRules", {}).get("rune" if rune else "normal", [])
+    var rule_data: Variant = forge_state.get("enhanceRules", null)
+    var table_values: Variant = (rule_data as Dictionary).get("rune" if rune else "normal", []) if rule_data is Dictionary else []
     var chance := -1
     if table_values is Array and level >= 0 and level < (table_values as Array).size():
         chance = int(table_values[level])
@@ -1199,7 +1201,9 @@ func _show_authoritative_enhancement() -> void:
                 if str(selected.get("rarity", "")) == "epic" else
                 "При неудаче вещь может сгореть без восстановления. Продолжить?")
             add_child(confirm)
-            confirm.confirmed.connect(func(): _request_real_enhancement(uid, mode, version))
+            confirm.confirmed.connect(func():
+                _request_real_enhancement(uid, mode, version)
+                confirm.queue_free())
             confirm.canceled.connect(func(): confirm.queue_free())
             confirm.popup_centered(Vector2i(430, 180)))
     _body.add_child(action)
