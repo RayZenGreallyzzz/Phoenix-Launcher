@@ -1223,7 +1223,7 @@ func _show_original_forge_recipes() -> void:
     var offered := false
     if tab in ["equipment", "legendary", "accessories", "pets"] \
         and not forge_state.is_empty() and _owns_verified_state(forge_state) \
-        and str(forge_state.get("catalogSourceSha", "")) == str(LIVE_FORGE.CATALOG.get("sha256", "")):
+        and str(forge_state.get("catalogRecipeSha", "")) == str(LIVE_FORGE.CATALOG.get("recipe_sha256", "")):
         for server_row in forge_state.get("offers", []):
             if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
                 and int(server_row.get("price", -1)) == price \
