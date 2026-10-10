@@ -1930,6 +1930,56 @@ func _auction_matches(item: Dictionary) -> bool:
         return kind == "quest"
     return true
 
+func _auction_sell_uid_changed(index: int, chooser: OptionButton) -> void:
+    if index >= 0 and index < chooser.item_count:
+        _auction_sell_uid = str(chooser.get_item_metadata(index))
+
+func _send_real_auction_action(action: String, fields: Dictionary) -> void:
+    if not visible or service != "auction" or not _owns_verified_state(auction_state) \
+        or auction_loading or auction_pending or not auction_actions.has(action) \
+        or not bool(auction_state.get("settlementEnabled", false)):
+        return
+    var version := int(auction_state.get("version", 0))
+    if version <= 0:
+        return
+    var valid := false
+    if action == "place":
+        var uid := str(fields.get("uid", ""))
+        for entry in auction_state.get("bag", []):
+            if entry is Dictionary and str(entry.get("uid", "")) == uid:
+                valid = int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
+                break
+    elif action == "buy":
+        for entry in auction_state.get("lots", []):
+            if entry is Dictionary and bool(entry.get("canBuy", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")) \
+                and float(entry.get("price", -1)) == float(fields.get("expectedUnitPrice", -2)) \
+                and str(entry.get("currency", "")) == str(fields.get("currency", "")):
+                valid = true
+                break
+    elif action == "cancel":
+        for entry in auction_state.get("mine", []):
+            if entry is Dictionary and bool(entry.get("canCancel", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")):
+                valid = true
+                break
+    if not valid:
+        return
+    var payload := fields.duplicate(true)
+    payload["action"] = action
+    payload["version"] = version
+    auction_action_requested.emit(payload)
+
+func _auction_buy_lot(lotId: String, price: float, currency: String) -> void:
+    _send_real_auction_action("buy", {"lotId":lotId,"expectedUnitPrice":price,"currency":currency})
+
+func _auction_cancel_lot(lotId: String) -> void:
+    _send_real_auction_action("cancel", {"lotId":lotId})
+
+func _auction_place_selected() -> void:
+    _send_real_auction_action("place", {"uid":_auction_sell_uid,
+        "price":_asking_price,"currency":_asking_currency.to_lower()})
+
 func _show_auction_lots(rows: Array, own: bool) -> void:
     var count := 0
     for raw in rows:
@@ -1947,6 +1997,19 @@ func _show_auction_lots(rows: Array, own: bool) -> void:
         desc += "  +" + str(item.get("enh", 0))
         _mini_row(desc, str(entry.get("qty", 1)) + " шт. · " + str(price) + " " + currency)
         _body.add_child(_label("Продавец: " + str(entry.get("sellerName", "Игрок")).left(24), 11, SUB))
+        var available := not auction_loading and not auction_pending and \
+            bool(auction_state.get("settlementEnabled", false))
+        if own and auction_actions.has("cancel") and bool(entry.get("canCancel", false)):
+            var cancel := _button("СНЯТЬ С ПРОДАЖИ", available)
+            cancel.name = "PPARealAuctionCancel_" + str(entry.get("id", ""))
+            cancel.pressed.connect(_auction_cancel_lot.bind(str(entry.get("id", ""))))
+            _body.add_child(cancel)
+        elif not own and auction_actions.has("buy") and bool(entry.get("canBuy", false)):
+            var buy := _button("КУПИТЬ · " + str(price) + " " + currency, available)
+            buy.name = "PPARealAuctionBuy_" + str(entry.get("id", ""))
+            buy.pressed.connect(_auction_buy_lot.bind(str(entry.get("id", "")),
+                float(entry.get("price", 0)), str(entry.get("currency", ""))))
+            _body.add_child(buy)
         count += 1
         if count >= 50:
             break
@@ -1960,6 +2023,10 @@ func _show_auction() -> void:
     _section("АУКЦИОН · PPA", "Реальные лоты и начисления из общего сервера Telegram PPA.")
     if not auction_notice.is_empty():
         _body.add_child(_label(auction_notice, 11, GOLD))
+    if auction_pending:
+        var retry := _button("ПРОВЕРИТЬ ТУ ЖЕ СДЕЛКУ", not auction_loading)
+        retry.pressed.connect(func(): auction_retry_requested.emit())
+        _body.add_child(retry)
     var refresh := _button("ОБНОВИТЬ АУКЦИОН", not auction_loading)
     refresh.pressed.connect(func(): authoritative_state_requested.emit("auction"))
     _body.add_child(refresh)
@@ -1981,8 +2048,7 @@ func _show_auction() -> void:
     if tab == "all":
         _section("АКТИВНЫЕ ЛОТЫ", "Общий рынок PPA · существующие объявления Telegram.")
         _show_auction_lots(auction_state.get("lots", []), false)
-        _locked_action("КУПИТЬ")
-        _body.add_child(_label("Покупку включим после проверки атомарного расчёта двух клиентов.", 11, SUB))
+        _body.add_child(_label("Купить можно только защищённый лот PPA. Старые лоты пока только для просмотра.", 11, SUB))
     elif tab == "mine":
         _section("МОИ ЛОТЫ", "Только объявления этого персонажа на общем сервере.")
         _show_auction_lots(auction_state.get("mine", []), true)
@@ -1994,16 +2060,66 @@ func _show_auction() -> void:
             if credit is Dictionary:
                 _mini_row("Продажа · " + str(credit.get("lotId", "")).left(20),
                     str(credit.get("amount", 0)) + " " + str(credit.get("currency", "ppa")).to_upper())
-        _locked_action("СНЯТЬ С ПРОДАЖИ / ЗАБРАТЬ PPA")
+        _body.add_child(_label("Новые лоты можно снять выше. Получение начислений пока требует отдельной серверной проверки.", 11, SUB))
     elif tab == "sell":
-        _section("НАСТОЯЩАЯ СУМКА", "Оригинальные предметы персонажа, никакой временной торговой копии.")
+        _section("ПРОДАЖА РЕАЛЬНОЙ ВЕЩИ", "Вещь будет изъята сервером из сумки и сохранена в лоте.")
         var items: Array = auction_state.get("bag", [])
-        for item in items.slice(0, 50):
-            if item is Dictionary:
-                _mini_row(str(item.get("name", "Вещь")).left(28),
-                    "+" + str(item.get("enh", 0)) + " · " + str(item.get("rarity", "common")))
-        _locked_action("ВЫСТАВИТЬ ЛОТ")
-        _body.add_child(_label("Размещение пока заблокировано: сервер должен изъять вещь в защищённый лот.", 11, SUB))
+        _mini_row("Открыто слотов", str(auction_state.get("maxSellSlots", 0)))
+        _mini_row("Мои активные лоты", str(auction_state.get("mine", []).size()))
+        var choose := OptionButton.new()
+        choose.name = "PPARealAuctionGearPicker"
+        var first_uid := ""
+        var chosen := 0
+        for item in items:
+            if not (item is Dictionary) or str(item.get("uid", "")).is_empty():
+                continue
+            if str(item.get("slot", "")).is_empty():
+                continue
+            var index := choose.item_count
+            choose.add_item(str(item.get("name", "Вещь")).left(25) + " · +" + str(item.get("enh", 0)))
+            choose.set_item_metadata(index, str(item.get("uid", "")))
+            if first_uid.is_empty():
+                first_uid = str(item.get("uid", ""))
+            if str(item.get("uid", "")) == _auction_sell_uid:
+                chosen = index
+        _body.add_child(choose)
+        if choose.item_count > 0:
+            choose.select(chosen)
+            _auction_sell_uid = str(choose.get_item_metadata(chosen))
+        else:
+            _auction_sell_uid = ""
+        choose.item_selected.connect(_auction_sell_uid_changed.bind(choose))
+        var settings := GridContainer.new()
+        settings.columns = 2
+        settings.add_theme_constant_override("h_separation", 10)
+        settings.add_theme_constant_override("v_separation", 8)
+        _body.add_child(settings)
+        settings.add_child(_label("Цена за вещь", 12, GOLD))
+        var price := SpinBox.new()
+        price.name = "PPARealAuctionPrice"
+        price.min_value = 1
+        price.max_value = 999999999
+        price.step = 1
+        price.value = _asking_price
+        price.value_changed.connect(_set_asking_price)
+        settings.add_child(price)
+        settings.add_child(_label("Валюта", 12, GOLD))
+        var currency := OptionButton.new()
+        currency.name = "PPARealAuctionCurrency"
+        currency.add_item("PPA")
+        currency.add_item("Gram")
+        currency.select(0 if _asking_currency == "PPA" else 1)
+        currency.item_selected.connect(_set_currency)
+        settings.add_child(currency)
+        var enabled := auction_actions.has("place") and \
+            bool(auction_state.get("settlementEnabled", false)) and \
+            not auction_loading and not auction_pending and not _auction_sell_uid.is_empty() \
+            and int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
+        var place := _button("ВЫСТАВИТЬ ВЕЩЬ НА АУКЦИОН", enabled)
+        place.name = "PPARealAuctionPlace"
+        place.pressed.connect(_auction_place_selected)
+        _body.add_child(place)
+        _body.add_child(_label("Комиссия при продаже: 10% · вещь не копируется.", 11, SUB))
 
 func _show_clan() -> void:
     if not clan_state.is_empty():
