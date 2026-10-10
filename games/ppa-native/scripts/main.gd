@@ -289,7 +289,22 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         return
 
     var data: Dictionary = parsed
+    if data.get("ok", false) != true:
+        _show_error("Сервер не подтвердил запрос PPA.")
+        return
+    # Existing ticket/profile/save contracts include the canonical game ID.
+    # Character/register endpoints additionally bind to the account bearer,
+    # but the character endpoint does not include gameId in its response.
+    if ["exchange", "me", "state"].has(request_mode) and str(data.get("gameId", "")) != GAME_ID:
+        _show_error("Сервер вернул ответ другой игры PPA.")
+        return
     if request_mode == "character":
+        # Registry metadata must match the Phoenix account that exchanged
+        # the one-time launcher ticket, not another hero's profile.
+        var confirmed_account: Variant = data.get("account", null)
+        if not (confirmed_account is Dictionary) or str((confirmed_account as Dictionary).get("accountId", "")) != str(account.get("accountId", "")):
+            _show_error("Сервер вернул другого владельца персонажа.")
+            return
         if data.get("needsCharacter", true) == true:
             _show_error("Сервер не нашёл сохранённого персонажа этого аккаунта.")
             return
