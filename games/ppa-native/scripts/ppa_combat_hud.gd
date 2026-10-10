@@ -153,6 +153,7 @@ func _refresh_vitals() -> void:
 func _build_actions() -> void:
     _group = Control.new()
     _group.name = "OriginalPPARightCombatControls"
+    _group.size = Vector2(GROUP_W, GROUP_H)
     _group.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(_group)
     _hint = Label.new()
@@ -249,7 +250,7 @@ func _refresh_skills() -> void:
         button.tooltip_text = skill_name + " · ранг %d" % rank if rank > 0 else "Навык пока не изучен"
         button.text = "✦" if rank > 0 else "—"
         _ranks[index].text = "I" if rank == 1 else str(rank) if rank > 1 else ""
-        button.disabled = rank <= 0 or not _training and _snapshot.is_empty()
+        button.disabled = rank <= 0
         var card_art := str(data.get("cardArt", ""))
         if rank > 0 and not card_art.is_empty() and ResourceLoader.exists(card_art):
             var texture := load(card_art) as Texture2D
@@ -258,6 +259,10 @@ func _refresh_skills() -> void:
                 button.expand_icon = true
         else:
             button.icon = null
+
+func is_over_action_area(point: Vector2) -> bool:
+    return _group != null and _group.visible and _group.get_global_rect().has_point(point)
+
 
 func skill_info(index: int) -> Dictionary:
     return _skill_defs[index].duplicate(true) if index >= 0 and index < _skill_defs.size() else {}
