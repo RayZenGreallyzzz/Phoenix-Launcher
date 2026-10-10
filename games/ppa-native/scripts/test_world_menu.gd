@@ -18,6 +18,8 @@ signal clan_action_requested(action: String, fields: Dictionary)
 signal clan_retry_requested
 signal merchant_action_requested(fields: Dictionary)
 signal merchant_retry_requested
+signal forge_action_requested(fields: Dictionary)
+signal forge_retry_requested
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -94,6 +96,18 @@ func apply_native_merchant(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_merchant(payload)
 
+func apply_native_forge(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_forge(payload)
+
+func set_forge_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_forge_loading(busy, pending)
+
+func set_forge_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_forge_notice(message, pending)
+
 func set_merchant_loading(busy: bool, pending: bool) -> void:
     if _npc_screen != null:
         _npc_screen.set_merchant_loading(busy, pending)
@@ -167,6 +181,8 @@ func _ready() -> void:
     _npc_screen.clan_retry_requested.connect(func(): clan_retry_requested.emit())
     _npc_screen.merchant_action_requested.connect(func(fields: Dictionary): merchant_action_requested.emit(fields))
     _npc_screen.merchant_retry_requested.connect(func(): merchant_retry_requested.emit())
+    _npc_screen.forge_action_requested.connect(func(fields: Dictionary): forge_action_requested.emit(fields))
+    _npc_screen.forge_retry_requested.connect(func(): forge_retry_requested.emit())
     # Offline map preview uses the same scene route from the Keeper and Hub.
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
