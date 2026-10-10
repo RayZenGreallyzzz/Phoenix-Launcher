@@ -1221,7 +1221,8 @@ func _show_original_forge_recipes() -> void:
     # PPA Forge server. Compare costs/materials with displayed original cards:
     # stale catalogs or client-supplied prices can NEVER authorize a craft.
     var offered := false
-    if tab == "equipment" and not forge_state.is_empty() and _owns_verified_state(forge_state):
+    if tab in ["equipment", "legendary", "accessories", "pets"] \
+        and not forge_state.is_empty() and _owns_verified_state(forge_state):
         for server_row in forge_state.get("offers", []):
             if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
                 and int(server_row.get("price", -1)) == price \
