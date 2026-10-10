@@ -165,7 +165,12 @@ func _on_completed(result: int, status: int, _headers: PackedStringArray, bytes:
     if status != 200 or response.get("ok", false) != true:
         # A failed state read, expired token or ambiguous command response
         # cannot erase a previously sent command or mint a fresh request ID.
-        request_failed.emit(str(response.get("message", "Сервис PPA пока недоступен")).left(240))
+        # 404 is the intentional default-off server feature gate, not a
+        # missing inventory item. Never offer a local fake purchase instead.
+        var public_message := str(response.get("message", "Сервис PPA пока недоступен"))
+        if status == 404 and str(response.get("code", "")) == "NOT_FOUND":
+            public_message = "Этот раздел NPC ещё не включён на общем сервере PPA"
+        request_failed.emit(public_message.left(240))
         if acknowledged:
             request_state()
         return
