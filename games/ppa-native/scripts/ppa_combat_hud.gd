@@ -171,13 +171,13 @@ func _build_actions() -> void:
     _hint.add_theme_color_override("font_color", Color("#F6D7A5"))
     _hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _group.add_child(_hint)
-    _small_toggle("ПК", Vector2(115, 61), "pk")
-    _small_toggle("АВТО", Vector2(173, 61), "auto")
-    _small_round("HP", Vector2(132, 126), Color("#7E2328"), "potion_hp")
-    _small_round("MP", Vector2(191, 126), Color("#183C83"), "potion_mp")
+    _small_toggle("ПК", Vector2(115, 45), "pk")
+    _small_toggle("АВТО", Vector2(173, 45), "auto")
+    _small_round("HP", Vector2(132, 110), Color("#7E2328"), "potion_hp")
+    _small_round("MP", Vector2(191, 110), Color("#183C83"), "potion_mp")
     # Original Telegram screenshot: four skills arc up/left from attack.
-    for location in [Vector2(43, 282), Vector2(56, 223),
-        Vector2(102, 181), Vector2(166, 169)]:
+    for location in [Vector2(63, 282), Vector2(76, 223),
+        Vector2(118, 181), Vector2(174, 169)]:
         var skill := _round("✦", location, 48.0, Color("#392419"), Color("#AA6C3C"))
         skill.pressed.connect(_emit_skill.bind(_skills.size()))
         _skills.append(skill)
@@ -280,6 +280,6 @@ func _layout() -> void:
     var factor := clampf(minf(size.x / 550.0, size.y / 640.0), 0.70, 1.0)
     _group.scale = Vector2.ONE * factor
     _group.position = Vector2(size.x - GROUP_W * factor - 12.0,
-        size.y - GROUP_H * factor - 16.0)
+        size.y - GROUP_H * factor - 46.0)
     _vitals.scale = Vector2.ONE * clampf(size.x / 490.0, 0.77, 1.0)
     _vitals.position = Vector2(24.0, 112.0)
