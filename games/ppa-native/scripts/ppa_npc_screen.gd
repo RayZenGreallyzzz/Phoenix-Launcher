@@ -443,6 +443,7 @@ func apply_authoritative_snapshot(snapshot: Dictionary) -> void:
     if not snapshot.has("data") or not (snapshot["data"] is Dictionary):
         return
     authoritative = (snapshot["data"] as Dictionary).duplicate(true)
+    authoritative["saveVersion"] = int(snapshot.get("version", 0))
     has_verified_state = true
     _render()
 
@@ -1007,6 +1008,15 @@ func _show_forge() -> void:
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
     _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
+    var refresh := _button("ОБНОВИТЬ ОСТАТКИ С СЕРВЕРА PPA")
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("forge"))
+    _body.add_child(refresh)
+    if has_verified_state and authoritative.get("service") == "forge" \
+        and authoritative.get("readOnly") == true:
+        _body.add_child(_label("Материалы и валюта подтверждены PPA · версия " +
+            str(authoritative.get("saveVersion", "—")), 11, GOLD))
+    else:
+        _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
     if tab == "enhance":
         _section("ЗАТОЧКА · ВЫБОР ЭКИПИРОВКИ", "Вещь, заточка и руна выбираются отдельно. Надетые предметы тоже доступны.")
         var chosen := HBoxContainer.new()
@@ -1051,6 +1061,15 @@ func _set_craft_rarity(key: String) -> void:
     _render()
 
 func _forge_owned_material(material_name: String) -> Variant:
+    # Most recent signed forge projection wins over a potentially stale
+    # full save. No local stash/resource totals or invented zero values.
+    if service == "forge" and has_verified_state \
+        and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
+        if material_name == "Перо Феникса":
+            var live_feathers: Variant = authoritative.get("feathers", null)
+            return (live_feathers as Dictionary).get("phoenix", null) if live_feathers is Dictionary else null
+        var live_materials: Variant = authoritative.get("materials", null)
+        return (live_materials as Dictionary).get(material_name, null) if live_materials is Dictionary else null
     if _player_view_readonly.is_empty():
         return null
     if material_name == "Перо Феникса":
@@ -1110,6 +1129,10 @@ func _show_original_forge_recipes() -> void:
         _body.add_child(_item_picture(art, 88))
     var money: Dictionary = _player_view_readonly.get("money", {})
     var balance: Variant = money.get("ppa", null)
+    if service == "forge" and has_verified_state \
+        and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
+        var live_currency: Variant = authoritative.get("currency", null)
+        balance = (live_currency as Dictionary).get("ppa", null) if live_currency is Dictionary else null
     var price := int(chosen.get("price",0))
     _mini_row("Цена · PPA",
         str(price) + (" · есть " + str(balance) if balance != null else " · баланс не загружен"))
