@@ -25,7 +25,7 @@ func _ready() -> void:
 
 func connect_explicitly() -> void:
     # Connecting WILL replace any other realtime socket for this same hero.
-    if connecting or enabled:
+    if connecting or peer != null:
         return
     var token: String = str(get_tree().get_meta("ppa_native_game_session", ""))
     if token.is_empty() or token == "<null>":
