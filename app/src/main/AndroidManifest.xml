@@ -41,6 +41,7 @@
     </application>
     <queries>
         <package android:name="com.phoenixgames.ppa" />
+        <package android:name="com.phoenixgames.ppa.beta" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tg" />
