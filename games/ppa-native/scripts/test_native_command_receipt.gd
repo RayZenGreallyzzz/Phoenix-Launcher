@@ -87,6 +87,10 @@ func _run() -> void:
         "contract":"ppa-auction-v1","ownerId":OTHER,"actions":[],
         "state":{"connected":true,"self":{"id":OTHER},"version":7}})
     check(snapshots.size()==1, "Foreign account snapshot leaked to current UI")
+    _reply(service, 404, {"ok":false,"code":"NOT_FOUND",
+        "message":"Game API route not found"})
+    check(not failed.is_empty() and str(failed[-1]).contains("ещё не включён"),
+        "Disabled Cloudflare NPC feature gate is shown as a raw backend error")
 
     service.queue_free()
     await process_frame
