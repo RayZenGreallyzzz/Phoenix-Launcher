@@ -342,6 +342,18 @@ jobs:
           python3 games/ppa-native/tools/generate_ppa_forge_catalog.py 2>&1 | tee /tmp/ppa-forge-catalog.log
           grep -q 'PPA_CANONICAL_FORGE_CATALOG_OK' /tmp/ppa-forge-catalog.log
           test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          file=Path('games/ppa-native/scripts/ppa_forge_catalog_generated.gd').read_text()
+          sha='c3e1198fc8b3c87df44c075f97961b9b0334aa46fe11785cd6c67319a9550fbe'
+          assert '"recipe_sha256":"'+sha+'"' in file, "Godot/Telegram smith prices and material quantities changed"
+          for key in ['"id":"legend:gear:weapon"','"id":"acc:wings:legendary"',
+                      '"id":"pet:Лесной дракончик:rare"','"id":"acc:necklace:legendary"',
+                      '"id":"acc:cloak:epic"','"id":"acc:artifact:legendary"']:
+              assert key in file, "Missing original PPA recipe "+key
+          print('PPA_ORIGINAL_GODOT_ALL_FORGE_APK_OK recipes=58 economy_sha='+sha)
+          PY
 
       - name: Generate original Telegram PPA premium shop goods and packs (display only)
         shell: bash
