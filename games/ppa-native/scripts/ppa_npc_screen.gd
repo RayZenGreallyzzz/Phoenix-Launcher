@@ -1294,8 +1294,8 @@ func _show_authoritative_enhancement() -> void:
     var requires := "premium" if premium else "normal"
     var stock: Variant = supplies.get(requires, null)
     var rune_stock: Variant = supplies.get("rune", null)
-    var enough := stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
-    var blocked := bool(selected.get("special", false)) or level >= 7 \
+    var enough: bool = stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
+    var blocked: bool = bool(selected.get("special", false)) or level >= 7 \
         or (not premium and level >= 5) or chance < 0 or not enough \
         or not forge_actions.has("enhance") or forge_busy or forge_pending
     if blocked:
