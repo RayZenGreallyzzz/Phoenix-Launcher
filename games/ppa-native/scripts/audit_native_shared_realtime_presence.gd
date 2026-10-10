@@ -23,11 +23,13 @@ func _run() -> void:
         counts["changed"] = int(counts["changed"]) + 1
     )
     client.presence_failed.connect(func(m: String): errors.append(m))
+    client._ticket_pid = "p:0123456789abcdef0123456789abcdef"
+    client._handle_packet({"type":"hello", "pid":client._ticket_pid, "serverRoom":"safe"})
     client._handle_packet({"type": "online", "count": 31, "roomCount": 9})
     if counts["total"] != 31 or counts["safe"] != 9:
         fail("Server online packet did not map to visible Godot presence")
         return
-    client._handle_packet({"type": "snapshot", "roomCount": 10, "players": [{"i": "p:fake"}]})
+    client._handle_packet({"type": "snapshot", "room":"safe", "roomCount": 10, "players": [{"i": "p:fake"}]})
     if counts["safe"] != 10 or counts["changed"] != 2:
         fail("Room population snapshot was not consumed")
         return

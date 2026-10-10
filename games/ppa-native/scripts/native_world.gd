@@ -21,6 +21,7 @@ const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
+const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
@@ -88,6 +89,7 @@ var input_label: Label
 var _server_snapshot_loader: Node
 var _npc_service_loader: Node
 var _native_global_realtime: Node
+var _shared_city_players: Node
 var _server_snapshot_status: Label
 var _combat_hud: Control
 
@@ -425,10 +427,18 @@ func _build_server_readonly_bridge() -> void:
     _npc_service_loader.service_ready.connect(_on_npc_service_ready)
     _npc_service_loader.service_failed.connect(_on_npc_service_failed)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
-    _native_global_realtime.name = "PPASharedRealtimePresenceOnly"
+    _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
     _native_global_realtime.presence_changed.connect(_on_native_presence)
     _native_global_realtime.presence_failed.connect(_on_native_presence_failure)
+    if _supports_shared_city():
+        _shared_city_players = SHARED_CITY_PLAYERS.new()
+        add_child(_shared_city_players)
+        _shared_city_players.bind_world(self)
+        _native_global_realtime.players_updated.connect(_shared_city_players.update_players)
+        _native_global_realtime.player_left.connect(_shared_city_players.remove_player)
+        _native_global_realtime.players_cleared.connect(_shared_city_players.clear_players)
+        _native_global_realtime.presence_connected.connect(_on_shared_city_connected)
     if test_menu != null:
         test_menu.npc_snapshot_requested.connect(_request_npc_service)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
@@ -448,9 +458,22 @@ func _on_npc_service_failed(_service: String, _code: String) -> void:
     pass
 
 func _connect_native_realtime() -> void:
-    # Only an explicit tap at the arena NPC can displace Telegram's socket.
+    if not _supports_shared_city():
+        _on_native_presence_failure("Общие данжи и арена ещё не подключены")
+        return
+    # One explicit tap switches this hero from Telegram to the common city.
     if _native_global_realtime != null:
+        _native_global_realtime.set_local_position(world_pos_px, facing_input, _anim_state)
         _native_global_realtime.connect_explicitly()
+
+func _supports_shared_city() -> bool:
+    # Dungeon/training inherit this UI but have offline preview entities.
+    # Never broadcast their local test coordinates into the live safe city.
+    return get_script().resource_path == "res://scripts/native_world.gd"
+
+func _on_shared_city_connected() -> void:
+    if _server_snapshot_status != null:
+        _server_snapshot_status.text = "PPA · общий мирный город подключён"
 
 func _on_native_presence(count: int, room_total: int) -> void:
     if test_menu != null:
@@ -766,6 +789,8 @@ func _physics_process(delta: float) -> void:
     _sync_world_visuals()
 
 func _process(delta: float) -> void:
+    if _native_global_realtime != null and _supports_shared_city():
+        _native_global_realtime.set_local_position(world_pos_px, facing_input, _anim_state)
     _fps_clock += delta
     if _fps_clock >= 0.25:
         _fps_clock = 0.0
