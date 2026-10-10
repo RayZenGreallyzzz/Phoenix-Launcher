@@ -12,6 +12,7 @@ on:
       - 'games/ppa-native/scripts/ppa_native_npc_service_bridge.gd'
       - 'games/ppa-native/scripts/test_native_forge_material_view.gd'
       - 'games/ppa-native/scripts/test_native_forge_actions.gd'
+      - 'games/ppa-native/scripts/test_native_forge_sharpen.gd'
       - 'games/ppa-native/scripts/test_native_forge_full_catalog.gd'
       - 'games/ppa-native/scripts/ppa_native_forge_service.gd'
       - 'games/ppa-native/scripts/test_world_menu.gd'
@@ -56,6 +57,9 @@ jobs:
       - name: Test signed forge crafting without game server calls
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_actions.gd
+      - name: Verify real server-owned equipment and pet sharpening buttons
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_sharpen.gd
       - name: Verify original forge uses only real PPA materials and feathers
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_material_view.gd
