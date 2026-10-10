@@ -130,9 +130,15 @@ func _number(save: Dictionary, keys: Array, default: float = -1.0) -> float:
     return default
 
 func _set_vital(bar: ProgressBar, text_label: Label, current: float, maximum: float) -> void:
-    if current < 0 or maximum <= 0:
+    if current < 0:
         bar.value = 0
         text_label.text = "—"
+        return
+    if maximum <= 0:
+        # The legacy Telegram save may contain current HP without max HP.
+        # Show the true current value, NEVER invent a maximum or fake a bar.
+        bar.value = 0
+        text_label.text = "%d/—" % int(current)
         return
     bar.value = clampf(current / maximum * 100.0, 0.0, 100.0)
     text_label.text = "%d/%d" % [int(current), int(maximum)]
