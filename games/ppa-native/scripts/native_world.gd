@@ -26,6 +26,7 @@ const FORGE_SERVICE = preload("res://scripts/ppa_native_forge_service.gd")
 const INVENTORY_SERVICE = preload("res://scripts/ppa_native_inventory_service.gd")
 const PERSONAL_STORAGE_SERVICE = preload("res://scripts/ppa_native_personal_storage_service.gd")
 const CLAN_STORAGE_SERVICE = preload("res://scripts/ppa_native_clan_storage_service.gd")
+const AUCTION_SERVICE = preload("res://scripts/ppa_native_auction_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -100,6 +101,7 @@ var _forge_service: Node
 var _inventory_service: Node
 var _personal_storage_service: Node
 var _clan_storage_service: Node
+var _auction_service: Node
 var _pending_save_refresh := false
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
@@ -502,6 +504,12 @@ func _build_server_readonly_bridge() -> void:
         _forge_service.request_state()
         _refresh_server_readonly_save())
     _clan_storage_service.loading_changed.connect(_on_clan_storage_loading)
+    _auction_service = AUCTION_SERVICE.new()
+    _auction_service.name = "PPAOriginalAuctionReadOnly"
+    add_child(_auction_service)
+    _auction_service.state_ready.connect(_on_auction_state)
+    _auction_service.request_failed.connect(_on_auction_notice)
+    _auction_service.loading_changed.connect(_on_auction_loading)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -542,6 +550,8 @@ func _request_npc_service(service: String) -> void:
     elif service == "forge":
         _forge_service.request_state()
         _inventory_service.request_state()
+    elif service == "auction":
+        _auction_service.request_state()
     elif service == "storage":
         _personal_storage_service.request_state()
         _clan_service.request_state()
@@ -682,6 +692,19 @@ func _on_clan_storage_loading(busy: bool) -> void:
 func _on_clan_storage_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_clan_storage_notice(message, _clan_storage_service.has_pending())
+
+func _on_auction_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_auction(payload)
+        test_menu.set_native_auction_loading(false)
+
+func _on_auction_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_native_auction_loading(busy)
+
+func _on_auction_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_native_auction_notice(message)
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
