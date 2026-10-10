@@ -2,7 +2,7 @@ name: PPA Godot original combat HUD existing APK QA
 
 on:
   push:
-    branches: [ "feature/ppa-godot-existing-apk-combat-hud-20261010" ]
+    branches: [ "feature/ppa-godot-existing-apk-combat-hud-20261010", "feature/godot-shared-forge-material-view-20261010" ]
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/ppa-native-original-hud-apk.yml"
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-original-hud-apk
+  group: ppa-native-original-hud-apk-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,6 +27,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check shared PPA HUD and original APK contract
         run: python3 games/ppa-native/tools/test_native_combat_hud.py
+      - name: Confirm original live NPC forge integration contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          scripts=Path('games/ppa-native/scripts')
+          world=(scripts/'test_world_menu.gd').read_text()
+          forge=(scripts/'ppa_npc_screen.gd').read_text()
+          bridge=(scripts/'ppa_native_npc_service_bridge.gd').read_text()
+          assert 'npc_snapshot_requested.emit(valid_service)' in world
+          assert 'authoritative.get("materials", null)' in forge
+          assert 'authoritative.get("currency", null)' in forge
+          assert '_locked_action("СОЗДАТЬ")' in forge
+          assert 'queued_service = service' in bridge
+          print('PPA_FORGE_NPC_APK_SOURCE_OK')
+          PY
 
       - name: Verify Phoenix game-ticket backend is deployed
         shell: bash
