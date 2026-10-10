@@ -114,6 +114,18 @@ func apply_native_personal_storage(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_personal_storage(payload)
 
+func apply_native_auction(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_auction(payload)
+
+func set_native_auction_loading(busy: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_loading(busy)
+
+func set_native_auction_notice(message: String) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_notice(message)
+
 func apply_native_clan_storage(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_clan_storage(payload)
