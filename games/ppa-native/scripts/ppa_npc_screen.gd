@@ -1143,8 +1143,19 @@ func _show_arena() -> void:
     _section("МЕЧНИК АРЕНЫ", "Telegram PPA · испытания, PvP и рейтинг")
     var wallet: Dictionary = _player_view_readonly.get("money", {})
     var tokens: Variant = wallet.get("arenaTokens", null)
+    # New trusted NPC snapshot may be fresher than the last full save.
+    if has_verified_state and authoritative.get("arenaTokens", null) != null:
+        tokens = authoritative["arenaTokens"]
     _mini_row("⚔ ЖЕТОНЫ АРЕНЫ · ЛИЧНЫЙ СЕЙВ D1",
         str(tokens) if tokens != null else "— · нет данных")
+    if has_verified_state and service == "arena":
+        var rating = authoritative.get("rating", null)
+        var wins = authoritative.get("wins", null)
+        var losses = authoritative.get("losses", null)
+        var tries_left = authoritative.get("attemptsRemaining", null)
+        _mini_row("СЕРВЕРНЫЙ РЕЙТИНГ", str(rating) if rating != null else "—")
+        _mini_row("ПОБЕДЫ / ПОРАЖЕНИЯ", (str(wins) if wins != null else "—") + " / " + (str(losses) if losses != null else "—"))
+        _mini_row("ОСТАТОК ПОПЫТОК", str(tries_left) if tries_left != null else "—")
     match tab:
         "fights":
             _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
