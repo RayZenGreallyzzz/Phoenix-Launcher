@@ -103,6 +103,11 @@ var _personal_storage_service: Node
 var _clan_storage_service: Node
 var _auction_service: Node
 var _pending_save_refresh := false
+# One authenticated RAM-only save serves character/NPC menus briefly.
+const READONLY_MENU_CACHE_MS := 30000
+var _readonly_cache_owner := ""
+var _readonly_cache_session_sha := ""
+var _readonly_cache_at_ms := -1
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
 var _shared_city_players: Node
@@ -457,7 +462,7 @@ func _build_server_readonly_bridge() -> void:
     _merchant_service.request_failed.connect(_on_merchant_notice)
     _merchant_service.command_finished.connect(func(message: String):
         _on_merchant_notice(message)
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _merchant_service.loading_changed.connect(_on_merchant_loading)
     _forge_service = FORGE_SERVICE.new()
     _forge_service.name = "PPACanonicalForgeService"
@@ -466,7 +471,7 @@ func _build_server_readonly_bridge() -> void:
     _forge_service.request_failed.connect(_on_forge_notice)
     _forge_service.command_finished.connect(func(message: String):
         _on_forge_notice(message)
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _forge_service.loading_changed.connect(_on_forge_loading)
     _inventory_service = INVENTORY_SERVICE.new()
     _inventory_service.name = "PPACanonicalInventoryService"
@@ -476,7 +481,7 @@ func _build_server_readonly_bridge() -> void:
     _inventory_service.command_finished.connect(func(message: String):
         _on_inventory_notice(message)
         _forge_service.request_state()
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _inventory_service.loading_changed.connect(_on_inventory_loading)
     _personal_storage_service = PERSONAL_STORAGE_SERVICE.new()
     _personal_storage_service.name = "PPACanonicalPersonalStorage"
@@ -485,7 +490,7 @@ func _build_server_readonly_bridge() -> void:
     _personal_storage_service.request_failed.connect(_on_personal_storage_notice)
     _personal_storage_service.command_finished.connect(func(message: String):
         _on_personal_storage_notice(message)
-        _refresh_server_readonly_save()
+        _refresh_server_readonly_save(true)
         _forge_service.request_state()
         _inventory_service.request_state()
         _personal_storage_service.request_state())
@@ -502,7 +507,7 @@ func _build_server_readonly_bridge() -> void:
         _personal_storage_service.request_state()
         _inventory_service.request_state()
         _forge_service.request_state()
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _clan_storage_service.loading_changed.connect(_on_clan_storage_loading)
     _auction_service = AUCTION_SERVICE.new()
     _auction_service.name = "PPAOriginalAuctionReadOnly"
@@ -516,7 +521,7 @@ func _build_server_readonly_bridge() -> void:
         _inventory_service.request_state()
         _forge_service.request_state()
         _personal_storage_service.request_state()
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -761,12 +766,22 @@ func _on_native_presence_failure(message: String) -> void:
     if test_menu != null:
         test_menu.apply_native_presence_failure(message)
 
-func _refresh_server_readonly_save() -> void:
+func _refresh_server_readonly_save(force: bool = false) -> void:
     # Authenticated GET only, no save writes. Never cache another character.
     if _server_snapshot_loader == null:
         return
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    var bearer := str(get_tree().get_meta("ppa_native_game_session", ""))
+    var session_sha := bearer.sha256_text() if not bearer.is_empty() and bearer != "<null>" else ""
+    if not force and _readonly_cache_at_ms >= 0 and not session_sha.is_empty() \
+            and owner == _readonly_cache_owner and session_sha == _readonly_cache_session_sha \
+            and Time.get_ticks_msec() - _readonly_cache_at_ms < READONLY_MENU_CACHE_MS:
+        return
     if bool(_server_snapshot_loader.get("loading")):
-        _pending_save_refresh = true
+        if force:
+            _pending_save_refresh = true
+        # City entry already has a request in flight: do not queue another.
         return
     if _server_snapshot_status != null:
         _server_snapshot_status.text = "PPA СЕРВЕР · перепроверяем облачное сохранение…"
@@ -776,6 +791,11 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     var save = payload.get("state", {})
     if not (save is Dictionary):
         return
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    _readonly_cache_owner = str(account.get("telegramId", "")) if account is Dictionary else ""
+    var bearer := str(get_tree().get_meta("ppa_native_game_session", ""))
+    _readonly_cache_session_sha = bearer.sha256_text() if not bearer.is_empty() and bearer != "<null>" else ""
+    _readonly_cache_at_ms = Time.get_ticks_msec()
     if test_menu != null:
         test_menu.call("apply_readonly_snapshot", payload)
     if _combat_hud != null:
@@ -795,9 +815,12 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         " linked=1 server_writes=0")
     if _pending_save_refresh:
         _pending_save_refresh = false
-        call_deferred("_refresh_server_readonly_save")
+        call_deferred("_refresh_server_readonly_save", true)
 
 func _on_readonly_snapshot_failed(code: String) -> void:
+    _readonly_cache_owner = ""
+    _readonly_cache_session_sha = ""
+    _readonly_cache_at_ms = -1
     if _combat_hud != null:
         _combat_hud.clear_server_save()
     if test_menu != null:
@@ -810,7 +833,7 @@ func _on_readonly_snapshot_failed(code: String) -> void:
     print("PPA_NATIVE_SAVE_READONLY_WAIT code=", code.left(56), " server_writes=0")
     if _pending_save_refresh:
         _pending_save_refresh = false
-        call_deferred("_refresh_server_readonly_save")
+        call_deferred("_refresh_server_readonly_save", true)
 
 func _input(event: InputEvent) -> void:
     # No virtual joystick or 3D click handlers may steal touches from
@@ -907,6 +930,7 @@ func _build_test_menu() -> void:
     test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
     test_menu.arena_training_requested.connect(_open_arena_training)
     test_menu.refresh_readonly_save_requested.connect(_refresh_server_readonly_save)
+    test_menu.force_refresh_readonly_save_requested.connect(func(): _refresh_server_readonly_save(true))
 
 func _open_arena_training() -> void:
     # Explicit user click starts a real LOCAL AI combat scene. PPA multiplayer
