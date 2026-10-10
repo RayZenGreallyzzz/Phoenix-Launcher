@@ -5,7 +5,7 @@ on:
     branches: [ "integration/ppa-godot-account-native-beta-20261010" ]
     paths:
       - "games/ppa-native/**"
-      - ".github/workflows/ppa-native-npc-server-beta.yml"
+      - ".github/workflows/ppa-native-unified-beta-20261010.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-npc-server-beta
+  group: ppa-native-unified-beta-20261010
   cancel-in-progress: true
 
 jobs:
