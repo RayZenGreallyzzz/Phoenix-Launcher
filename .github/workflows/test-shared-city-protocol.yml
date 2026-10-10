@@ -1,0 +1,30 @@
+name: Test Godot shared city protocol
+on:
+  pull_request:
+    paths:
+      - 'games/ppa-native/scripts/ppa_native_shared_realtime.gd'
+      - 'games/ppa-native/scripts/ppa_shared_city*.gd'
+      - 'games/ppa-native/scripts/test_shared_city_protocol.gd'
+      - 'games/ppa-native/scripts/native_world.gd'
+      - '.github/workflows/test-shared-city-protocol.yml'
+permissions:
+  contents: read
+jobs:
+  city:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Godot 4.6
+        run: |
+          curl -L --fail --retry 3 -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          chmod +x /tmp/godot/Godot_v4.6-stable_linux.x86_64
+      - name: Isolated protocol/runtime test, no live server or player data
+        run: |
+          mkdir -p /tmp/city-test/scripts
+          for file in ppa_shared_city_protocol.gd ppa_native_shared_realtime.gd ppa_shared_city_players.gd test_shared_city_protocol.gd test_hero_catalog.gd dwarf_model_fit.gd; do
+            cp "games/ppa-native/scripts/$file" /tmp/city-test/scripts/
+          done
+          printf '[application]\nconfig/name="PPA city protocol test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/city-test/project.godot
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/city-test --script res://scripts/test_shared_city_protocol.gd
