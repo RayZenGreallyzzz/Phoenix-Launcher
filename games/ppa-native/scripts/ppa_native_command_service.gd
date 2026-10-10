@@ -169,6 +169,19 @@ func _on_completed(result: int, status: int, _headers: PackedStringArray, bytes:
         if acknowledged:
             request_state()
         return
+    if _kind == "action":
+        # Canonical PPA command receipts are deliberately SMALL: the server
+        # returns gameId, contract, ownerId, requestId, commandStatus and
+        # receipt/version, but never a mutable state/actions snapshot.
+        # Require the signed acknowledgement, then request fresh state.
+        if not acknowledged:
+            request_failed.emit("Сервер не подтвердил ID действия · повтори тот же запрос")
+            return
+        command_finished.emit(str(response.get("message", "Действие подтверждено")))
+        # Replayed receipts may be older than another client's actions.
+        # Never use their balances or inventory as the current NPC state.
+        request_state()
+        return
     if response.get("gameId") != "phoenix-pix-arena" or response.get("contract") != contract_key \
         or str(response.get("ownerId", "")) != _owner or not (response.get("state") is Dictionary) \
         or not (response.get("actions") is Array):
@@ -178,16 +191,7 @@ func _on_completed(result: int, status: int, _headers: PackedStringArray, bytes:
     if not _valid_state(state):
         request_failed.emit("Сервер не подтвердил данные персонажа")
         return
-    if _kind == "action":
-        if not acknowledged:
-            request_failed.emit("Сервер не подтвердил ID действия · повтори тот же запрос")
-            return
-        command_finished.emit(str(response.get("message", "Действие подтверждено")))
-        # Replays can contain an older acknowledgement: always rehydrate from
-        # a fresh read, never use an old acknowledgement as live clan state.
-        request_state()
-    else:
-        state_ready.emit(response.duplicate(true))
+    state_ready.emit(response.duplicate(true))
 
 func _valid_state(state: Dictionary) -> bool:
     return state.get("connected") == true and state.get("self") is Dictionary \
