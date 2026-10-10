@@ -38,7 +38,7 @@ func _run() -> void:
         "mine":[{"id":"my-lot","item":{"name":"Лунный лис","rarity":"epic","enh":5,
             "kind":"gear","slot":"pet"},"price":60,"qty":1,"currency":"gram",
             "sellerId":OWNER,"sellerName":"Я","canCancel":false}],
-        "pendingCredits":[{"id":"credit1","lotId":"oldlot","soldQty":1,"currency":"ppa",
+        "recoverable":[],"pendingCredits":[{"id":"credit1","lotId":"oldlot","soldQty":1,"currency":"ppa",
             "amount":900,"createdAt":123}],
         "bag":[{"uid":"my-+7","name":"Броня +7","slot":"armor","enh":7,"rarity":"epic"}]}}
     npc.apply_native_auction(signed)
