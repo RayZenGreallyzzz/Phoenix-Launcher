@@ -35,7 +35,8 @@ jobs:
           world=(scripts/'test_world_menu.gd').read_text()
           forge=(scripts/'ppa_npc_screen.gd').read_text()
           bridge=(scripts/'ppa_native_npc_service_bridge.gd').read_text()
-          assert 'npc_snapshot_requested.emit(valid_service)' in world
+          assert '_npc_screen.open_npc(npc)' in world
+          assert 'npc_snapshot_requested.emit(service)' in world
           assert 'authoritative.get("materials", null)' in forge
           assert 'authoritative.get("currency", null)' in forge
           assert '_locked_action("СОЗДАТЬ")' in forge
