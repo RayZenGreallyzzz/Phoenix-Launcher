@@ -69,7 +69,7 @@ func _account_owner() -> String:
     return owner if owner.is_valid_int() and owner.length() <= 20 and int(owner) > 0 else ""
 
 func _pending_path(owner: String) -> String:
-    return "user://ppa_" + service_key + "_pending_" + owner + ".json"
+    return "user://ppa_" + service_key.replace("/", "_") + "_pending_" + owner + ".json"
 
 func _restore_pending(owner: String) -> void:
     if owner.is_empty() or owner == _pending_owner:
