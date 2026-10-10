@@ -4,6 +4,8 @@ on:
     paths:
       - 'games/ppa-native/scripts/ppa_native_clan_service.gd'
       - 'games/ppa-native/scripts/ppa_native_command_service.gd'
+      - 'games/ppa-native/scripts/test_native_command_receipt.gd'
+      - 'games/ppa-native/scripts/test_native_command_receipt_probe.gd'
       - 'games/ppa-native/scripts/ppa_native_merchant_service.gd'
       - 'games/ppa-native/scripts/ppa_clan_menu_content.gd'
       - 'games/ppa-native/scripts/test_native_clan_service.gd'
@@ -63,6 +65,9 @@ jobs:
           printf '[application]\nconfig/name="PPA shared NPC controls test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/npc-test/project.godot
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --check-only --script res://scripts/audit_native_shared_npc_actions.gd
           timeout --preserve-status 90s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd
+      - name: Verify canonical command receipts never require fake NPC state
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_command_receipt.gd
       - name: Test every original Telegram PPA recipe in Godot
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_full_catalog.gd
