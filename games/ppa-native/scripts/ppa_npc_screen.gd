@@ -59,6 +59,8 @@ var _asking_currency := "PPA"
 var _forge_filter := "equipment"
 var _craft_rarity := "all"
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
+var _enhance_uid := ""
+var _enhance_mode := "normal"
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
@@ -327,6 +329,8 @@ func open_npc(source: Dictionary) -> void:
     _forge_filter = "equipment"
     _craft_rarity = "all"
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
+    _enhance_uid = ""
+    _enhance_mode = "normal"
     authoritative.clear()
     has_verified_state = false
     clan_state.clear()
@@ -356,6 +360,8 @@ func close_npc() -> void:
     forge_notice = ""
     forge_busy = false
     forge_pending = false
+    _enhance_uid = ""
+    _enhance_mode = "normal"
 
 func apply_native_clan(payload: Dictionary) -> void:
     if not visible or service != "clan" or payload.get("gameId") != "phoenix-pix-arena" \
@@ -1070,28 +1076,7 @@ func _show_forge() -> void:
     else:
         _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
     if tab == "enhance":
-        _section("ЗАТОЧКА · ВЫБОР ЭКИПИРОВКИ", "Вещь, заточка и руна выбираются отдельно. Надетые предметы тоже доступны.")
-        var chosen := HBoxContainer.new()
-        chosen.name = "NpcForgeSelectedSlots"
-        chosen.add_theme_constant_override("separation", 6)
-        _body.add_child(chosen)
-        for role in ["equipment", "stone", "rune"]:
-            var panel := PanelContainer.new()
-            panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            panel.add_theme_stylebox_override("panel", _style(Color("#141A20"), GOLD if role == _forge_filter else EDGE, 6))
-            chosen.add_child(panel)
-            var name_label := {"equipment":"ВЕЩЬ", "stone":"ЗАТОЧКА", "rune":"РУНА"}
-            var thing := _chosen_item(str(_forge_keys.get(role, "")))
-            panel.add_child(_label(str(name_label[role]) + "\n" +
-                (str(thing.get("name", "◇ пусто")).substr(0, 23)), 11, GOLD if not thing.is_empty() else SUB))
-        _choice_tiles([
-            {"key":"equipment","label":"ВЕЩИ"},
-            {"key":"stone","label":"ЗАТОЧКИ"},
-            {"key":"rune","label":"РУНЫ"}], _forge_filter, _set_forge_filter)
-        _add_picker(_forge_filter, str(_forge_keys.get(_forge_filter, "")), _choose_forge)
-        _details(str(_forge_keys.get(_forge_filter, "")))
-        _mini_row("Шанс успеха / ресурсы", "рассчитывает сервер")
-        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        _show_authoritative_enhancement()
     elif tab == "rune_fusion":
         _message("СЛИЯНИЕ РУН", "Отображаются реальные руны из отдельной сумки персонажа. Слияние пока не выполняется.")
         if _player_view_readonly.is_empty():
@@ -1103,6 +1088,121 @@ func _show_forge() -> void:
     else:
         _show_original_forge_recipes()
     _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
+
+func _choose_enhancement_item(uid: String) -> void:
+    _enhance_uid = uid
+    _render()
+
+func _set_enhancement_mode(mode: String) -> void:
+    if mode in ["normal", "normal_rune", "premium", "premium_rune"]:
+        _enhance_mode = mode
+    _render()
+
+func _request_real_enhancement(uid: String, mode: String, version: int) -> void:
+    if not visible or service != "forge" or forge_busy or forge_pending \
+        or not forge_actions.has("enhance") or not _owns_verified_state(forge_state) \
+        or int(forge_state.get("version", 0)) != version:
+        return
+    var match_found := false
+    for saved in forge_state.get("enhanceItems", []):
+        if saved is Dictionary and str(saved.get("uid", "")) == uid \
+            and int(saved.get("enh", -1)) < 7 and not bool(saved.get("special", false)):
+            match_found = true
+            break
+    if not match_found:
+        return
+    forge_action_requested.emit({"action":"enhance", "uid":uid, "stone":mode, "version":version})
+
+func _show_authoritative_enhancement() -> void:
+    _section("ЗАТОЧКА PPA · ОРИГИНАЛЬНЫЕ ВЕЩИ",
+        "Сервер проверяет камни, шанс и сохранение. Только предметы в сумке: надетую вещь сначала нужно снять.")
+    if not _owns_verified_state(forge_state) or not (forge_state.get("enhanceItems") is Array):
+        _message("ЖДЁМ ОБЩУЮ КУЗНИЦУ", "Заточка недоступна без подтверждённого сохранения сервера PPA.")
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        return
+    var items: Array = forge_state.get("enhanceItems", [])
+    var selected: Dictionary = {}
+    for raw in items:
+        if raw is Dictionary and str(raw.get("uid", "")) == _enhance_uid:
+            selected = raw
+            break
+    if selected.is_empty() and not items.is_empty() and items[0] is Dictionary:
+        selected = items[0]
+        _enhance_uid = str(selected.get("uid", ""))
+    var available := GridContainer.new()
+    available.name = "PPARealForgeItemGrid"
+    available.columns = 2 if size.x < 620.0 else 3
+    available.add_theme_constant_override("h_separation", 5)
+    available.add_theme_constant_override("v_separation", 5)
+    _body.add_child(available)
+    for entry in items:
+        if not (entry is Dictionary):
+            continue
+        var uid := str(entry.get("uid", ""))
+        if uid.is_empty():
+            continue
+        var label_text := str(entry.get("name", "Вещь")).left(24) + "  +" + str(entry.get("enh", 0))
+        var choose := _button(label_text, uid != _enhance_uid)
+        choose.name = "PPAEnhanceItem_" + uid.to_utf8_buffer().hex_encode()
+        choose.pressed.connect(_choose_enhancement_item.bind(uid))
+        available.add_child(choose)
+    if selected.is_empty():
+        _message("НЕТ ВЕЩЕЙ", "В серверной сумке нет предметов для заточки.")
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        return
+    _section(str(selected.get("name", "Вещь")) + " · +" + str(selected.get("enh", 0)),
+        "Заточка конкретного UID из исходного инвентаря Telegram PPA.")
+    var supplies: Dictionary = forge_state.get("stones", {})
+    _mini_row("Обычные камни", str(supplies.get("normal", "нет данных")))
+    _mini_row("Премиум камни", str(supplies.get("premium", "нет данных")))
+    _mini_row("Руны заточки", str(supplies.get("rune", "нет данных")))
+    _choice_tiles([
+        {"key":"normal", "label":"ОБЫЧНЫЙ"},
+        {"key":"normal_rune", "label":"ОБЫЧНЫЙ + РУНА"},
+        {"key":"premium", "label":"ПРЕМИУМ"},
+        {"key":"premium_rune", "label":"ПРЕМИУМ + РУНА"}
+    ], _enhance_mode, _set_enhancement_mode)
+    var level := int(selected.get("enh", 0))
+    var premium := _enhance_mode.begins_with("premium")
+    var rune := _enhance_mode.ends_with("_rune")
+    var table_values: Variant = forge_state.get("enhanceRules", {}).get("rune" if rune else "normal", [])
+    var chance := -1
+    if table_values is Array and level >= 0 and level < (table_values as Array).size():
+        chance = int(table_values[level])
+    _mini_row("Следующая заточка", "+" + str(level + 1))
+    _mini_row("Вероятность успеха", str(chance) + "%" if chance >= 0 else "не подтверждена")
+    _mini_row("Неудача", "Вещь и + сохраняются" if premium else
+        ("Эпик: откат −1" if str(selected.get("rarity", "")) == "epic" else "ВЕЩЬ МОЖЕТ СГОРЕТЬ"))
+    var requires := "premium" if premium else "normal"
+    var stock: Variant = supplies.get(requires, null)
+    var rune_stock: Variant = supplies.get("rune", null)
+    var enough := stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
+    var blocked := bool(selected.get("special", false)) or level >= 7 \
+        or (not premium and level >= 5) or chance < 0 or not enough \
+        or not forge_actions.has("enhance") or forge_busy or forge_pending
+    if blocked:
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        if bool(selected.get("special", false)):
+            _body.add_child(_label("Особый питомец пока требует дополнительной серверной проверки.", 11, SUB))
+        return
+    var uid := str(selected.get("uid", ""))
+    var mode := _enhance_mode
+    var version := int(forge_state.get("version", 0))
+    var action := _button("ЗАТОЧИТЬ · +" + str(level + 1), true)
+    action.name = "PPARealForgeEnhance"
+    action.pressed.connect(func():
+        if premium:
+            _request_real_enhancement(uid, mode, version)
+        else:
+            var confirm := ConfirmationDialog.new()
+            confirm.dialog_text = ("При неудаче эпик потеряет уровень заточки. Продолжить?"
+                if str(selected.get("rarity", "")) == "epic" else
+                "При неудаче вещь может сгореть без восстановления. Продолжить?")
+            add_child(confirm)
+            confirm.confirmed.connect(func(): _request_real_enhancement(uid, mode, version))
+            confirm.canceled.connect(func(): confirm.queue_free())
+            confirm.popup_centered(Vector2i(430, 180)))
+    _body.add_child(action)
 
 # Original live PPA blacksmithFrame catalog (generated at build from its public
 # srcdoc). Inventory/balances are ONLY from the authenticated game-state save.
