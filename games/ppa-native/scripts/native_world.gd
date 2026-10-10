@@ -520,7 +520,21 @@ func _build_test_menu() -> void:
     test_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     test_menu.change_class_requested.connect(_back_to_character_select)
     test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
+    test_menu.arena_training_requested.connect(_open_arena_training)
     test_menu.refresh_readonly_save_requested.connect(_refresh_server_readonly_save)
+
+func _open_arena_training() -> void:
+    # Explicit user click starts a real LOCAL AI combat scene. PPA multiplayer
+    # and rewards remain server-owned and are not simulated in this beta.
+    if test_menu != null:
+        test_menu.close_menu()
+    if _joy_touch_id != -1 or _joy_mouse_active:
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+    var err := get_tree().change_scene_to_file("res://arena_training.tscn")
+    if err != OK:
+        push_error("PPA_ARENA_TRAINING_ENTRY_FAILED: " + error_string(err))
 
 func _open_dungeon_map_test() -> void:
     # Native visual test only. Never writes scene, loot or entry permissions
