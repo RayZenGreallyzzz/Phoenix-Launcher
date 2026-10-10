@@ -50,12 +50,41 @@ func _check() -> void:
     root.add_child(npc)
     npc.size = root.size
     npc.apply_player_save_readonly(save)
+    # The removed NpcInventoryPicker was tied to a local preview bag.
+    # The real Godot forge now only equips from signed shared PPA UID state.
+    set_meta("phoenix_account", {"telegramId":"990000001"})
     npc.open_npc({"service":"forge","id":"smith","name":"Кузнец"})
+    npc._select_tab("enhance")
     await process_frame
-    if npc.find_child("NpcInventoryPicker",true,false) == null:
-        fail("Forge has no real player inventory picker")
+    if npc.find_child("PPARealEquip_" + "real-armor".to_utf8_buffer().hex_encode(),true,false) != null:
+        fail("Unverified original gear was actionable without server state")
+        return
+    var inventory_snapshot := {"gameId":"phoenix-pix-arena",
+        "contract":"ppa-inventory-v1","ownerId":"990000001",
+        "actions":["equip"],"state":{"connected":true,
+            "self":{"id":"990000001"},"version":21,
+            "bag":[{"uid":"real-armor","name":"Броня лучника",
+                "kind":"gear","slot":"armor","rarity":"common","enh":0}],
+            "equipped":{}}}
+    var sent_equips: Array = []
+    npc.inventory_action_requested.connect(
+        func(command: Dictionary): sent_equips.append(command.duplicate(true)))
+    npc.apply_native_inventory(inventory_snapshot)
+    var equip_button = npc.find_child(
+        "PPARealEquip_" + "real-armor".to_utf8_buffer().hex_encode(),true,false) as Button
+    if equip_button == null or equip_button.disabled:
+        fail("Forge has no signed PPA UID equipment control")
+        return
+    equip_button.pressed.emit()
+    if sent_equips.size() != 1 or sent_equips[0] != {
+        "action":"equip","uid":"real-armor","version":21}:
+        fail("Forge sent a local slot index instead of canonical UID/version")
+        return
+    if (npc.inventory_state["bag"][0] as Dictionary).get("uid") != "real-armor":
+        fail("Forge mutated inventory before authenticated server acknowledgement")
         return
     npc.close_npc()
+    remove_meta("phoenix_account")
     npc.open_npc({"service":"arena","id":"arena","name":"Мечник арены"})
     await process_frame
     if not npc.is_open():
