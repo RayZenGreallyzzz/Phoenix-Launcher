@@ -774,6 +774,17 @@ func _refresh_server_readonly_save(force: bool = false) -> void:
     var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
     var bearer := str(get_tree().get_meta("ppa_native_game_session", ""))
     var session_sha := bearer.sha256_text() if not bearer.is_empty() and bearer != "<null>" else ""
+    if _readonly_cache_at_ms >= 0 and (owner != _readonly_cache_owner \
+            or session_sha != _readonly_cache_session_sha or session_sha.is_empty()):
+        # Switching characters or sessions must hide the previous player's
+        # bag, currency and equipped items BEFORE the next HTTP response.
+        _readonly_cache_at_ms = -1
+        _readonly_cache_owner = ""
+        _readonly_cache_session_sha = ""
+        if test_menu != null:
+            test_menu.clear_readonly_snapshot()
+        if _combat_hud != null:
+            _combat_hud.clear_server_save()
     if not force and _readonly_cache_at_ms >= 0 and not session_sha.is_empty() \
             and owner == _readonly_cache_owner and session_sha == _readonly_cache_session_sha \
             and Time.get_ticks_msec() - _readonly_cache_at_ms < READONLY_MENU_CACHE_MS:
