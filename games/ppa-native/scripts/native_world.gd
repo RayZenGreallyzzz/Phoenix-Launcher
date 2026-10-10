@@ -21,6 +21,7 @@ const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
+const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -88,6 +89,7 @@ var _server_snapshot_loader: Node
 var _npc_service_loader: Node
 var _native_global_realtime: Node
 var _server_snapshot_status: Label
+var _combat_hud: Control
 
 var _joy_touch_id := -1
 var _joy_mouse_active := false
@@ -371,6 +373,32 @@ func _build_hud() -> void:
     exit_button.pressed.connect(_exit_game)
     add_child(exit_button)
 
+    # One Telegram-style control layout for City, Dungeon and Arena.
+    # These UI buttons never fabricate authoritative damage or spend potions.
+    _combat_hud = PPA_COMBAT_HUD.new()
+    _combat_hud.name = "PPAOriginalCombatHUD"
+    _combat_hud.z_index = 31
+    add_child(_combat_hud)
+    _combat_hud.set_class_key(selected_visual_class)
+    _combat_hud.action_requested.connect(_on_hud_action)
+
+
+func _on_hud_action(action: String, slot: int) -> void:
+    # Local test world has no canonical server combat actions yet.
+    # ArenaTrainingWorld overrides ONLY attack to hit its local practice AI.
+    if _combat_hud == null:
+        return
+    if action == "skill":
+        var skill: Dictionary = _combat_hud.skill_info(slot)
+        var skill_name := str(skill.get("n", skill.get("name", "Навык")))
+        _combat_hud.show_notice(skill_name + " · ждём общий боевой сервер")
+    elif action == "attack":
+        _combat_hud.show_notice("Атака: ожидается серверный бой PPA")
+    elif action == "potion_hp" or action == "potion_mp":
+        _combat_hud.show_notice("Зелье: расход только через сервер PPA")
+    elif action == "pk" or action == "auto":
+        _combat_hud.show_notice("Режим " + action.to_upper() + ": ожидается сервер")
+
 
 func _build_server_readonly_bridge() -> void:
     # Can be used by City and Dungeon. No save/write request is possible.
@@ -448,6 +476,8 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         return
     if test_menu != null:
         test_menu.call("apply_readonly_snapshot", payload)
+    if _combat_hud != null:
+        _combat_hud.apply_server_save(save)
     # Display real values exactly as received; never replace with fabricated
     # class stats or mutate a save from this visual 3D testing client.
     var level_text := str(save.get("lvl", save.get("level", "—")))
@@ -463,6 +493,8 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         " linked=1 server_writes=0")
 
 func _on_readonly_snapshot_failed(code: String) -> void:
+    if _combat_hud != null:
+        _combat_hud.clear_server_save()
     if test_menu != null:
         test_menu.call("clear_readonly_snapshot")
     # An unavailable backend must never silently switch to fake stats, create
@@ -609,6 +641,10 @@ func _back_to_character_select() -> void:
 
 func _try_world_tap(screen_position: Vector2) -> bool:
     if test_menu == null or test_menu.is_open():
+        return false
+    # _input executes before GUI signals: don't open NPC/character panels
+    # when touching any skill, potion, PK, auto or attack region.
+    if _combat_hud != null and _combat_hud.is_over_action_area(screen_position):
         return false
     if size.x <= 0.0 or size.y <= 0.0:
         return false

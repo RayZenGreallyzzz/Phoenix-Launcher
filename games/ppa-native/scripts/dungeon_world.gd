@@ -496,8 +496,8 @@ func _add_dungeon_hud() -> void:
     label.offset_left = 14
     label.offset_right = -14
     # Do not cover the new read-only server HP/MP header at Y=81..105.
-    label.offset_top = 106
-    label.offset_bottom = 129
+    label.offset_top = 187
+    label.offset_bottom = 210
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     label.add_theme_font_size_override("font_size", 12)
     label.add_theme_color_override("font_color", Color("#ECCC93"))
@@ -510,12 +510,13 @@ func _add_dungeon_hud() -> void:
     back.text = "↶ В ГОРОД"
     back.anchor_left = 1.0
     back.anchor_right = 1.0
-    back.anchor_top = 1.0
-    back.anchor_bottom = 1.0
+    # Return remains available but must never cover the original PPA attack.
+    back.anchor_top = 0.0
+    back.anchor_bottom = 0.0
     back.offset_left = -172
     back.offset_right = -18
-    back.offset_top = -88
-    back.offset_bottom = -36
+    back.offset_top = 200
+    back.offset_bottom = 248
     back.z_index = 70
     back.add_theme_font_size_override("font_size", 14)
     back.pressed.connect(_back_to_city)
@@ -528,8 +529,8 @@ func _add_dungeon_hud() -> void:
     alignment.anchor_right = 0.0
     alignment.offset_left = 16.0
     alignment.offset_right = 222.0
-    alignment.offset_top = 132.0
-    alignment.offset_bottom = 184.0
+    alignment.offset_top = 216.0
+    alignment.offset_bottom = 268.0
     alignment.mouse_filter = Control.MOUSE_FILTER_STOP
     alignment.focus_mode = Control.FOCUS_ALL
     alignment.z_index = 70
