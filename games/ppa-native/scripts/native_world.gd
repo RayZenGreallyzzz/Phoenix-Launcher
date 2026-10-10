@@ -22,6 +22,11 @@ const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
 const CLAN_SERVICE = preload("res://scripts/ppa_native_clan_service.gd")
 const MERCHANT_SERVICE = preload("res://scripts/ppa_native_merchant_service.gd")
+const FORGE_SERVICE = preload("res://scripts/ppa_native_forge_service.gd")
+const INVENTORY_SERVICE = preload("res://scripts/ppa_native_inventory_service.gd")
+const PERSONAL_STORAGE_SERVICE = preload("res://scripts/ppa_native_personal_storage_service.gd")
+const CLAN_STORAGE_SERVICE = preload("res://scripts/ppa_native_clan_storage_service.gd")
+const AUCTION_SERVICE = preload("res://scripts/ppa_native_auction_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -92,7 +97,17 @@ var _server_snapshot_loader: Node
 var _npc_service_loader: Node
 var _clan_service: Node
 var _merchant_service: Node
+var _forge_service: Node
+var _inventory_service: Node
+var _personal_storage_service: Node
+var _clan_storage_service: Node
+var _auction_service: Node
 var _pending_save_refresh := false
+# One authenticated RAM-only save serves character/NPC menus briefly.
+const READONLY_MENU_CACHE_MS := 30000
+var _readonly_cache_owner := ""
+var _readonly_cache_session_sha := ""
+var _readonly_cache_at_ms := -1
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
 var _shared_city_players: Node
@@ -447,8 +462,66 @@ func _build_server_readonly_bridge() -> void:
     _merchant_service.request_failed.connect(_on_merchant_notice)
     _merchant_service.command_finished.connect(func(message: String):
         _on_merchant_notice(message)
-        _refresh_server_readonly_save())
+        _refresh_server_readonly_save(true))
     _merchant_service.loading_changed.connect(_on_merchant_loading)
+    _forge_service = FORGE_SERVICE.new()
+    _forge_service.name = "PPACanonicalForgeService"
+    add_child(_forge_service)
+    _forge_service.state_ready.connect(_on_forge_state)
+    _forge_service.request_failed.connect(_on_forge_notice)
+    _forge_service.command_finished.connect(func(message: String):
+        _on_forge_notice(message)
+        _refresh_server_readonly_save(true))
+    _forge_service.loading_changed.connect(_on_forge_loading)
+    _inventory_service = INVENTORY_SERVICE.new()
+    _inventory_service.name = "PPACanonicalInventoryService"
+    add_child(_inventory_service)
+    _inventory_service.state_ready.connect(_on_inventory_state)
+    _inventory_service.request_failed.connect(_on_inventory_notice)
+    _inventory_service.command_finished.connect(func(message: String):
+        _on_inventory_notice(message)
+        _forge_service.request_state()
+        _refresh_server_readonly_save(true))
+    _inventory_service.loading_changed.connect(_on_inventory_loading)
+    _personal_storage_service = PERSONAL_STORAGE_SERVICE.new()
+    _personal_storage_service.name = "PPACanonicalPersonalStorage"
+    add_child(_personal_storage_service)
+    _personal_storage_service.state_ready.connect(_on_personal_storage_state)
+    _personal_storage_service.request_failed.connect(_on_personal_storage_notice)
+    _personal_storage_service.command_finished.connect(func(message: String):
+        _on_personal_storage_notice(message)
+        _refresh_server_readonly_save(true)
+        _forge_service.request_state()
+        _inventory_service.request_state()
+        _personal_storage_service.request_state())
+    _personal_storage_service.loading_changed.connect(_on_personal_storage_loading)
+    _clan_storage_service = CLAN_STORAGE_SERVICE.new()
+    _clan_storage_service.name = "PPACanonicalClanStorage"
+    add_child(_clan_storage_service)
+    _clan_storage_service.state_ready.connect(_on_clan_storage_state)
+    _clan_storage_service.request_failed.connect(_on_clan_storage_notice)
+    _clan_storage_service.command_finished.connect(func(message: String):
+        _on_clan_storage_notice(message)
+        _clan_storage_service.request_state()
+        _clan_service.request_state()
+        _personal_storage_service.request_state()
+        _inventory_service.request_state()
+        _forge_service.request_state()
+        _refresh_server_readonly_save(true))
+    _clan_storage_service.loading_changed.connect(_on_clan_storage_loading)
+    _auction_service = AUCTION_SERVICE.new()
+    _auction_service.name = "PPAOriginalAuctionReadOnly"
+    add_child(_auction_service)
+    _auction_service.state_ready.connect(_on_auction_state)
+    _auction_service.request_failed.connect(_on_auction_notice)
+    _auction_service.loading_changed.connect(_on_auction_loading)
+    _auction_service.command_finished.connect(func(message: String):
+        _on_auction_notice(message)
+        _auction_service.request_state()
+        _inventory_service.request_state()
+        _forge_service.request_state()
+        _personal_storage_service.request_state()
+        _refresh_server_readonly_save(true))
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -468,6 +541,16 @@ func _build_server_readonly_bridge() -> void:
         test_menu.clan_retry_requested.connect(_clan_service.retry_pending)
         test_menu.merchant_action_requested.connect(_request_merchant_action)
         test_menu.merchant_retry_requested.connect(_merchant_service.retry_pending)
+        test_menu.forge_action_requested.connect(_request_forge_action)
+        test_menu.forge_retry_requested.connect(_forge_service.retry_pending)
+        test_menu.inventory_action_requested.connect(_request_inventory_action)
+        test_menu.inventory_retry_requested.connect(_inventory_service.retry_pending)
+        test_menu.personal_storage_action_requested.connect(_request_personal_storage_action)
+        test_menu.personal_storage_retry_requested.connect(_personal_storage_service.retry_pending)
+        test_menu.clan_storage_action_requested.connect(_request_clan_storage_action)
+        test_menu.clan_storage_retry_requested.connect(_clan_storage_service.retry_pending)
+        test_menu.auction_action_requested.connect(_request_auction_action)
+        test_menu.auction_retry_requested.connect(_auction_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
@@ -475,8 +558,19 @@ func _request_npc_service(service: String) -> void:
         return
     if service == "clan":
         _clan_service.request_state()
+        _clan_storage_service.request_state()
     elif service == "merchant":
         _merchant_service.request_state()
+    elif service == "forge":
+        _forge_service.request_state()
+        _inventory_service.request_state()
+    elif service == "auction":
+        _auction_service.request_state()
+    elif service == "storage":
+        _personal_storage_service.request_state()
+        _clan_service.request_state()
+        _clan_storage_service.request_state()
+        _npc_service_loader.request_service(service)
     else:
         _npc_service_loader.request_service(service)
 
@@ -521,6 +615,122 @@ func _on_merchant_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_merchant_notice(message, _merchant_service.has_pending())
 
+func _request_forge_action(fields: Dictionary) -> void:
+    if _forge_service == null:
+        return
+    var action := str(fields.get("action", "craft"))
+    if action not in ["craft", "enhance"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _forge_service.request_action(action, payload)
+
+func _on_forge_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_forge(payload)
+        test_menu.set_forge_loading(false, _forge_service.has_pending())
+
+func _on_forge_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_forge_loading(busy, _forge_service.has_pending())
+
+func _on_forge_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_forge_notice(message, _forge_service.has_pending())
+
+func _request_inventory_action(fields: Dictionary) -> void:
+    if _inventory_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["equip","unequip"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _inventory_service.request_action(action,payload)
+
+func _on_inventory_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_inventory(payload)
+        test_menu.set_inventory_loading(false,_inventory_service.has_pending())
+
+func _on_inventory_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_inventory_loading(busy,_inventory_service.has_pending())
+
+func _on_inventory_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_inventory_notice(message,_inventory_service.has_pending())
+
+func _request_personal_storage_action(fields: Dictionary) -> void:
+    if _personal_storage_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["put","take"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _personal_storage_service.request_action(action, payload)
+
+func _on_personal_storage_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_personal_storage(payload)
+        test_menu.set_personal_storage_loading(false, _personal_storage_service.has_pending())
+
+func _on_personal_storage_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_personal_storage_loading(busy, _personal_storage_service.has_pending())
+
+func _on_personal_storage_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_personal_storage_notice(message, _personal_storage_service.has_pending())
+
+func _request_clan_storage_action(fields: Dictionary) -> void:
+    if _clan_storage_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["put", "take"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _clan_storage_service.request_action(action, payload)
+
+func _on_clan_storage_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_clan_storage(payload)
+        test_menu.set_clan_storage_loading(false, _clan_storage_service.has_pending())
+
+func _on_clan_storage_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_clan_storage_loading(busy, _clan_storage_service.has_pending())
+
+func _on_clan_storage_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_clan_storage_notice(message, _clan_storage_service.has_pending())
+
+func _request_auction_action(fields: Dictionary) -> void:
+    if _auction_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["place", "buy", "cancel"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _auction_service.request_action(action, payload)
+
+func _on_auction_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_auction(payload)
+        test_menu.set_native_auction_pending(false, _auction_service.has_pending())
+
+func _on_auction_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_native_auction_pending(busy, _auction_service.has_pending())
+
+func _on_auction_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_native_auction_notice(message)
+        test_menu.set_native_auction_pending(false, _auction_service.has_pending())
+
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
         test_menu.apply_native_npc_service(payload)
@@ -556,12 +766,33 @@ func _on_native_presence_failure(message: String) -> void:
     if test_menu != null:
         test_menu.apply_native_presence_failure(message)
 
-func _refresh_server_readonly_save() -> void:
+func _refresh_server_readonly_save(force: bool = false) -> void:
     # Authenticated GET only, no save writes. Never cache another character.
     if _server_snapshot_loader == null:
         return
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    var bearer := str(get_tree().get_meta("ppa_native_game_session", ""))
+    var session_sha := bearer.sha256_text() if not bearer.is_empty() and bearer != "<null>" else ""
+    if _readonly_cache_at_ms >= 0 and (owner != _readonly_cache_owner \
+            or session_sha != _readonly_cache_session_sha or session_sha.is_empty()):
+        # Switching characters or sessions must hide the previous player's
+        # bag, currency and equipped items BEFORE the next HTTP response.
+        _readonly_cache_at_ms = -1
+        _readonly_cache_owner = ""
+        _readonly_cache_session_sha = ""
+        if test_menu != null:
+            test_menu.clear_readonly_snapshot()
+        if _combat_hud != null:
+            _combat_hud.clear_server_save()
+    if not force and _readonly_cache_at_ms >= 0 and not session_sha.is_empty() \
+            and owner == _readonly_cache_owner and session_sha == _readonly_cache_session_sha \
+            and Time.get_ticks_msec() - _readonly_cache_at_ms < READONLY_MENU_CACHE_MS:
+        return
     if bool(_server_snapshot_loader.get("loading")):
-        _pending_save_refresh = true
+        if force:
+            _pending_save_refresh = true
+        # City entry already has a request in flight: do not queue another.
         return
     if _server_snapshot_status != null:
         _server_snapshot_status.text = "PPA СЕРВЕР · перепроверяем облачное сохранение…"
@@ -571,6 +802,11 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     var save = payload.get("state", {})
     if not (save is Dictionary):
         return
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    _readonly_cache_owner = str(account.get("telegramId", "")) if account is Dictionary else ""
+    var bearer := str(get_tree().get_meta("ppa_native_game_session", ""))
+    _readonly_cache_session_sha = bearer.sha256_text() if not bearer.is_empty() and bearer != "<null>" else ""
+    _readonly_cache_at_ms = Time.get_ticks_msec()
     if test_menu != null:
         test_menu.call("apply_readonly_snapshot", payload)
     if _combat_hud != null:
@@ -590,9 +826,12 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
         " linked=1 server_writes=0")
     if _pending_save_refresh:
         _pending_save_refresh = false
-        call_deferred("_refresh_server_readonly_save")
+        call_deferred("_refresh_server_readonly_save", true)
 
 func _on_readonly_snapshot_failed(code: String) -> void:
+    _readonly_cache_owner = ""
+    _readonly_cache_session_sha = ""
+    _readonly_cache_at_ms = -1
     if _combat_hud != null:
         _combat_hud.clear_server_save()
     if test_menu != null:
@@ -605,7 +844,7 @@ func _on_readonly_snapshot_failed(code: String) -> void:
     print("PPA_NATIVE_SAVE_READONLY_WAIT code=", code.left(56), " server_writes=0")
     if _pending_save_refresh:
         _pending_save_refresh = false
-        call_deferred("_refresh_server_readonly_save")
+        call_deferred("_refresh_server_readonly_save", true)
 
 func _input(event: InputEvent) -> void:
     # No virtual joystick or 3D click handlers may steal touches from
@@ -702,6 +941,7 @@ func _build_test_menu() -> void:
     test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
     test_menu.arena_training_requested.connect(_open_arena_training)
     test_menu.refresh_readonly_save_requested.connect(_refresh_server_readonly_save)
+    test_menu.force_refresh_readonly_save_requested.connect(func(): _refresh_server_readonly_save(true))
 
 func _open_arena_training() -> void:
     # Explicit user click starts a real LOCAL AI combat scene. PPA multiplayer

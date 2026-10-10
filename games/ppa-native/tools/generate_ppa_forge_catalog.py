@@ -150,9 +150,42 @@ def main() -> None:
                 "materials":requirement(item.get("mats",[]), [q*mult[rarity] for q in sizes]),
                 "img":image_ref(pet_art.get(name,""))
             })
+    # The original Telegram legendary equipment uses an independent list,
+    # not GEAR or ACC. Copy its six canonical rows; no invented recipes.
+    match = re.search(r"\bLEGENDARY_CRAFT\s*=\s*\[(.*?)\];", source, re.S)
+    if not match:
+        raise RuntimeError("Original legendary smith equipment list missing")
+    legendary_items = []
+    for raw in re.findall(r"\{([^{}]+)\}", match.group(1)):
+        props = {}
+        for key, value, digits in re.findall(
+                r"(\w+)\s*:\s*(?:'([^']*)'|(\d+))", raw):
+            props[key] = int(digits) if digits else value
+        if not {"name","slot","kind","icon","price","mat"} <= props.keys():
+            raise RuntimeError("Original legendary equipment entry changed")
+        legendary_items.append(props)
+    if len(legendary_items) < 5:
+        raise RuntimeError("Original legendary equipment list incomplete")
+    for item in legendary_items:
+        rows.append({
+            "id":"legend:"+item["kind"]+":"+item["slot"],
+            "tab":"legendary","kind":item["kind"],"slot":item["slot"],
+            "name":item["name"],"rarity":"legendary","price":int(item["price"]),
+            "currency":"ppa","icon":item["icon"],"desc":"Легендарный тир",
+            "materials":[{"name":item["mat"],"count":1000}],"img":""
+        })
+    # Price/material parity with server. Differences in images, markup and
+    # HTML order must not make two identical recipes appear incompatible.
+    signed_rows = [[x["id"], int(x["price"]), x["rarity"],
+                    [[v["name"], int(v["count"])] for v in x["materials"]]]
+                   for x in sorted(rows,key=lambda row:row["id"])]
+    recipe_signature = hashlib.sha256(json.dumps(
+        signed_rows,ensure_ascii=False,separators=(",",":")
+    ).encode()).hexdigest()
     # Client uses this immutable display catalog, never as an authorization
     # source for deduction. Real purchase/forge must be a server-side atomic action.
     data = {
+        "recipe_sha256":recipe_signature,
         "source":"public-live-PPA:blacksmithFrame",
         "sha256":hashlib.sha256(source.encode()).hexdigest(),
         "rows":rows
@@ -167,6 +200,7 @@ def main() -> None:
     print("PPA_CANONICAL_FORGE_CATALOG_OK", "recipes="+str(len(rows)),
           "epic_gear="+str(len(gear)), "accessories="+str(len(acc)),
           "pets="+str(len(pets)), "source_sha256="+data["sha256"],
+          "recipe_sha256="+data["recipe_sha256"],
           "write_actions=0",flush=True)
 
 if __name__ == "__main__":

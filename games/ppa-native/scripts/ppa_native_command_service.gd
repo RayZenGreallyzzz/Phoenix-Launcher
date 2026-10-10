@@ -69,7 +69,7 @@ func _account_owner() -> String:
     return owner if owner.is_valid_int() and owner.length() <= 20 and int(owner) > 0 else ""
 
 func _pending_path(owner: String) -> String:
-    return "user://ppa_" + service_key + "_pending_" + owner + ".json"
+    return "user://ppa_" + service_key.replace("/", "_") + "_pending_" + owner + ".json"
 
 func _restore_pending(owner: String) -> void:
     if owner.is_empty() or owner == _pending_owner:
@@ -165,9 +165,27 @@ func _on_completed(result: int, status: int, _headers: PackedStringArray, bytes:
     if status != 200 or response.get("ok", false) != true:
         # A failed state read, expired token or ambiguous command response
         # cannot erase a previously sent command or mint a fresh request ID.
-        request_failed.emit(str(response.get("message", "Сервис PPA пока недоступен")).left(240))
+        # 404 is the intentional default-off server feature gate, not a
+        # missing inventory item. Never offer a local fake purchase instead.
+        var public_message := str(response.get("message", "Сервис PPA пока недоступен"))
+        if status == 404 and str(response.get("code", "")) == "NOT_FOUND":
+            public_message = "Этот раздел NPC ещё не включён на общем сервере PPA"
+        request_failed.emit(public_message.left(240))
         if acknowledged:
             request_state()
+        return
+    if _kind == "action":
+        # Canonical PPA command receipts are deliberately SMALL: the server
+        # returns gameId, contract, ownerId, requestId, commandStatus and
+        # receipt/version, but never a mutable state/actions snapshot.
+        # Require the signed acknowledgement, then request fresh state.
+        if not acknowledged:
+            request_failed.emit("Сервер не подтвердил ID действия · повтори тот же запрос")
+            return
+        command_finished.emit(str(response.get("message", "Действие подтверждено")))
+        # Replayed receipts may be older than another client's actions.
+        # Never use their balances or inventory as the current NPC state.
+        request_state()
         return
     if response.get("gameId") != "phoenix-pix-arena" or response.get("contract") != contract_key \
         or str(response.get("ownerId", "")) != _owner or not (response.get("state") is Dictionary) \
@@ -178,16 +196,7 @@ func _on_completed(result: int, status: int, _headers: PackedStringArray, bytes:
     if not _valid_state(state):
         request_failed.emit("Сервер не подтвердил данные персонажа")
         return
-    if _kind == "action":
-        if not acknowledged:
-            request_failed.emit("Сервер не подтвердил ID действия · повтори тот же запрос")
-            return
-        command_finished.emit(str(response.get("message", "Действие подтверждено")))
-        # Replays can contain an older acknowledgement: always rehydrate from
-        # a fresh read, never use an old acknowledgement as live clan state.
-        request_state()
-    else:
-        state_ready.emit(response.duplicate(true))
+    state_ready.emit(response.duplicate(true))
 
 func _valid_state(state: Dictionary) -> bool:
     return state.get("connected") == true and state.get("self") is Dictionary \

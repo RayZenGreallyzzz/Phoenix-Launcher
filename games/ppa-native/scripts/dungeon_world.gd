@@ -529,8 +529,12 @@ func _add_dungeon_hud() -> void:
     alignment.anchor_right = 0.0
     alignment.offset_left = 16.0
     alignment.offset_right = 222.0
-    alignment.offset_top = 216.0
-    alignment.offset_bottom = 268.0
+    # Preserve the original floating joystick test point (90, 230).
+    # The old 216..268 overlay occupied that point and correctly intercepted
+    # its touch; never weaken _joy_point_allowed() or disable this QA check.
+    # This is an optional diagnostic, not combat/character UI.
+    alignment.offset_top = 280.0
+    alignment.offset_bottom = 332.0
     alignment.mouse_filter = Control.MOUSE_FILTER_STOP
     alignment.focus_mode = Control.FOCUS_ALL
     alignment.z_index = 70

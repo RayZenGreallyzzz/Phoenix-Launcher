@@ -4,13 +4,35 @@ on:
     paths:
       - 'games/ppa-native/scripts/ppa_native_clan_service.gd'
       - 'games/ppa-native/scripts/ppa_native_command_service.gd'
+      - 'games/ppa-native/scripts/test_native_command_receipt.gd'
+      - 'games/ppa-native/scripts/test_native_command_receipt_probe.gd'
       - 'games/ppa-native/scripts/ppa_native_merchant_service.gd'
       - 'games/ppa-native/scripts/ppa_clan_menu_content.gd'
       - 'games/ppa-native/scripts/test_native_clan_service.gd'
       - 'games/ppa-native/scripts/audit_native_shared_npc_actions.gd'
       - 'games/ppa-native/scripts/ppa_npc_screen.gd'
+      - 'games/ppa-native/scripts/ppa_native_npc_service_bridge.gd'
+      - 'games/ppa-native/scripts/test_native_forge_material_view.gd'
+      - 'games/ppa-native/scripts/test_native_forge_actions.gd'
+      - 'games/ppa-native/scripts/test_native_forge_sharpen.gd'
+      - 'games/ppa-native/scripts/ppa_native_inventory_service.gd'
+      - 'games/ppa-native/scripts/test_native_inventory_equip.gd'
+      - 'games/ppa-native/scripts/ppa_native_personal_storage_service.gd'
+      - 'games/ppa-native/scripts/test_native_personal_storage.gd'
+      - 'games/ppa-native/scripts/ppa_native_clan_storage_service.gd'
+      - 'games/ppa-native/scripts/test_native_clan_storage.gd'
+      - 'games/ppa-native/scripts/ppa_native_auction_service.gd'
+      - 'games/ppa-native/scripts/test_native_auction_readonly.gd'
+      - 'games/ppa-native/scripts/test_native_auction_actions.gd'
+      - 'games/ppa-native/scripts/test_native_auction_recovery.gd'
+      - 'games/ppa-native/scripts/test_native_auction_credit_claim.gd'
+      - 'games/ppa-native/scripts/test_native_forge_full_catalog.gd'
+      - 'games/ppa-native/scripts/ppa_native_forge_service.gd'
       - 'games/ppa-native/scripts/test_world_menu.gd'
       - 'games/ppa-native/scripts/native_world.gd'
+      - 'games/ppa-native/scripts/ppa_global_hub.gd'
+      - 'games/ppa-native/scripts/test_native_save_menu_cache.gd'
+      - 'games/ppa-native/scripts/test_native_premium_card_layout.gd'
       - '.github/workflows/test-native-clan-service.yml'
 permissions:
   contents: read
@@ -44,4 +66,47 @@ jobs:
           mkdir -p /tmp/npc-test/scripts
           cp games/ppa-native/scripts/*.gd /tmp/npc-test/scripts/
           printf '[application]\nconfig/name="PPA shared NPC controls test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/npc-test/project.godot
-          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --check-only --script res://scripts/audit_native_shared_npc_actions.gd
+          timeout --preserve-status 90s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd
+      - name: Verify canonical command receipts never require fake NPC state
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_command_receipt.gd
+      - name: Reuse authenticated city save, force GET after writes, isolate owners
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_save_menu_cache.gd
+      - name: Readable premium cards on phone and tablet, no fabricated purchases
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_premium_card_layout.gd
+      - name: Test every original Telegram PPA recipe in Godot
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_full_catalog.gd
+      - name: Test signed forge crafting without game server calls
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_actions.gd
+      - name: Verify real server-owned equipment and pet sharpening buttons
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_sharpen.gd
+      - name: Verify account-owned shared PPA equipment switching in Godot
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_inventory_equip.gd
+      - name: Verify canonical personal vault and read-only clan vault UI
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_personal_storage.gd
+      - name: Check real common clan D1 vault rights and atomic command UI
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_clan_storage.gd
+      - name: Verify original Telegram PPA auction market and seller credits in Godot
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_readonly.gd
+      - name: Verify escrow-backed auction place, buy and cancel on same PPA character
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_actions.gd
+      - name: Verify owner-only expired PPA escrow gear recovery in Godot
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_recovery.gd
+      - name: Prevent local seller-money duplication when Telegram and Godot credit modes differ
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_credit_claim.gd
+      - name: Verify original forge uses only real PPA materials and feathers
+        run: |
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_material_view.gd

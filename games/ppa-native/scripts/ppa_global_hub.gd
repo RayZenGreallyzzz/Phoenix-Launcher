@@ -269,7 +269,11 @@ func _original_premium_cards(title_text: String, offers: Array) -> void:
     _section(title_text, "Реальный ассортимент Telegram PPA · цены из оригинального магазина")
     var cards := GridContainer.new()
     cards.name = "OriginalPpaPremiumGrid_" + title_text.replace(" ", "_")
-    cards.columns = 2 if size.x < 780.0 else 3
+    # Window is at most 980px wide, even on a wide tablet. Using the entire
+    # viewport width here made three very narrow/clipped premium cards.
+    # One column on phones, two readable columns on tablet landscape.
+    cards.columns = 2 if _frame != null and _frame.size.x >= 840.0 else 1
+    cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     cards.add_theme_constant_override("h_separation", 6)
     cards.add_theme_constant_override("v_separation", 7)
     _body.add_child(cards)
@@ -280,9 +284,11 @@ func _original_premium_cards(title_text: String, offers: Array) -> void:
         var tile := PanelContainer.new()
         tile.add_theme_stylebox_override("panel", _style(Color("#171A1E"), LINE))
         tile.custom_minimum_size.y = 125.0
+        tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         cards.add_child(tile)
         var column := VBoxContainer.new()
         column.add_theme_constant_override("separation", 4)
+        column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         tile.add_child(column)
         var art := str(item.get("img", ""))
         if art.begins_with("res://") and ResourceLoader.exists(art):

@@ -12,6 +12,7 @@ const SERVICES := ["merchant","forge","storage","auction","clan","arena","blackm
 var http: HTTPRequest
 var loading := false
 var requested_service := ""
+var queued_service := ""
 var last_version := -1
 
 func _ready() -> void:
@@ -25,7 +26,11 @@ func request_service(service: String) -> void:
         service_failed.emit(service, "INVALID_SERVICE")
         return
     if loading:
-        return # Only one request; never flood Cloudflare on tab clicks.
+        # A single HTTPRequest cannot run twice. Remember the MOST RECENT
+        # requested NPC instead of silently losing it on fast menu switches.
+        if service != requested_service:
+            queued_service = service
+        return
     var bearer_raw: Variant = get_tree().get_meta("ppa_native_game_session", "")
     var bearer := str(bearer_raw)
     if bearer.is_empty() or bearer == "<null>":
@@ -42,9 +47,19 @@ func request_service(service: String) -> void:
     if err != OK:
         loading = false
         service_failed.emit(service, "REQUEST_" + str(err))
+        call_deferred("_drain_queued_service")
+
+func _drain_queued_service() -> void:
+    if loading or queued_service.is_empty():
+        return
+    var next_service := queued_service
+    queued_service = ""
+    request_service(next_service)
 
 func _on_completed(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     loading = false
+    # Defer until all response validation/emission is finished.
+    call_deferred("_drain_queued_service")
     var service := requested_service
     requested_service = ""
     if result != HTTPRequest.RESULT_SUCCESS:

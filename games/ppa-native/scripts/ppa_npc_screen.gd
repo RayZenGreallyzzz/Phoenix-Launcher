@@ -10,6 +10,16 @@ signal clan_action_requested(action: String, fields: Dictionary)
 signal clan_retry_requested
 signal merchant_action_requested(fields: Dictionary)
 signal merchant_retry_requested
+signal forge_action_requested(fields: Dictionary)
+signal forge_retry_requested
+signal inventory_action_requested(fields: Dictionary)
+signal inventory_retry_requested
+signal personal_storage_action_requested(fields: Dictionary)
+signal personal_storage_retry_requested
+signal clan_storage_action_requested(fields: Dictionary)
+signal clan_storage_retry_requested
+signal auction_action_requested(fields: Dictionary)
+signal auction_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -57,6 +67,8 @@ var _asking_currency := "PPA"
 var _forge_filter := "equipment"
 var _craft_rarity := "all"
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
+var _enhance_uid := ""
+var _enhance_mode := "normal"
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
@@ -70,6 +82,36 @@ var merchant_actions: Array = []
 var merchant_busy := false
 var merchant_pending := false
 var merchant_notice := ""
+var forge_state: Dictionary = {}
+var forge_actions: Array = []
+var forge_busy := false
+var forge_pending := false
+var forge_notice := ""
+var inventory_state: Dictionary = {}
+var inventory_actions: Array = []
+var inventory_busy := false
+var inventory_pending := false
+var inventory_notice := ""
+var personal_storage_state: Dictionary = {}
+var personal_storage_actions: Array = []
+var personal_storage_busy := false
+var personal_storage_pending := false
+var personal_storage_notice := ""
+var _storage_bag_uid := ""
+var _storage_personal_uid := ""
+var clan_storage_state: Dictionary = {}
+var clan_storage_actions: Array = []
+var clan_storage_busy := false
+var clan_storage_pending := false
+var clan_storage_notice := ""
+var _clan_put_uid := ""
+var _clan_take_uid := ""
+var auction_state: Dictionary = {}
+var auction_notice := ""
+var auction_loading := false
+var auction_actions: Array = []
+var auction_pending := false
+var _auction_sell_uid := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -292,6 +334,16 @@ func clear_player_save_readonly() -> void:
     clan_actions.clear()
     merchant_state.clear()
     merchant_actions.clear()
+    forge_state.clear()
+    forge_actions.clear()
+    inventory_state.clear()
+    inventory_actions.clear()
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    clan_storage_state.clear()
+    clan_storage_actions.clear()
+    auction_state.clear()
+    auction_actions.clear()
     if visible:
         _render()
 
@@ -318,6 +370,8 @@ func open_npc(source: Dictionary) -> void:
     _forge_filter = "equipment"
     _craft_rarity = "all"
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
+    _enhance_uid = ""
+    _enhance_mode = "normal"
     authoritative.clear()
     has_verified_state = false
     clan_state.clear()
@@ -326,6 +380,28 @@ func open_npc(source: Dictionary) -> void:
     merchant_state.clear()
     merchant_actions.clear()
     merchant_notice = ""
+    forge_state.clear()
+    forge_actions.clear()
+    forge_notice = ""
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    personal_storage_notice = ""
+    _storage_bag_uid = ""
+    _storage_personal_uid = ""
+    clan_storage_state.clear()
+    clan_storage_actions.clear()
+    clan_storage_notice = ""
+    _clan_put_uid = ""
+    _clan_take_uid = ""
+    auction_state.clear()
+    auction_notice = ""
+    auction_loading = false
+    auction_actions.clear()
+    auction_pending = false
+    _auction_sell_uid = ""
+    inventory_state.clear()
+    inventory_actions.clear()
+    inventory_notice = ""
     visible = true
     _fit()
     _render()
@@ -339,9 +415,41 @@ func close_npc() -> void:
     clan_actions.clear()
     merchant_state.clear()
     merchant_actions.clear()
+    forge_state.clear()
+    forge_actions.clear()
+    forge_notice = ""
+    forge_busy = false
+    forge_pending = false
+    inventory_state.clear()
+    inventory_actions.clear()
+    inventory_notice = ""
+    inventory_busy = false
+    inventory_pending = false
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    personal_storage_notice = ""
+    personal_storage_busy = false
+    personal_storage_pending = false
+    _storage_bag_uid = ""
+    _storage_personal_uid = ""
+    clan_storage_state.clear()
+    clan_storage_actions.clear()
+    clan_storage_busy = false
+    clan_storage_pending = false
+    clan_storage_notice = ""
+    _clan_put_uid = ""
+    _clan_take_uid = ""
+    auction_state.clear()
+    auction_notice = ""
+    auction_loading = false
+    auction_actions.clear()
+    auction_pending = false
+    _auction_sell_uid = ""
+    _enhance_uid = ""
+    _enhance_mode = "normal"
 
 func apply_native_clan(payload: Dictionary) -> void:
-    if not visible or service != "clan" or payload.get("gameId") != "phoenix-pix-arena" \
+    if not visible or service not in ["clan","storage"] or payload.get("gameId") != "phoenix-pix-arena" \
         or payload.get("contract") != "ppa-clan-v1" \
         or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
         return
@@ -352,7 +460,7 @@ func apply_native_clan(payload: Dictionary) -> void:
         or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner:
         return
     clan_state = state.duplicate(true)
-    clan_actions = payload["actions"].duplicate()
+    clan_actions = payload["actions"].duplicate() if service == "clan" else []
     _render()
 
 func apply_native_merchant(payload: Dictionary) -> void:
@@ -371,6 +479,163 @@ func apply_native_merchant(payload: Dictionary) -> void:
     merchant_state = state.duplicate(true)
     merchant_actions = payload["actions"].duplicate()
     _render()
+
+func apply_native_forge(payload: Dictionary) -> void:
+    if not visible or service != "forge" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-forge-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var owner_data: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(owner_data.get("telegramId", "")) if owner_data is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("offers") is Array) or not (state.get("wallet") is Dictionary) \
+        or int(state.get("version", 0)) < 1:
+        return
+    forge_state = state.duplicate(true)
+    forge_actions = payload["actions"].duplicate()
+    _render()
+
+func apply_native_inventory(payload: Dictionary) -> void:
+    if not visible or service != "forge" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-inventory-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("bag") is Array) or not (state.get("equipped") is Dictionary) \
+        or int(state.get("version", 0)) < 1:
+        return
+    inventory_state = state.duplicate(true)
+    inventory_actions = payload["actions"].duplicate()
+    _render()
+
+func apply_native_personal_storage(payload: Dictionary) -> void:
+    if not visible or service != "storage" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-personal-storage-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("bag") is Array) or not (state.get("personal") is Array) \
+        or int(state.get("version", 0)) < 1:
+        return
+    personal_storage_state = state.duplicate(true)
+    personal_storage_actions = payload["actions"].duplicate()
+    _render()
+
+func apply_native_auction(payload: Dictionary) -> void:
+    if not visible or service != "auction" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-auction-v1" \
+        or not (payload.get("state") is Dictionary):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("lots") is Array) or not (state.get("mine") is Array) \
+        or not (state.get("pendingCredits") is Array) \
+        or not (state.get("recoverable") is Array) \
+        or not (state.get("wallet") is Dictionary) \
+        or not (state.get("settlementEnabled") is bool) \
+        or int(state.get("version", 0)) < 1:
+        return
+    auction_state = state.duplicate(true)
+    auction_actions = payload.get("actions", []).duplicate()
+    auction_loading = false
+    _render()
+
+func set_native_auction_loading(busy: bool) -> void:
+    auction_loading = busy
+    if visible and service == "auction":
+        _render()
+
+func set_native_auction_pending(busy: bool, pending: bool) -> void:
+    auction_loading = busy
+    auction_pending = pending
+    if visible and service == "auction":
+        _render()
+
+func set_native_auction_notice(message: String) -> void:
+    auction_notice = message.left(220)
+    auction_loading = false
+    if visible and service == "auction":
+        _render()
+
+func apply_native_clan_storage(payload: Dictionary) -> void:
+    if not visible or service not in ["storage","clan"] \
+        or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-clan-storage-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("bag") is Array) or not (state.get("items") is Array) \
+        or str(state.get("clanRevision", "")).length() != 64 \
+        or int(state.get("version", 0)) < 1:
+        return
+    clan_storage_state = state.duplicate(true)
+    clan_storage_actions = payload["actions"].duplicate()
+    _render()
+
+func set_clan_storage_loading(busy: bool, pending: bool) -> void:
+    clan_storage_busy = busy
+    clan_storage_pending = pending
+    if visible and service in ["storage","clan"]:
+        _render()
+
+func set_clan_storage_notice(message: String, pending: bool) -> void:
+    clan_storage_notice = message.left(240)
+    clan_storage_pending = pending
+    if visible and service in ["storage","clan"]:
+        _render()
+
+func set_personal_storage_loading(busy: bool, pending: bool) -> void:
+    personal_storage_busy = busy
+    personal_storage_pending = pending
+    if visible and service == "storage":
+        _render()
+
+func set_personal_storage_notice(message: String, pending: bool) -> void:
+    personal_storage_notice = message.left(240)
+    personal_storage_pending = pending
+    if visible and service == "storage":
+        _render()
+
+func set_inventory_loading(busy: bool, pending: bool) -> void:
+    inventory_busy = busy
+    inventory_pending = pending
+    if visible and service == "forge":
+        _render()
+
+func set_inventory_notice(message: String, pending: bool) -> void:
+    inventory_notice = message.left(240)
+    inventory_pending = pending
+    if visible and service == "forge":
+        _render()
+
+func set_forge_loading(busy: bool, pending: bool) -> void:
+    forge_busy = busy
+    forge_pending = pending
+    if visible and service == "forge":
+        _render()
+
+func set_forge_notice(message: String, pending: bool) -> void:
+    forge_notice = message.left(240)
+    forge_pending = pending
+    if visible and service == "forge":
+        _render()
 
 func set_merchant_loading(busy: bool, pending: bool) -> void:
     merchant_busy = busy
@@ -443,6 +708,7 @@ func apply_authoritative_snapshot(snapshot: Dictionary) -> void:
     if not snapshot.has("data") or not (snapshot["data"] is Dictionary):
         return
     authoritative = (snapshot["data"] as Dictionary).duplicate(true)
+    authoritative["saveVersion"] = int(snapshot.get("version", 0))
     has_verified_state = true
     _render()
 
@@ -1007,29 +1273,23 @@ func _show_forge() -> void:
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
     _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
+    if not forge_notice.is_empty():
+        _body.add_child(_label(forge_notice, 12, GOLD))
+    if forge_pending:
+        var retry := _button("ПРОВЕРИТЬ ТО ЖЕ СОЗДАНИЕ", not forge_busy)
+        retry.pressed.connect(func(): forge_retry_requested.emit())
+        _body.add_child(retry)
+    var refresh := _button("ОБНОВИТЬ ОСТАТКИ С СЕРВЕРА PPA")
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("forge"))
+    _body.add_child(refresh)
+    if has_verified_state and authoritative.get("service") == "forge" \
+        and authoritative.get("readOnly") == true:
+        _body.add_child(_label("Материалы и валюта подтверждены PPA · версия " +
+            str(authoritative.get("saveVersion", "—")), 11, GOLD))
+    else:
+        _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
     if tab == "enhance":
-        _section("ЗАТОЧКА · ВЫБОР ЭКИПИРОВКИ", "Вещь, заточка и руна выбираются отдельно. Надетые предметы тоже доступны.")
-        var chosen := HBoxContainer.new()
-        chosen.name = "NpcForgeSelectedSlots"
-        chosen.add_theme_constant_override("separation", 6)
-        _body.add_child(chosen)
-        for role in ["equipment", "stone", "rune"]:
-            var panel := PanelContainer.new()
-            panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            panel.add_theme_stylebox_override("panel", _style(Color("#141A20"), GOLD if role == _forge_filter else EDGE, 6))
-            chosen.add_child(panel)
-            var name_label := {"equipment":"ВЕЩЬ", "stone":"ЗАТОЧКА", "rune":"РУНА"}
-            var thing := _chosen_item(str(_forge_keys.get(role, "")))
-            panel.add_child(_label(str(name_label[role]) + "\n" +
-                (str(thing.get("name", "◇ пусто")).substr(0, 23)), 11, GOLD if not thing.is_empty() else SUB))
-        _choice_tiles([
-            {"key":"equipment","label":"ВЕЩИ"},
-            {"key":"stone","label":"ЗАТОЧКИ"},
-            {"key":"rune","label":"РУНЫ"}], _forge_filter, _set_forge_filter)
-        _add_picker(_forge_filter, str(_forge_keys.get(_forge_filter, "")), _choose_forge)
-        _details(str(_forge_keys.get(_forge_filter, "")))
-        _mini_row("Шанс успеха / ресурсы", "рассчитывает сервер")
-        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        _show_authoritative_enhancement()
     elif tab == "rune_fusion":
         _message("СЛИЯНИЕ РУН", "Отображаются реальные руны из отдельной сумки персонажа. Слияние пока не выполняется.")
         if _player_view_readonly.is_empty():
@@ -1042,6 +1302,195 @@ func _show_forge() -> void:
         _show_original_forge_recipes()
     _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
 
+func _choose_enhancement_item(uid: String) -> void:
+    _enhance_uid = uid
+    _render()
+
+func _set_enhancement_mode(mode: String) -> void:
+    if mode in ["normal", "normal_rune", "premium", "premium_rune"]:
+        _enhance_mode = mode
+    _render()
+
+func _request_real_enhancement(uid: String, mode: String, version: int) -> void:
+    if not visible or service != "forge" or forge_busy or forge_pending \
+        or not forge_actions.has("enhance") or not _owns_verified_state(forge_state) \
+        or int(forge_state.get("version", 0)) != version:
+        return
+    var match_found := false
+    for saved in forge_state.get("enhanceItems", []):
+        if saved is Dictionary and str(saved.get("uid", "")) == uid \
+            and int(saved.get("enh", -1)) < 7 and not bool(saved.get("special", false)):
+            match_found = true
+            break
+    if not match_found:
+        return
+    forge_action_requested.emit({"action":"enhance", "uid":uid, "stone":mode, "version":version})
+
+func _request_original_equipment_move(action: String, target: String, version: int) -> void:
+    if not visible or service != "forge" or inventory_busy or inventory_pending \
+        or not inventory_actions.has(action) or not _owns_verified_state(inventory_state) \
+        or version != int(inventory_state.get("version", -1)):
+        return
+    if action == "unequip":
+        var equipped: Variant = inventory_state.get("equipped", {})
+        if not (equipped is Dictionary) or not ((equipped as Dictionary).get(target) is Dictionary):
+            return
+        inventory_action_requested.emit({"action":"unequip","slot":target,"version":version})
+    elif action == "equip":
+        var match_found := false
+        for entry in inventory_state.get("bag", []):
+            if entry is Dictionary and str(entry.get("uid","")) == target:
+                match_found = true
+                break
+        if match_found:
+            inventory_action_requested.emit({"action":"equip","uid":target,"version":version})
+
+func _show_shared_equipment_tools() -> void:
+    _section("ЭКИПИРОВКА · ТОТ ЖЕ ПЕРСОНАЖ",
+        "Снять вещь для заточки и надеть обратно · только через общий сервер PPA.")
+    if not inventory_notice.is_empty():
+        _body.add_child(_label(inventory_notice, 11, GOLD))
+    if inventory_pending:
+        var retry := _button("ПРОВЕРИТЬ ПРЕЖНЕЕ ПЕРЕМЕЩЕНИЕ", not inventory_busy)
+        retry.pressed.connect(func(): inventory_retry_requested.emit())
+        _body.add_child(retry)
+    if not _owns_verified_state(inventory_state) or not (inventory_state.get("equipped") is Dictionary):
+        _body.add_child(_label("Ожидаем подтверждённую серверную экипировку.", 11, SUB))
+        return
+    var server_version := int(inventory_state.get("version", 0))
+    var action_allowed := not inventory_busy and not inventory_pending
+    var worn: Dictionary = inventory_state.get("equipped", {})
+    var grid := GridContainer.new()
+    grid.columns = 2
+    _body.add_child(grid)
+    for slot in worn:
+        var gear: Variant = worn[slot]
+        if not (gear is Dictionary):
+            continue
+        var name_text := str((gear as Dictionary).get("name","Вещь")).left(24)
+        var b := _button("СНЯТЬ · " + name_text, inventory_actions.has("unequip") and action_allowed)
+        b.name = "PPARealUnequip_" + str(slot)
+        b.pressed.connect(_request_original_equipment_move.bind("unequip", str(slot), server_version))
+        grid.add_child(b)
+    _body.add_child(_label("Сумка · выбери вещь для экипировки:", 11, SUB))
+    var bag: Variant = inventory_state.get("bag", null)
+    if bag is Array:
+        var bag_grid := GridContainer.new()
+        bag_grid.columns = 2
+        _body.add_child(bag_grid)
+        for entry in bag:
+            if not (entry is Dictionary):
+                continue
+            var uid := str(entry.get("uid", ""))
+            if uid.is_empty():
+                continue
+            var slot_name := str(entry.get("slot", ""))
+            if slot_name not in ["weapon", "helmet", "armor", "gloves", "ring", "legs",
+                "boots", "necklace", "artifact", "cloak", "wings", "pet"]:
+                continue
+            var label_text := str(entry.get("name", "Вещь")).left(22)
+            var b := _button("НАДЕТЬ · " + label_text,
+                inventory_actions.has("equip") and action_allowed)
+            b.name = "PPARealEquip_" + uid.to_utf8_buffer().hex_encode()
+            b.pressed.connect(_request_original_equipment_move.bind("equip", uid, server_version))
+            bag_grid.add_child(b)
+
+func _show_authoritative_enhancement() -> void:
+    _show_shared_equipment_tools()
+    _section("ЗАТОЧКА PPA · ОРИГИНАЛЬНЫЕ ВЕЩИ",
+        "Сервер проверяет камни, шанс и сохранение. Только предметы в сумке: надетую вещь сначала нужно снять.")
+    if not _owns_verified_state(forge_state) or not (forge_state.get("enhanceItems") is Array):
+        _message("ЖДЁМ ОБЩУЮ КУЗНИЦУ", "Заточка недоступна без подтверждённого сохранения сервера PPA.")
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        return
+    var items: Array = forge_state.get("enhanceItems", [])
+    var selected: Dictionary = {}
+    for raw in items:
+        if raw is Dictionary and str(raw.get("uid", "")) == _enhance_uid:
+            selected = raw
+            break
+    if selected.is_empty() and not items.is_empty() and items[0] is Dictionary:
+        selected = items[0]
+        _enhance_uid = str(selected.get("uid", ""))
+    var available := GridContainer.new()
+    available.name = "PPARealForgeItemGrid"
+    available.columns = 2 if size.x < 620.0 else 3
+    available.add_theme_constant_override("h_separation", 5)
+    available.add_theme_constant_override("v_separation", 5)
+    _body.add_child(available)
+    for entry in items:
+        if not (entry is Dictionary):
+            continue
+        var uid := str(entry.get("uid", ""))
+        if uid.is_empty():
+            continue
+        var label_text := str(entry.get("name", "Вещь")).left(24) + "  +" + str(entry.get("enh", 0))
+        var choose := _button(label_text, uid != _enhance_uid)
+        choose.name = "PPAEnhanceItem_" + uid.to_utf8_buffer().hex_encode()
+        choose.pressed.connect(_choose_enhancement_item.bind(uid))
+        available.add_child(choose)
+    if selected.is_empty():
+        _message("НЕТ ВЕЩЕЙ", "В серверной сумке нет предметов для заточки.")
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        return
+    _section(str(selected.get("name", "Вещь")) + " · +" + str(selected.get("enh", 0)),
+        "Заточка конкретного UID из исходного инвентаря Telegram PPA.")
+    var supplied_stones: Variant = forge_state.get("stones", null)
+    var supplies: Dictionary = supplied_stones as Dictionary if supplied_stones is Dictionary else {}
+    _mini_row("Обычные камни", str(supplies.get("normal", "нет данных")))
+    _mini_row("Премиум камни", str(supplies.get("premium", "нет данных")))
+    _mini_row("Руны заточки", str(supplies.get("rune", "нет данных")))
+    _choice_tiles([
+        {"key":"normal", "label":"ОБЫЧНЫЙ"},
+        {"key":"normal_rune", "label":"ОБЫЧНЫЙ + РУНА"},
+        {"key":"premium", "label":"ПРЕМИУМ"},
+        {"key":"premium_rune", "label":"ПРЕМИУМ + РУНА"}
+    ], _enhance_mode, _set_enhancement_mode)
+    var level := int(selected.get("enh", 0))
+    var premium := _enhance_mode.begins_with("premium")
+    var rune := _enhance_mode.ends_with("_rune")
+    var rule_data: Variant = forge_state.get("enhanceRules", null)
+    var table_values: Variant = (rule_data as Dictionary).get("rune" if rune else "normal", []) if rule_data is Dictionary else []
+    var chance := -1
+    if table_values is Array and level >= 0 and level < (table_values as Array).size():
+        chance = int(table_values[level])
+    _mini_row("Следующая заточка", "+" + str(level + 1))
+    _mini_row("Вероятность успеха", str(chance) + "%" if chance >= 0 else "не подтверждена")
+    _mini_row("Неудача", "Вещь и + сохраняются" if premium else
+        ("Эпик: откат −1" if str(selected.get("rarity", "")) == "epic" else "ВЕЩЬ МОЖЕТ СГОРЕТЬ"))
+    var requires := "premium" if premium else "normal"
+    var stock: Variant = supplies.get(requires, null)
+    var rune_stock: Variant = supplies.get("rune", null)
+    var enough: bool = stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
+    var blocked: bool = bool(selected.get("special", false)) or level >= 7 \
+        or (not premium and level >= 5) or chance < 0 or not enough \
+        or not forge_actions.has("enhance") or forge_busy or forge_pending
+    if blocked:
+        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
+        if bool(selected.get("special", false)):
+            _body.add_child(_label("Особый питомец пока требует дополнительной серверной проверки.", 11, SUB))
+        return
+    var uid := str(selected.get("uid", ""))
+    var mode := _enhance_mode
+    var version := int(forge_state.get("version", 0))
+    var action := _button("ЗАТОЧИТЬ · +" + str(level + 1), true)
+    action.name = "PPARealForgeEnhance"
+    action.pressed.connect(func():
+        if premium:
+            _request_real_enhancement(uid, mode, version)
+        else:
+            var confirm := ConfirmationDialog.new()
+            confirm.dialog_text = ("При неудаче эпик потеряет уровень заточки. Продолжить?"
+                if str(selected.get("rarity", "")) == "epic" else
+                "При неудаче вещь может сгореть без восстановления. Продолжить?")
+            add_child(confirm)
+            confirm.confirmed.connect(func():
+                _request_real_enhancement(uid, mode, version)
+                confirm.queue_free())
+            confirm.canceled.connect(func(): confirm.queue_free())
+            confirm.popup_centered(Vector2i(430, 180)))
+    _body.add_child(action)
+
 # Original live PPA blacksmithFrame catalog (generated at build from its public
 # srcdoc). Inventory/balances are ONLY from the authenticated game-state save.
 # This intentionally never emits a craft/enhance/spend request.
@@ -1051,6 +1500,20 @@ func _set_craft_rarity(key: String) -> void:
     _render()
 
 func _forge_owned_material(material_name: String) -> Variant:
+    # Most recent signed forge projection wins over a potentially stale
+    # full save. No local stash/resource totals or invented zero values.
+    if service == "forge" and not forge_state.is_empty() and _owns_verified_state(forge_state):
+        var live: Variant = forge_state.get("feathers", null) if material_name == "Перо Феникса" else forge_state.get("materials", null)
+        if live is Dictionary:
+            return (live as Dictionary).get("phoenix" if material_name == "Перо Феникса" else material_name, null)
+        return null
+    if service == "forge" and has_verified_state \
+        and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
+        if material_name == "Перо Феникса":
+            var live_feathers: Variant = authoritative.get("feathers", null)
+            return (live_feathers as Dictionary).get("phoenix", null) if live_feathers is Dictionary else null
+        var live_materials: Variant = authoritative.get("materials", null)
+        return (live_materials as Dictionary).get(material_name, null) if live_materials is Dictionary else null
     if _player_view_readonly.is_empty():
         return null
     if material_name == "Перо Феникса":
@@ -1110,6 +1573,13 @@ func _show_original_forge_recipes() -> void:
         _body.add_child(_item_picture(art, 88))
     var money: Dictionary = _player_view_readonly.get("money", {})
     var balance: Variant = money.get("ppa", null)
+    if service == "forge" and has_verified_state \
+        and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
+        var live_currency: Variant = authoritative.get("currency", null)
+        balance = (live_currency as Dictionary).get("ppa", null) if live_currency is Dictionary else null
+    if service == "forge" and not forge_state.is_empty() and _owns_verified_state(forge_state):
+        var wallet: Variant = forge_state.get("wallet", null)
+        balance = (wallet as Dictionary).get("ppa", null) if wallet is Dictionary else null
     var price := int(chosen.get("price",0))
     _mini_row("Цена · PPA",
         str(price) + (" · есть " + str(balance) if balance != null else " · баланс не загружен"))
@@ -1134,10 +1604,38 @@ func _show_original_forge_recipes() -> void:
         _body.add_child(_label("Не хватает валюты или материалов для выбранного рецепта.", 11, Color("#E2A17C")))
     else:
         _body.add_child(_label("Ресурсов достаточно по последнему снимку; сервер всё равно должен проверить их заново.", 11, GOLD))
-    _locked_action("СОЗДАТЬ")
-    _body.add_child(_label(
-        "Предпросмотр 1:1 · создание появится только после атомарной серверной операции.",
-        11, SUB))
+    # Enable ONLY recipes advertised by the currently authenticated canonical
+    # PPA Forge server. Compare costs/materials with displayed original cards:
+    # stale catalogs or client-supplied prices can NEVER authorize a craft.
+    var offered := false
+    if tab in ["equipment", "legendary", "accessories", "pets"] \
+        and not forge_state.is_empty() and _owns_verified_state(forge_state) \
+        and str(forge_state.get("catalogRecipeSha", "")) == str(LIVE_FORGE.CATALOG.get("recipe_sha256", "")):
+        for server_row in forge_state.get("offers", []):
+            if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
+                and int(server_row.get("price", -1)) == price \
+                and server_row.get("currency") == "ppa" \
+                and server_row.get("materials") == chosen.get("materials", []):
+                offered = true
+                break
+    var can_craft := offered and forge_actions.has("craft") and not forge_busy \
+        and not forge_pending and all_known and enough \
+        and int(forge_state.get("version", 0)) > 0
+    if can_craft:
+        var create_button := _button("СОЗДАТЬ", true)
+        create_button.name = "PPARealForgeCraft"
+        create_button.pressed.connect(func():
+            if visible and service == "forge" and not forge_busy and not forge_pending \
+                and forge_actions.has("craft") and _owns_verified_state(forge_state):
+                forge_action_requested.emit({"id":selected_id,
+                    "version":int(forge_state.get("version", 0))}))
+        _body.add_child(create_button)
+    else:
+        _locked_action("СОЗДАТЬ")
+        if not offered:
+            _body.add_child(_label(
+                "Рецепт не подтверждён общим сервером или каталог PPA обновился.", 11, SUB))
+    _body.add_child(_label("Создание выполняет сервер PPA, не Godot.", 11, SUB))
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
@@ -1163,6 +1661,26 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
             var seen: Dictionary = _player_view_readonly.get("storageFieldsPresent", {})
             if bool(seen.get(scope, false)):
                 saved_items = scopes.get(scope, [])
+                known = true
+    if service == "storage" and _owns_verified_state(personal_storage_state):
+        if scope == "inventory" or scope == "personal":
+            var live_key := "bag" if scope == "inventory" else "personal"
+            var live: Variant = personal_storage_state.get(live_key, null)
+            if live is Array:
+                saved_items = live
+                known = true
+    # Clan items are stored in a shared clan D1 record, NOT player's
+    # legacy storage.clan array. Display only signed clan state.
+    if scope == "clan":
+        known = false
+        saved_items = []
+        if _owns_verified_state(clan_storage_state) and clan_storage_state.get("items") is Array:
+            saved_items = clan_storage_state["items"]
+            known = true
+        elif service == "storage" and _owns_verified_state(clan_state):
+            var clan_storage: Variant = clan_state.get("storage", null)
+            if clan_storage is Dictionary and (clan_storage as Dictionary).get("items") is Array:
+                saved_items = (clan_storage as Dictionary)["items"]
                 known = true
     var occupied := 0
     for raw in saved_items:
@@ -1203,6 +1721,174 @@ func _storage_pair(scope: String) -> void:
     _storage_slot_panel(split, "inventory")
     _storage_slot_panel(split, scope)
 
+func _select_personal_uid(which: String, uid: String) -> void:
+    if which == "bag":
+        _storage_bag_uid = uid
+    elif which == "personal":
+        _storage_personal_uid = uid
+
+func _request_personal_storage_move(action: String, uid: String, version: int) -> void:
+    if not visible or service != "storage" or tab != "personal" \
+        or personal_storage_busy or personal_storage_pending \
+        or not personal_storage_actions.has(action) \
+        or not _owns_verified_state(personal_storage_state) \
+        or int(personal_storage_state.get("version", -1)) != version:
+        return
+    var records: Variant = personal_storage_state.get("bag", null) if action == "put" else personal_storage_state.get("personal", null)
+    if not (records is Array):
+        return
+    var matches := 0
+    for entry in records:
+        if entry is Dictionary and str(entry.get("uid", "")) == uid and not uid.is_empty():
+            matches += 1
+    if matches != 1:
+        return
+    personal_storage_action_requested.emit({"action":action,"uid":uid,"version":version})
+
+func _show_personal_storage_controls() -> void:
+    if not personal_storage_notice.is_empty():
+        _body.add_child(_label(personal_storage_notice, 12, GOLD))
+    if personal_storage_pending:
+        var pending_button := _button("ПРОВЕРИТЬ ТО ЖЕ ПЕРЕМЕЩЕНИЕ", not personal_storage_busy)
+        pending_button.pressed.connect(func(): personal_storage_retry_requested.emit())
+        _body.add_child(pending_button)
+    if not _owns_verified_state(personal_storage_state):
+        _body.add_child(_label("Ожидаем серверный список предметов PPA.", 11, SUB))
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+        return
+    var version := int(personal_storage_state.get("version", 0))
+    var bag: Array = personal_storage_state.get("bag", [])
+    var stored: Array = personal_storage_state.get("personal", [])
+    _mini_row("Настоящая сумка", str(bag.size()) + " / 100")
+    _mini_row("Личный склад", str(stored.size()) + " / 200")
+    for direction in ["put","take"]:
+        var source_items: Array = bag if direction == "put" else stored
+        var which := "bag" if direction == "put" else "personal"
+        var chosen_uid := _storage_bag_uid if direction == "put" else _storage_personal_uid
+        var chooser := OptionButton.new()
+        chooser.name = "PPAStorageChoose_" + direction
+        var selected_index := 0
+        for entry in source_items:
+            if not (entry is Dictionary):
+                continue
+            var uid := str(entry.get("uid", ""))
+            if uid.is_empty():
+                continue
+            var text_value := str(entry.get("name", "Предмет")).left(28) + " · +" + str(entry.get("enh", 0))
+            var index := chooser.item_count
+            chooser.add_item(text_value)
+            chooser.set_item_metadata(index, uid)
+            if uid == chosen_uid:
+                selected_index = index
+        if chooser.item_count > 0:
+            chooser.select(selected_index)
+            chosen_uid = str(chooser.get_item_metadata(selected_index))
+            _select_personal_uid(which, chosen_uid)
+        chooser.item_selected.connect(func(i: int): _select_personal_uid(which, str(chooser.get_item_metadata(i))))
+        _body.add_child(chooser)
+        var can_move := chooser.item_count > 0 and not personal_storage_busy and not personal_storage_pending \
+            and personal_storage_actions.has(direction) \
+            and (stored.size() < 200 if direction == "put" else bag.size() < 100)
+        var button := _button("ПОЛОЖИТЬ В СКЛАД" if direction == "put" else "ЗАБРАТЬ В СУМКУ", can_move)
+        button.name = "PPARealPersonalStorage_" + direction
+        button.pressed.connect(func():
+            var selected := _storage_bag_uid if direction == "put" else _storage_personal_uid
+            _request_personal_storage_move(direction, selected, version))
+        _body.add_child(button)
+
+func _choose_clan_vault_uid(which: String, uid: String) -> void:
+    if which == "bag":
+        _clan_put_uid = uid
+    elif which == "items":
+        _clan_take_uid = uid
+
+func _request_clan_storage_move(action: String, uid: String, version: int, revision: String) -> void:
+    if not visible or service not in ["storage","clan"] or tab != "clan" and tab != "storage" \
+        or clan_storage_busy or clan_storage_pending \
+        or not clan_storage_actions.has(action) \
+        or not _owns_verified_state(clan_storage_state) \
+        or int(clan_storage_state.get("version", -1)) != version \
+        or str(clan_storage_state.get("clanRevision", "")) != revision:
+        return
+    if action == "put" and not bool(clan_storage_state.get("canDeposit", false)):
+        return
+    var source: Variant = clan_storage_state.get("bag", null) if action == "put" else clan_storage_state.get("items", null)
+    if not (source is Array):
+        return
+    var count := 0
+    for entry in source:
+        if entry is Dictionary and str(entry.get("uid", "")) == uid and not uid.is_empty():
+            if action == "put" or bool(entry.get("canTake", false)):
+                count += 1
+    if count != 1:
+        return
+    clan_storage_action_requested.emit({"action":action,"uid":uid,"version":version,"clanRevision":revision})
+
+func _clan_storage_choice_selected(index: int, chooser: OptionButton, action: String) -> void:
+    if index < 0 or index >= chooser.item_count:
+        return
+    _choose_clan_vault_uid("bag" if action == "put" else "items",
+        str(chooser.get_item_metadata(index)))
+
+func _submit_selected_clan_storage_move(action: String, version: int, revision: String) -> void:
+    var uid := _clan_put_uid if action == "put" else _clan_take_uid
+    _request_clan_storage_move(action, uid, version, revision)
+
+func _show_clan_storage_controls() -> void:
+    _section("КЛАНОВЫЙ СКЛАД · ОБЩИЙ МИР",
+        "Сервер одновременно переносит вещь между сумкой и общим складом клана.")
+    if not clan_storage_notice.is_empty():
+        _body.add_child(_label(clan_storage_notice, 12, GOLD))
+    if clan_storage_pending:
+        var pending_button := _button("ПРОВЕРИТЬ ПРЕЖНИЙ ПЕРЕНОС", not clan_storage_busy)
+        pending_button.pressed.connect(func(): clan_storage_retry_requested.emit())
+        _body.add_child(pending_button)
+    if not _owns_verified_state(clan_storage_state):
+        _body.add_child(_label("Ожидаем подтверждённое состояние кланового склада PPA.", 11, SUB))
+        _locked_action("КЛАНОВЫЙ ПЕРЕНОС")
+        return
+    var version := int(clan_storage_state.get("version", 0))
+    var revision := str(clan_storage_state.get("clanRevision", ""))
+    var bag: Array = clan_storage_state.get("bag", [])
+    var stored: Array = clan_storage_state.get("items", [])
+    _mini_row("Инвентарь", str(bag.size()) + " / 100")
+    _mini_row("Клановый склад", str(stored.size()) + " / 500")
+    if not bool(clan_storage_state.get("storageUnlocked", false)):
+        _body.add_child(_label("Склад ещё не открыт главой клана.", 11, SUB))
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+        return
+    for action in ["put","take"]:
+        var from_items: Array = bag if action == "put" else stored
+        var choices := OptionButton.new()
+        choices.name = "PPAClanStorageChoose_" + action
+        var preferred := _clan_put_uid if action == "put" else _clan_take_uid
+        var selected := 0
+        for entry in from_items:
+            if not (entry is Dictionary):
+                continue
+            var uid := str(entry.get("uid", ""))
+            if uid.is_empty() or action == "take" and not bool(entry.get("canTake", false)):
+                continue
+            var index := choices.item_count
+            choices.add_item(str(entry.get("name", "Вещь")).left(24) + " · +" + str(entry.get("enh", 0)))
+            choices.set_item_metadata(index, uid)
+            if preferred == uid:
+                selected = index
+        if choices.item_count > 0:
+            choices.select(selected)
+            _choose_clan_vault_uid("bag" if action == "put" else "items",
+                str(choices.get_item_metadata(selected)))
+        choices.item_selected.connect(_clan_storage_choice_selected.bind(choices, action))
+        _body.add_child(choices)
+        var allowed: bool = choices.item_count > 0 and clan_storage_actions.has(action) \
+            and not clan_storage_busy and not clan_storage_pending \
+            and (bool(clan_storage_state.get("canDeposit", false)) and stored.size() < 500 \
+                if action == "put" else bag.size() < 100)
+        var button := _button("ВНЕСТИ В КЛАН" if action == "put" else "ЗАБРАТЬ ИЗ КЛАНА", allowed)
+        button.name = "PPARealClanStorage_" + action
+        button.pressed.connect(_submit_selected_clan_storage_move.bind(action, version, revision))
+        _body.add_child(button)
+
 func _show_storage() -> void:
     var captions := {"personal":"ЛИЧНОЕ ХРАНИЛИЩЕ", "clan":"КЛАНОВОЕ ХРАНИЛИЩЕ",
         "premium":"ПРЕМИУМ ХРАНИЛИЩЕ", "sort":"СОРТИРОВКА"}
@@ -1216,16 +1902,162 @@ func _show_storage() -> void:
         _locked_action("СОХРАНИТЬ ПОРЯДОК")
         return
     _storage_pair(tab)
-    if tab == "clan":
-        _message("КЛАНОВЫЕ ПРАВА", "Переносить вещи смогут только участники с подтверждёнными правами.")
+    if tab == "personal":
+        _show_personal_storage_controls()
+    elif tab == "clan":
+        _show_clan_storage_controls()
     elif tab == "premium":
         _message("ПРЕМИУМ ДОСТУП", "Содержимое премиум-хранилища читается только с сервера PPA.")
-    _locked_action("ПОЛОЖИТЬ")
-    _locked_action("ЗАБРАТЬ")
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+
+func _auction_matches(item: Dictionary) -> bool:
+    if _auction_category == "all":
+        return true
+    var slot_name := str(item.get("slot", ""))
+    var kind := str(item.get("kind", ""))
+    if _auction_category == "weapon":
+        return slot_name == "weapon"
+    if _auction_category == "armor":
+        return slot_name in ["helmet","armor","gloves","legs","boots"]
+    if _auction_category == "accessories":
+        return slot_name in ["ring","necklace","artifact","cloak","wings","pet"]
+    if _auction_category == "consumables":
+        return kind in ["consumable","stone","feather"]
+    if _auction_category == "materials":
+        return kind == "material"
+    if _auction_category == "books":
+        return kind == "grimoire"
+    if _auction_category == "quest":
+        return kind == "quest"
+    return true
+
+func _auction_sell_uid_changed(index: int, chooser: OptionButton) -> void:
+    if index >= 0 and index < chooser.item_count:
+        _auction_sell_uid = str(chooser.get_item_metadata(index))
+
+func _send_real_auction_action(action: String, fields: Dictionary) -> void:
+    if not visible or service != "auction" or not _owns_verified_state(auction_state) \
+        or auction_loading or auction_pending or not auction_actions.has(action) \
+        or not bool(auction_state.get("settlementEnabled", false)):
+        return
+    var version := int(auction_state.get("version", 0))
+    if version <= 0:
+        return
+    var valid := false
+    if action == "place":
+        var uid := str(fields.get("uid", ""))
+        for entry in auction_state.get("bag", []):
+            if entry is Dictionary and str(entry.get("uid", "")) == uid:
+                valid = int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
+                break
+    elif action == "buy":
+        for entry in auction_state.get("lots", []):
+            if entry is Dictionary and bool(entry.get("canBuy", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")) \
+                and float(entry.get("price", -1)) == float(fields.get("expectedUnitPrice", -2)) \
+                and str(entry.get("currency", "")) == str(fields.get("currency", "")):
+                valid = true
+                break
+    elif action == "recover":
+        for entry in auction_state.get("recoverable", []):
+            if entry is Dictionary and bool(entry.get("canRecover", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")):
+                valid = true
+                break
+    elif action == "claim":
+        if bool(auction_state.get("serverCreditClaimsEnabled", false)):
+            for entry in auction_state.get("pendingCredits", []):
+                if entry is Dictionary and bool(entry.get("canClaim", false)) \
+                    and str(entry.get("id", "")) == str(fields.get("creditId", "")):
+                    valid = true
+                    break
+    elif action == "cancel":
+        for entry in auction_state.get("mine", []):
+            if entry is Dictionary and bool(entry.get("canCancel", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")):
+                valid = true
+                break
+    if not valid:
+        return
+    var payload := fields.duplicate(true)
+    payload["action"] = action
+    payload["version"] = version
+    auction_action_requested.emit(payload)
+
+func _auction_buy_lot(lotId: String, price: float, currency: String) -> void:
+    _send_real_auction_action("buy", {"lotId":lotId,"expectedUnitPrice":price,"currency":currency})
+
+func _auction_cancel_lot(lotId: String) -> void:
+    _send_real_auction_action("cancel", {"lotId":lotId})
+
+func _auction_claim_credit(creditId: String) -> void:
+    _send_real_auction_action("claim", {"creditId":creditId})
+
+func _auction_recover_lot(lotId: String) -> void:
+    _send_real_auction_action("recover", {"lotId":lotId})
+
+func _auction_place_selected() -> void:
+    _send_real_auction_action("place", {"uid":_auction_sell_uid,
+        "price":_asking_price,"currency":_asking_currency.to_lower()})
+
+func _show_auction_lots(rows: Array, own: bool) -> void:
+    var count := 0
+    for raw in rows:
+        if not (raw is Dictionary):
+            continue
+        var entry: Dictionary = raw
+        var item: Variant = entry.get("item", null)
+        if not (item is Dictionary):
+            continue
+        if not own and not _auction_matches(item):
+            continue
+        var price: Variant = entry.get("price", null)
+        var currency := str(entry.get("currency", "ppa")).to_upper()
+        var desc := str(item.get("name", "Предмет PPA")).left(45)
+        desc += "  +" + str(item.get("enh", 0))
+        _mini_row(desc, str(entry.get("qty", 1)) + " шт. · " + str(price) + " " + currency)
+        _body.add_child(_label("Продавец: " + str(entry.get("sellerName", "Игрок")).left(24), 11, SUB))
+        var available := not auction_loading and not auction_pending and \
+            bool(auction_state.get("settlementEnabled", false))
+        if own and auction_actions.has("cancel") and bool(entry.get("canCancel", false)):
+            var cancel := _button("СНЯТЬ С ПРОДАЖИ", available)
+            cancel.name = "PPARealAuctionCancel_" + str(entry.get("id", ""))
+            cancel.pressed.connect(_auction_cancel_lot.bind(str(entry.get("id", ""))))
+            _body.add_child(cancel)
+        elif not own and auction_actions.has("buy") and bool(entry.get("canBuy", false)):
+            var buy := _button("КУПИТЬ · " + str(price) + " " + currency, available)
+            buy.name = "PPARealAuctionBuy_" + str(entry.get("id", ""))
+            buy.pressed.connect(_auction_buy_lot.bind(str(entry.get("id", "")),
+                float(entry.get("price", 0)), str(entry.get("currency", ""))))
+            _body.add_child(buy)
+        count += 1
+        if count >= 50:
+            break
+    if count == 0:
+        _body.add_child(_label("Подходящих активных объявлений нет.", 12, SUB))
+    elif count >= 50:
+        _body.add_child(_label("Показаны первые 50 лотов из серверной выборки.", 11, SUB))
 
 func _show_auction() -> void:
-    var captions := {"all":"КУПИТЬ", "mine":"МОИ ЛОТЫ", "sell":"ПРОДАТЬ"}
-    _section("АУКЦИОН · " + str(captions.get(tab, "")), "Выбор вещи и параметры лота независимы от операций на сервере PPA.")
+    var verified := _owns_verified_state(auction_state)
+    _section("АУКЦИОН · PPA", "Реальные лоты и начисления из общего сервера Telegram PPA.")
+    if not auction_notice.is_empty():
+        _body.add_child(_label(auction_notice, 11, GOLD))
+    if auction_pending:
+        var retry := _button("ПРОВЕРИТЬ ТУ ЖЕ СДЕЛКУ", not auction_loading)
+        retry.pressed.connect(func(): auction_retry_requested.emit())
+        _body.add_child(retry)
+    var refresh := _button("ОБНОВИТЬ АУКЦИОН", not auction_loading)
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("auction"))
+    _body.add_child(refresh)
+    if not verified:
+        _message("ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ", "Без подтверждённого персонажа PPA аукцион недоступен.")
+        _locked_action("КУПИТЬ / ПРОДАТЬ")
+        return
+    var wallet: Dictionary = auction_state.get("wallet", {})
+    _mini_row("PPA", str(wallet.get("ppa", "—")))
+    _mini_row("Gram", str(wallet.get("gram", "—")))
+    _mini_row("Комиссия аукциона", "10% · начисление продавцу 90%")
     if tab != "mine":
         _choice_tiles([
             {"key":"all","label":"ВСЕ"}, {"key":"weapon","label":"ОРУЖИЕ"},
@@ -1234,53 +2066,109 @@ func _show_auction() -> void:
             {"key":"books","label":"КНИГИ"}, {"key":"quest","label":"КВЕСТОВЫЕ"},
             {"key":"misc","label":"РАЗНОЕ"}], _auction_category, _auction_filter)
     if tab == "all":
-        _message("ТОРГОВЫЕ ПРЕДЛОЖЕНИЯ", "Реальные объявления появятся после подключения серверного аукциона.")
-        _locked_action("КУПИТЬ")
+        _section("АКТИВНЫЕ ЛОТЫ", "Общий рынок PPA · существующие объявления Telegram.")
+        _show_auction_lots(auction_state.get("lots", []), false)
+        _body.add_child(_label("Купить можно только защищённый лот PPA. Старые лоты пока только для просмотра.", 11, SUB))
+    elif tab == "mine":
+        _section("МОИ ЛОТЫ", "Только объявления этого персонажа на общем сервере.")
+        _show_auction_lots(auction_state.get("mine", []), true)
+        _section("ИСТЁКШИЕ ЛОТЫ · ВОЗВРАТ ВЕЩЕЙ",
+            "Непроданная вещь хранится на сервере до безопасного возврата в сумку.")
+        var recoverable: Array = auction_state.get("recoverable", [])
+        if recoverable.is_empty():
+            _body.add_child(_label("Вещей, ожидающих возврата, нет.", 12, SUB))
+        for entry in recoverable.slice(0, 50):
+            if not (entry is Dictionary):
+                continue
+            var lot: Dictionary = entry
+            var item: Variant = lot.get("item", {})
+            var item_name := str(item.get("name", "Вещь")) if item is Dictionary else "Вещь"
+            _mini_row(item_name, "UID · " + str(lot.get("uid", "")).left(22))
+            var enabled: bool = auction_actions.has("recover") and \
+                bool(lot.get("canRecover", false)) and \
+                not auction_pending and not auction_loading and \
+                bool(auction_state.get("settlementEnabled", false)) and \
+                (auction_state.get("bag", []) as Array).size() < 100
+            var reclaim := _button("ВЕРНУТЬ ИЗ ИСТЁКШЕГО ЛОТА", enabled)
+            reclaim.name = "PPARealAuctionRecover_" + str(lot.get("id", ""))
+            reclaim.pressed.connect(_auction_recover_lot.bind(str(lot.get("id", ""))))
+            _body.add_child(reclaim)
+        _section("НАЧИСЛЕНИЯ ПРОДАВЦУ", "Подтверждённые Telegram PPA credits, пока без автоматического списания.")
+        var credits: Array = auction_state.get("pendingCredits", [])
+        if credits.is_empty():
+            _body.add_child(_label("Ожидающих начислений нет.", 12, SUB))
+        for credit in credits.slice(0, 30):
+            if credit is Dictionary:
+                _mini_row("Продажа · " + str(credit.get("lotId", "")).left(20),
+                    str(credit.get("amount", 0)) + " " + str(credit.get("currency", "ppa")).to_upper())
+                if auction_actions.has("claim") and bool(credit.get("canClaim", false)) \
+                    and bool(auction_state.get("serverCreditClaimsEnabled", false)):
+                    var claim := _button("ПОЛУЧИТЬ · " + str(credit.get("amount", 0)), \
+                        not auction_pending and not auction_loading)
+                    claim.name = "PPARealAuctionClaim_" + str(credit.get("id", ""))
+                    claim.pressed.connect(_auction_claim_credit.bind(str(credit.get("id", ""))))
+                    _body.add_child(claim)
+        if not bool(auction_state.get("serverCreditClaimsEnabled", false)):
+            _body.add_child(_label("Выплаты заблокированы, пока Telegram и Godot не используют единый серверный расчёт.", 11, SUB))
     elif tab == "sell":
-        _section("ЧТО ПРОДАЁМ", "Только вещи из инвентаря, подходящие по правилам PPA. Нажми на слот.")
-        _add_picker("sell", _auction_item_key, _choose_auction)
-        _details(_auction_item_key)
-        _section("УСЛОВИЯ ПРОДАЖИ", "Цена, количество и валюта выбираются до отправки лота.")
-        var selected := _chosen_item(_auction_item_key)
+        _section("ПРОДАЖА РЕАЛЬНОЙ ВЕЩИ", "Вещь будет изъята сервером из сумки и сохранена в лоте.")
+        var items: Array = auction_state.get("bag", [])
+        _mini_row("Открыто слотов", str(auction_state.get("maxSellSlots", 0)))
+        _mini_row("Мои активные лоты", str(auction_state.get("mine", []).size()))
+        var choose := OptionButton.new()
+        choose.name = "PPARealAuctionGearPicker"
+        var first_uid := ""
+        var chosen := 0
+        for item in items:
+            if not (item is Dictionary) or str(item.get("uid", "")).is_empty():
+                continue
+            if str(item.get("slot", "")).is_empty():
+                continue
+            var index := choose.item_count
+            choose.add_item(str(item.get("name", "Вещь")).left(25) + " · +" + str(item.get("enh", 0)))
+            choose.set_item_metadata(index, str(item.get("uid", "")))
+            if first_uid.is_empty():
+                first_uid = str(item.get("uid", ""))
+            if str(item.get("uid", "")) == _auction_sell_uid:
+                chosen = index
+        _body.add_child(choose)
+        if choose.item_count > 0:
+            choose.select(chosen)
+            _auction_sell_uid = str(choose.get_item_metadata(chosen))
+        else:
+            _auction_sell_uid = ""
+        choose.item_selected.connect(_auction_sell_uid_changed.bind(choose))
         var settings := GridContainer.new()
-        settings.name = "NpcAuctionListingInputs"
         settings.columns = 2
         settings.add_theme_constant_override("h_separation", 10)
         settings.add_theme_constant_override("v_separation", 8)
         _body.add_child(settings)
-        settings.add_child(_label("Цена за единицу", 12, GOLD))
+        settings.add_child(_label("Цена за вещь", 12, GOLD))
         var price := SpinBox.new()
-        price.name = "NpcAuctionPrice"
+        price.name = "PPARealAuctionPrice"
         price.min_value = 1
         price.max_value = 999999999
         price.step = 1
         price.value = _asking_price
-        price.custom_minimum_size = Vector2(130, 38)
         price.value_changed.connect(_set_asking_price)
         settings.add_child(price)
-        settings.add_child(_label("Количество", 12, GOLD))
-        var amount := SpinBox.new()
-        amount.name = "NpcAuctionQuantity"
-        amount.min_value = 1
-        amount.max_value = maxi(1, int(selected.get("qty", 1)))
-        amount.value = mini(_asking_quantity, int(amount.max_value))
-        amount.custom_minimum_size = Vector2(130, 38)
-        amount.value_changed.connect(_set_asking_qty)
-        settings.add_child(amount)
         settings.add_child(_label("Валюта", 12, GOLD))
         var currency := OptionButton.new()
-        currency.name = "NpcAuctionCurrency"
-        currency.custom_minimum_size = Vector2(130, 38)
+        currency.name = "PPARealAuctionCurrency"
         currency.add_item("PPA")
         currency.add_item("Gram")
         currency.select(0 if _asking_currency == "PPA" else 1)
         currency.item_selected.connect(_set_currency)
         settings.add_child(currency)
-        _mini_row("Комиссия / число свободных лотов", "рассчитает сервер")
-        _locked_action("ВЫСТАВИТЬ ЛОТ")
-    else:
-        _message("МОИ ЛОТЫ", "Только подтверждённые объявления из серверного аукциона.")
-        _locked_action("СНЯТЬ С ПРОДАЖИ")
+        var enabled: bool = auction_actions.has("place") and \
+            bool(auction_state.get("settlementEnabled", false)) and \
+            not auction_loading and not auction_pending and not _auction_sell_uid.is_empty() \
+            and int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
+        var place := _button("ВЫСТАВИТЬ ВЕЩЬ НА АУКЦИОН", enabled)
+        place.name = "PPARealAuctionPlace"
+        place.pressed.connect(_auction_place_selected)
+        _body.add_child(place)
+        _body.add_child(_label("Комиссия при продаже: 10% · вещь не копируется.", 11, SUB))
 
 func _show_clan() -> void:
     if not clan_state.is_empty():
