@@ -1222,7 +1222,8 @@ func _show_original_forge_recipes() -> void:
     # stale catalogs or client-supplied prices can NEVER authorize a craft.
     var offered := false
     if tab in ["equipment", "legendary", "accessories", "pets"] \
-        and not forge_state.is_empty() and _owns_verified_state(forge_state):
+        and not forge_state.is_empty() and _owns_verified_state(forge_state) \
+        and str(forge_state.get("catalogSourceSha", "")) == str(LIVE_FORGE.CATALOG.get("sha256", "")):
         for server_row in forge_state.get("offers", []):
             if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
                 and int(server_row.get("price", -1)) == price \
@@ -1246,7 +1247,7 @@ func _show_original_forge_recipes() -> void:
         _locked_action("СОЗДАТЬ")
         if not offered:
             _body.add_child(_label(
-                "Этот рецепт ещё не подтверждён общим сервером PPA.", 11, SUB))
+                "Рецепт не подтверждён общим сервером или каталог PPA обновился.", 11, SUB))
     _body.add_child(_label("Создание выполняет сервер PPA, не Godot.", 11, SUB))
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
