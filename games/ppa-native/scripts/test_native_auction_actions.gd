@@ -42,7 +42,7 @@ func _run() -> void:
             "slot":"pet","rarity":"epic","enh":5,"kind":"gear"},
             "qty":1,"price":99,"currency":"gram","sellerId":OWNER,"sellerName":"Я",
             "canBuy":false,"canCancel":true}],
-        "pendingCredits":[],"bag":[{"uid":"real-item-plus7","name":"Броня +7",
+        "recoverable":[],"pendingCredits":[],"bag":[{"uid":"real-item-plus7","name":"Броня +7",
             "slot":"armor","enh":7,"rarity":"epic"}]}}
     npc.apply_native_auction(packet)
     var buy := npc._body.find_child("PPARealAuctionBuy_" + BUY_ID,true,false) as Button
