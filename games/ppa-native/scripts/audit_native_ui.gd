@@ -158,6 +158,22 @@ func _run() -> void:
                     quit(1)
                     return
             print("PPA_SOURCE_SKILL_PLACEHOLDERS_OK page=", page, " count=", placeholders, " max_height=110")
+    # Reopening the same inventory without a new server save must preserve
+    # the already-rendered 100 slots instead of recreating every widget.
+    original_char.open_index(0)
+    var cached_bag = original_char.find_child("OriginalPPABagGrid", true, false)
+    if cached_bag == null:
+        push_error("PPA_INVENTORY_CACHE: real bag grid was never rendered")
+        quit(1)
+        return
+    original_char.visible = false
+    original_char.open_index(0)
+    var reopened_bag = original_char.find_child("OriginalPPABagGrid", true, false)
+    if reopened_bag == null or reopened_bag.get_instance_id() != cached_bag.get_instance_id():
+        push_error("PPA_INVENTORY_CACHE: reopening the same page rebuilt all 100 slots")
+        quit(1)
+        return
+    print("PPA_INVENTORY_WIDGET_REUSE_OK unchanged_page=1 no_duplicate_build=1")
     # Source skill catalog is reference material, not proof that the player
     # learned it. A verified snapshot can still render an acquired skill.
     var gnome_data: Dictionary = CANONICAL_GRIMOIRES.class_info("gnome")
