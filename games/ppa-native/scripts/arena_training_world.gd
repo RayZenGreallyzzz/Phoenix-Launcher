@@ -116,20 +116,10 @@ func _build_hud() -> void:
     _state_label.z_index = 25
     add_child(_state_label)
 
-    _attack_button = Button.new()
-    _attack_button.text = "⚔ АТАКА"
-    _attack_button.anchor_left = 1.0
-    _attack_button.anchor_right = 1.0
-    _attack_button.anchor_top = 1.0
-    _attack_button.anchor_bottom = 1.0
-    _attack_button.offset_left = -174
-    _attack_button.offset_right = -23
-    _attack_button.offset_top = -141
-    _attack_button.offset_bottom = -69
-    _attack_button.add_theme_font_size_override("font_size", 19)
-    _attack_button.z_index = 40
-    _attack_button.pressed.connect(_player_attack)
-    add_child(_attack_button)
+    # NativeWorld already created the approved original PPA attack/skill arc.
+    # Arena uses that SAME attack button instead of overlaying a second one.
+    if _combat_hud != null:
+        _combat_hud.set_training(true)
 
     _return_button = Button.new()
     _return_button.text = "В ГОРОД"
@@ -142,6 +132,12 @@ func _build_hud() -> void:
     _return_button.z_index = 40
     _return_button.pressed.connect(_back_to_city)
     add_child(_return_button)
+
+func _on_hud_action(action: String, slot: int) -> void:
+    if action == "attack":
+        _player_attack()
+    else:
+        super._on_hud_action(action, slot)
 
 func _exit_game() -> void:
     _back_to_city()
@@ -292,8 +288,9 @@ func _update_hud() -> void:
 func _finish(message: String) -> void:
     finished = true
     move_input = Vector2.ZERO
-    if _attack_button != null:
-        _attack_button.disabled = true
+    # Reuse the common combat HUD; only the local training round ends here.
+    if _combat_hud != null:
+        _combat_hud.show_notice("Раунд окончен")
     _state_label.text = message + " · без наград и изменений сейва"
     _state_label.add_theme_color_override("font_color", Color("#FFE58C"))
     var retry := Button.new()
