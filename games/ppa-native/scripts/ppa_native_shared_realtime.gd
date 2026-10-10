@@ -59,6 +59,18 @@ func connect_explicitly() -> void:
 func set_local_position(point: Vector2, facing: Vector2, animation: String) -> void:
     _local_position = PROTOCOL.position_packet(point, facing, animation)
 
+func refresh_clan_identity_if_connected() -> void:
+    # Clan identity is included in the server-signed ticket. Refresh an
+    # already opted-in city connection; never restart a displaced hero or
+    # opt a menu-only/offline client into the shared world automatically.
+    if not _wanted or connecting or peer == null or not _position_ready:
+        return
+    peer.poll()
+    if peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+        return
+    disconnect_city()
+    connect_explicitly()
+
 func _on_ticket(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     connecting = false
     if not _wanted:

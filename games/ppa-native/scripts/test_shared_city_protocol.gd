@@ -74,6 +74,8 @@ func _run() -> void:
     check(client._position_ready, "Server position acceptance required")
     client.disconnect_city()
     check(not client._hello_received and not client._position_ready and clears["count"] == 1, "Disconnect retained another account")
+    client.refresh_clan_identity_if_connected()
+    check(not client._wanted and client.peer == null and not client.connecting, "Clan menu restarted a disconnected/replaced hero")
     # No session means no HTTP request/WebSocket, even after an explicit tap.
     client.connect_explicitly()
     check(client.peer == null and not client.connecting and not client._wanted, "Missing-session connection attempted")

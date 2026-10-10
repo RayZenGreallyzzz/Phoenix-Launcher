@@ -1,7 +1,7 @@
 extends Control
 
-# Lightweight local beta UI. No production trading, forging, purchases or
-# save mutations happen here. Menu/stash persists across all 8 visual classes.
+# Local preview stash never changes the live save. Verified clan/merchant
+# actions are forwarded to the common PPA server adapters.
 const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const SHARED_STASH = preload("res://scripts/test_shared_storage.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
@@ -14,6 +14,10 @@ const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 signal change_class_requested
 # Future server adapter listens to this and returns a verified read-only NPC snapshot.
 signal npc_snapshot_requested(service: String)
+signal clan_action_requested(action: String, fields: Dictionary)
+signal clan_retry_requested
+signal merchant_action_requested(fields: Dictionary)
+signal merchant_retry_requested
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -73,6 +77,30 @@ func apply_native_npc_service(payload: Dictionary) -> void:
         return
     if _npc_screen != null:
         _npc_screen.apply_authoritative_snapshot(payload)
+
+func apply_native_clan(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_clan(payload)
+
+func set_clan_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_clan_loading(busy, pending)
+
+func set_clan_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_clan_notice(message, pending)
+
+func apply_native_merchant(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_merchant(payload)
+
+func set_merchant_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_merchant_loading(busy, pending)
+
+func set_merchant_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_merchant_notice(message, pending)
 
 func apply_native_presence(count: int, room_total: int) -> void:
     if _npc_screen != null:
@@ -135,6 +163,10 @@ func _ready() -> void:
     _npc_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     _npc_screen.close_requested.connect(close_menu)
     _npc_screen.authoritative_state_requested.connect(func(service: String): npc_snapshot_requested.emit(service))
+    _npc_screen.clan_action_requested.connect(func(action: String, fields: Dictionary): clan_action_requested.emit(action, fields))
+    _npc_screen.clan_retry_requested.connect(func(): clan_retry_requested.emit())
+    _npc_screen.merchant_action_requested.connect(func(fields: Dictionary): merchant_action_requested.emit(fields))
+    _npc_screen.merchant_retry_requested.connect(func(): merchant_retry_requested.emit())
     # Offline map preview uses the same scene route from the Keeper and Hub.
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())

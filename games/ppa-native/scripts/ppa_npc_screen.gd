@@ -1,11 +1,15 @@
 extends Control
 
 # Nine original Peace City NPC services, ONE native Godot screen. No player
-# character frame, WebView, fake economy or server mutations in this UI.
-# All actions that would change the live save remain locked until an
-# authenticated Phoenix/PPA service adapter is implemented and verified.
+# character frame, WebView or fake economy in this UI.
+# Only server-advertised typed clan and merchant actions are enabled.
+# Other mutations stay locked until their shared adapters are verified.
 signal close_requested
 signal authoritative_state_requested(service: String)
+signal clan_action_requested(action: String, fields: Dictionary)
+signal clan_retry_requested
+signal merchant_action_requested(fields: Dictionary)
+signal merchant_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -19,6 +23,7 @@ const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
 const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
+const CLAN_CONTENT = preload("res://scripts/ppa_clan_menu_content.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 # Exact deployed original PPA PVP_SHOP_ITEMS (reference catalog only).
 # Current rating, purchased-today limits, and live purchases require arena API.
@@ -55,6 +60,16 @@ var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
+var clan_state: Dictionary = {}
+var clan_actions: Array = []
+var clan_busy := false
+var clan_pending := false
+var clan_notice := ""
+var merchant_state: Dictionary = {}
+var merchant_actions: Array = []
+var merchant_busy := false
+var merchant_pending := false
+var merchant_notice := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -273,6 +288,10 @@ func apply_player_save_readonly(save: Dictionary) -> void:
 func clear_player_save_readonly() -> void:
     _player_save_readonly.clear()
     _player_view_readonly.clear()
+    clan_state.clear()
+    clan_actions.clear()
+    merchant_state.clear()
+    merchant_actions.clear()
     if visible:
         _render()
 
@@ -301,6 +320,12 @@ func open_npc(source: Dictionary) -> void:
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     authoritative.clear()
     has_verified_state = false
+    clan_state.clear()
+    clan_actions.clear()
+    clan_notice = ""
+    merchant_state.clear()
+    merchant_actions.clear()
+    merchant_notice = ""
     visible = true
     _fit()
     _render()
@@ -310,6 +335,105 @@ func close_npc() -> void:
     visible = false
     authoritative.clear()
     has_verified_state = false
+    clan_state.clear()
+    clan_actions.clear()
+    merchant_state.clear()
+    merchant_actions.clear()
+
+func apply_native_clan(payload: Dictionary) -> void:
+    if not visible or service != "clan" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-clan-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var profile: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(profile.get("telegramId", "")) if profile is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner:
+        return
+    clan_state = state.duplicate(true)
+    clan_actions = payload["actions"].duplicate()
+    _render()
+
+func apply_native_merchant(payload: Dictionary) -> void:
+    if not visible or service != "merchant" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-merchant-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var profile: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(profile.get("telegramId", "")) if profile is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("offers") is Array) or not (state.get("wallet") is Dictionary) \
+        or int(state.get("version", 0)) < 1:
+        return
+    merchant_state = state.duplicate(true)
+    merchant_actions = payload["actions"].duplicate()
+    _render()
+
+func set_merchant_loading(busy: bool, pending: bool) -> void:
+    merchant_busy = busy
+    merchant_pending = pending
+    if visible and service == "merchant":
+        _render()
+
+func set_merchant_notice(message: String, pending: bool) -> void:
+    merchant_notice = message.left(240)
+    merchant_pending = pending
+    if visible and service == "merchant":
+        _render()
+
+func set_clan_loading(busy: bool, pending: bool) -> void:
+    clan_busy = busy
+    clan_pending = pending
+    if visible and service == "clan":
+        _render()
+
+func set_clan_notice(message: String, pending: bool) -> void:
+    clan_notice = message.left(240)
+    clan_pending = pending
+    if visible and service == "clan":
+        _render()
+
+func request_clan_action(action: String, fields: Dictionary) -> void:
+    if not visible or service != "clan" or not _owns_verified_state(clan_state) \
+        or clan_busy or clan_pending or not clan_actions.has(action):
+        return
+    if action in ["leaveClan", "kickMember", "transferLeadership"]:
+        var dialog := ConfirmationDialog.new()
+        dialog.dialog_text = {"leaveClan":"Выйти из клана? Вступление и создание клана будут закрыты на 24 часа. Если ты последний участник, клан будет удалён.",
+            "kickMember":"Исключить выбранного участника из клана?",
+            "transferLeadership":"Передать выбранному участнику права главы?"}.get(action, "Подтвердить действие?")
+        dialog.title = "Клан PPA"
+        dialog.confirmed.connect(func():
+            if visible and service == "clan" and _owns_verified_state(clan_state) \
+                and not clan_busy and not clan_pending and clan_actions.has(action):
+                clan_action_requested.emit(action, fields.duplicate(true))
+            dialog.queue_free())
+        dialog.canceled.connect(dialog.queue_free)
+        add_child(dialog)
+        dialog.popup_centered(Vector2i(350, 150))
+    else:
+        clan_action_requested.emit(action, fields.duplicate(true))
+
+func _owns_verified_state(state: Dictionary) -> bool:
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var self_data: Variant = state.get("self")
+    return account is Dictionary and self_data is Dictionary \
+        and not str(account.get("telegramId", "")).is_empty() \
+        and str(self_data.get("id", "")) == str(account.get("telegramId", ""))
+
+func show_canonical_clan_storage(items: Array) -> void:
+    var scroller := ScrollContainer.new()
+    scroller.custom_minimum_size = Vector2(0, 260)
+    scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    _body.add_child(scroller)
+    var grid = VIRTUAL_GRID.new()
+    grid.custom_minimum_size.x = 300
+    scroller.add_child(grid)
+    grid.configure("clan", scroller, 5)
+    grid.apply_items_readonly(items)
 
 # Read-only future bridge contract. Call ONLY after authenticated server
 # account+service validation; rendering these fields is not permission to buy.
@@ -433,6 +557,18 @@ func _render() -> void:
         _status.text = "PPA · реальные вещи и баланс из D1 · операции заблокированы"
     if has_verified_state:
         _status.text = "PPA · подтверждённые данные сервиса · операции пока недоступны"
+    if service == "clan" and not clan_state.is_empty():
+        _status.text = "PPA · общий клан · подтверждённые серверные действия"
+        if clan_actions.is_empty():
+            _status.text = "PPA · общий клан · серверные действия ещё не включены"
+        if clan_busy:
+            _status.text = "PPA · запрос к серверу клана…"
+    if service == "merchant" and not merchant_state.is_empty():
+        _status.text = "PPA · общий торговец · покупка через сервер"
+        if merchant_actions.is_empty():
+            _status.text = "PPA · общий торговец · покупки ещё не включены"
+        if merchant_busy:
+            _status.text = "PPA · запрос к серверу торговца…"
     if service == "arena":
         _status.text += " · " + native_online_status
     _scroll.set_deferred("scroll_vertical", 0)
@@ -673,17 +809,60 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
         plus.pressed.connect(_change_quantity.bind(1))
         row.add_child(plus)
         _body.add_child(_label("Итого: " + str(int(item.get("price", 0)) * quantity) + suffix, 14, GOLD))
-    _locked_action("КУПИТЬ")
+    if service == "merchant" and not merchant_state.is_empty():
+        var wallet: Dictionary = merchant_state.get("wallet", {})
+        var total := int(item.get("price", 0)) * quantity
+        var enabled: bool = merchant_actions.has("buy") and not merchant_busy and not merchant_pending \
+            and float(wallet.get(currency_code, 0)) >= total
+        var buy := _button("КУПИТЬ", enabled)
+        buy.name = "MerchantCommand_buy"
+        buy.pressed.connect(func():
+            if visible and service == "merchant" and _owns_verified_state(merchant_state) \
+                and merchant_actions.has("buy") and not merchant_busy and not merchant_pending:
+                merchant_action_requested.emit({"id":str(item.get("id", "")), "qty":quantity,
+                    "version":int(merchant_state.get("version", 0))}))
+        _body.add_child(buy)
+    else:
+        _locked_action("КУПИТЬ")
+
+func _merchant_products() -> Array:
+    if merchant_state.is_empty():
+        return SHOP.MERCHANT
+    var products: Array = []
+    for offer in merchant_state.get("offers", []):
+        if not offer is Dictionary:
+            continue
+        # APK catalog supplies only original art/description/category; live
+        # name, price, currency and owned quantity come from the server.
+        for original in SHOP.MERCHANT:
+            if original.get("id") == offer.get("id"):
+                var product: Dictionary = original.duplicate(true)
+                product.merge(offer, true)
+                products.append(product)
+                break
+    return products
 
 func _show_merchant() -> void:
-    _section("ЛАВКА ТОРГОВЦА", "Оригинальные 12 товаров PPA · просмотр без списания валюты")
+    _section("ЛАВКА ТОРГОВЦА", "Товары PPA · цена и покупка подтверждаются общим сервером")
+    var refresh := _button("ОБНОВИТЬ ТОРГОВЦА", not merchant_busy)
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("merchant"))
+    _body.add_child(refresh)
+    if not merchant_notice.is_empty():
+        _body.add_child(_label(merchant_notice, 12, GOLD))
+    if merchant_pending:
+        var retry := _button("ПРОВЕРИТЬ ТО ЖЕ ДЕЙСТВИЕ", not merchant_busy)
+        retry.name = "MerchantRetryPending"
+        retry.pressed.connect(func(): merchant_retry_requested.emit())
+        _body.add_child(retry)
     var filtered: Array = []
-    for entry in SHOP.MERCHANT:
+    for entry in _merchant_products():
         if str(entry.get("tab", "")) == tab:
             filtered.append(entry)
     _product_grid(filtered, true)
     _selected_details(filtered, true)
     var money: Dictionary = _player_view_readonly.get("money", {})
+    if not merchant_state.is_empty():
+        money = merchant_state.get("wallet", {})
     _body.add_child(_label("Ваш баланс D1 · Gold: " +
         (str(money["gold"]) if money.get("gold", null) != null else "—") +
         " / PPA: " +
@@ -1104,11 +1283,19 @@ func _show_auction() -> void:
         _locked_action("СНЯТЬ С ПРОДАЖИ")
 
 func _show_clan() -> void:
+    if not clan_state.is_empty():
+        CLAN_CONTENT.render(self)
+        return
     var captions := {"overview":"ОБЗОР КЛАНА", "clans":"КЛАНЫ И РЕЙТИНГ",
         "members":"УЧАСТНИКИ", "storage":"КЛАНОВЫЙ СКЛАД",
         "exchange":"ОБМЕН", "bosses":"КЛАНОВЫЕ БОССЫ",
         "bonuses":"БОНУСЫ КЛАНА", "wars":"ВОЙНЫ И ЦИТАДЕЛЬ", "journal":"ЖУРНАЛ"}
     _section(str(captions.get(tab, "МАГИСТР КЛАНОВ")), "Структура Telegram PPA · все операции через общий сервер")
+    if not clan_notice.is_empty():
+        _body.add_child(_label(clan_notice, 12, GOLD))
+    var refresh := _button("ОБНОВИТЬ КЛАН", not clan_busy)
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("clan"))
+    _body.add_child(refresh)
     match tab:
         "overview":
             _message("ВАШ КЛАН", "Название, глава, режим и уровень загрузятся из PPA.")
