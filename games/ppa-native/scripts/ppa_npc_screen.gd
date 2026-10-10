@@ -2111,7 +2111,7 @@ func _show_auction() -> void:
         currency.select(0 if _asking_currency == "PPA" else 1)
         currency.item_selected.connect(_set_currency)
         settings.add_child(currency)
-        var enabled := auction_actions.has("place") and \
+        var enabled: bool = auction_actions.has("place") and \
             bool(auction_state.get("settlementEnabled", false)) and \
             not auction_loading and not auction_pending and not _auction_sell_uid.is_empty() \
             and int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
