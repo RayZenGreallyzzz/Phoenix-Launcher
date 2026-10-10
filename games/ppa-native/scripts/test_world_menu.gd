@@ -65,6 +65,14 @@ func apply_readonly_snapshot(payload: Dictionary) -> void:
     if _panel != null and _panel.visible:
         _refresh()
 
+func apply_native_npc_service(payload: Dictionary) -> void:
+    # Service payload is an authenticated, READ-ONLY projection of the same
+    # Telegram PPA save already used by every character/inventory panel.
+    if payload.get("readOnly", false) != true:
+        return
+    if _npc_screen != null:
+        _npc_screen.apply_authoritative_snapshot(payload)
+
 func clear_readonly_snapshot() -> void:
     _verified_save.clear()
     _has_verified_save = false
