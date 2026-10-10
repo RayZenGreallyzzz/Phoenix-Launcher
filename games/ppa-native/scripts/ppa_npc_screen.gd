@@ -8,6 +8,7 @@ signal close_requested
 signal authoritative_state_requested(service: String)
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
+signal arena_training_requested
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
 const LIVE_FORGE = preload("res://scripts/ppa_forge_catalog_generated.gd")
@@ -1150,7 +1151,14 @@ func _show_arena() -> void:
             _message("ПРОТИВ ИИ", "Испытание против ботов. Состав и доступность определяет сервер.")
             _message("PVP АРЕНА", "Режимы 1×1 и 3×3 / 5×5 — где они доступны в живой PPA.")
             _message("СЕЗОННЫЙ РЕЙТИНГ", "Позиция и подбор на сервере.")
-            _locked_action("ВОЙТИ В ИСПЫТАНИЕ")
+            var practice := _button("⚔ НАЧАТЬ ТРЕНИРОВКУ ПРОТИВ ИИ")
+            practice.name = "NpcArenaAiPractice"
+            practice.custom_minimum_size.y = 50.0
+            practice.add_theme_stylebox_override("normal", _style(Color("#3A2917"), GOLD, 7, 2))
+            practice.pressed.connect(func(): arena_training_requested.emit())
+            _body.add_child(practice)
+            _body.add_child(_label("Три движущихся ИИ-бота, атака, HP, победа и поражение. Тренировочный бой без сервера и наград.", 11, SUB))
+            _locked_action("БОЕВОЙ РЕЙТИНГ / СЕТЕВОЙ МАТЧ")
         "attempts":
             _message("PVP · ПОПЫТКИ", "Лимит, остаток попыток, жетоны арены и обновление доступны после синхронизации.")
             _locked_action("НАЧАТЬ МАТЧ")
