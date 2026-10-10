@@ -26,6 +26,8 @@ signal personal_storage_action_requested(fields: Dictionary)
 signal personal_storage_retry_requested
 signal clan_storage_action_requested(fields: Dictionary)
 signal clan_storage_retry_requested
+signal auction_action_requested(fields: Dictionary)
+signal auction_retry_requested
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -121,6 +123,10 @@ func apply_native_auction(payload: Dictionary) -> void:
 func set_native_auction_loading(busy: bool) -> void:
     if _npc_screen != null:
         _npc_screen.set_native_auction_loading(busy)
+
+func set_native_auction_pending(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_pending(busy, pending)
 
 func set_native_auction_notice(message: String) -> void:
     if _npc_screen != null:
@@ -243,6 +249,8 @@ func _ready() -> void:
     _npc_screen.personal_storage_retry_requested.connect(func(): personal_storage_retry_requested.emit())
     _npc_screen.clan_storage_action_requested.connect(func(fields: Dictionary): clan_storage_action_requested.emit(fields))
     _npc_screen.clan_storage_retry_requested.connect(func(): clan_storage_retry_requested.emit())
+    _npc_screen.auction_action_requested.connect(func(fields: Dictionary): auction_action_requested.emit(fields))
+    _npc_screen.auction_retry_requested.connect(func(): auction_retry_requested.emit())
     # Offline map preview uses the same scene route from the Keeper and Hub.
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
