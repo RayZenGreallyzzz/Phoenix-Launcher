@@ -12,6 +12,8 @@ signal merchant_action_requested(fields: Dictionary)
 signal merchant_retry_requested
 signal forge_action_requested(fields: Dictionary)
 signal forge_retry_requested
+signal inventory_action_requested(fields: Dictionary)
+signal inventory_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -79,6 +81,11 @@ var forge_actions: Array = []
 var forge_busy := false
 var forge_pending := false
 var forge_notice := ""
+var inventory_state: Dictionary = {}
+var inventory_actions: Array = []
+var inventory_busy := false
+var inventory_pending := false
+var inventory_notice := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -303,6 +310,8 @@ func clear_player_save_readonly() -> void:
     merchant_actions.clear()
     forge_state.clear()
     forge_actions.clear()
+    inventory_state.clear()
+    inventory_actions.clear()
     if visible:
         _render()
 
@@ -342,6 +351,9 @@ func open_npc(source: Dictionary) -> void:
     forge_state.clear()
     forge_actions.clear()
     forge_notice = ""
+    inventory_state.clear()
+    inventory_actions.clear()
+    inventory_notice = ""
     visible = true
     _fit()
     _render()
@@ -360,6 +372,11 @@ func close_npc() -> void:
     forge_notice = ""
     forge_busy = false
     forge_pending = false
+    inventory_state.clear()
+    inventory_actions.clear()
+    inventory_notice = ""
+    inventory_busy = false
+    inventory_pending = false
     _enhance_uid = ""
     _enhance_mode = "normal"
 
@@ -411,6 +428,35 @@ func apply_native_forge(payload: Dictionary) -> void:
     forge_state = state.duplicate(true)
     forge_actions = payload["actions"].duplicate()
     _render()
+
+func apply_native_inventory(payload: Dictionary) -> void:
+    if not visible or service != "forge" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-inventory-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("bag") is Array) or not (state.get("equipped") is Dictionary) \
+        or int(state.get("version", 0)) < 1:
+        return
+    inventory_state = state.duplicate(true)
+    inventory_actions = payload["actions"].duplicate()
+    _render()
+
+func set_inventory_loading(busy: bool, pending: bool) -> void:
+    inventory_busy = busy
+    inventory_pending = pending
+    if visible and service == "forge":
+        _render()
+
+func set_inventory_notice(message: String, pending: bool) -> void:
+    inventory_notice = message.left(240)
+    inventory_pending = pending
+    if visible and service == "forge":
+        _render()
 
 func set_forge_loading(busy: bool, pending: bool) -> void:
     forge_busy = busy
@@ -1113,7 +1159,77 @@ func _request_real_enhancement(uid: String, mode: String, version: int) -> void:
         return
     forge_action_requested.emit({"action":"enhance", "uid":uid, "stone":mode, "version":version})
 
+func _request_original_equipment_move(action: String, target: String, version: int) -> void:
+    if not visible or service != "forge" or inventory_busy or inventory_pending \
+        or not inventory_actions.has(action) or not _owns_verified_state(inventory_state) \
+        or version != int(inventory_state.get("version", -1)):
+        return
+    if action == "unequip":
+        var equipped: Variant = inventory_state.get("equipped", {})
+        if not (equipped is Dictionary) or not (equipped as Dictionary).get(target) is Dictionary:
+            return
+        inventory_action_requested.emit({"action":"unequip","slot":target,"version":version})
+    elif action == "equip":
+        var match_found := false
+        for entry in inventory_state.get("bag", []):
+            if entry is Dictionary and str(entry.get("uid","")) == target:
+                match_found = true
+                break
+        if match_found:
+            inventory_action_requested.emit({"action":"equip","uid":target,"version":version})
+
+func _show_shared_equipment_tools() -> void:
+    _section("ЭКИПИРОВКА · ТОТ ЖЕ ПЕРСОНАЖ",
+        "Снять вещь для заточки и надеть обратно · только через общий сервер PPA.")
+    if not inventory_notice.is_empty():
+        _body.add_child(_label(inventory_notice, 11, GOLD))
+    if inventory_pending:
+        var retry := _button("ПРОВЕРИТЬ ПРЕЖНЕЕ ПЕРЕМЕЩЕНИЕ", not inventory_busy)
+        retry.pressed.connect(func(): inventory_retry_requested.emit())
+        _body.add_child(retry)
+    if not _owns_verified_state(inventory_state) or not (inventory_state.get("equipped") is Dictionary):
+        _body.add_child(_label("Ожидаем подтверждённую серверную экипировку.", 11, SUB))
+        return
+    var server_version := int(inventory_state.get("version", 0))
+    var action_allowed := not inventory_busy and not inventory_pending
+    var worn: Dictionary = inventory_state.get("equipped", {})
+    var grid := GridContainer.new()
+    grid.columns = 2
+    _body.add_child(grid)
+    for slot in worn:
+        var gear: Variant = worn[slot]
+        if not (gear is Dictionary):
+            continue
+        var name_text := str((gear as Dictionary).get("name","Вещь")).left(24)
+        var b := _button("СНЯТЬ · " + name_text, inventory_actions.has("unequip") and action_allowed)
+        b.name = "PPARealUnequip_" + str(slot)
+        b.pressed.connect(_request_original_equipment_move.bind("unequip", str(slot), server_version))
+        grid.add_child(b)
+    _body.add_child(_label("Сумка · выбери вещь для экипировки:", 11, SUB))
+    var bag: Variant = inventory_state.get("bag", null)
+    if bag is Array:
+        var bag_grid := GridContainer.new()
+        bag_grid.columns = 2
+        _body.add_child(bag_grid)
+        for entry in bag:
+            if not (entry is Dictionary):
+                continue
+            var uid := str(entry.get("uid", ""))
+            if uid.is_empty():
+                continue
+            var slot_name := str(entry.get("slot", ""))
+            if slot_name not in ["weapon", "helmet", "armor", "gloves", "ring", "legs",
+                "boots", "necklace", "artifact", "cloak", "wings", "pet"]:
+                continue
+            var label_text := str(entry.get("name", "Вещь")).left(22)
+            var b := _button("НАДЕТЬ · " + label_text,
+                inventory_actions.has("equip") and action_allowed)
+            b.name = "PPARealEquip_" + uid.to_utf8_buffer().hex_encode()
+            b.pressed.connect(_request_original_equipment_move.bind("equip", uid, server_version))
+            bag_grid.add_child(b)
+
 func _show_authoritative_enhancement() -> void:
+    _show_shared_equipment_tools()
     _section("ЗАТОЧКА PPA · ОРИГИНАЛЬНЫЕ ВЕЩИ",
         "Сервер проверяет камни, шанс и сохранение. Только предметы в сумке: надетую вещь сначала нужно снять.")
     if not _owns_verified_state(forge_state) or not (forge_state.get("enhanceItems") is Array):
