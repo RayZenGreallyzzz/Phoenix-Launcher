@@ -506,8 +506,15 @@ jobs:
           "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "package: name='com.phoenixgames.ppa'"
           "$AAPT" dump badging build/PhoenixPixArena-native-debug.apk | grep -q "versionCode='${PPA_VERSION_CODE}'"
           # Same installed package. Certificate compatibility MUST be verified before installing over the old APK.
-          "$APKSIGNER" verify --verbose --print-certs build/PhoenixPixArena-native-debug.apk > /tmp/ppa-beta-signing.txt
-          grep -q 'Number of signers: 1' /tmp/ppa-beta-signing.txt
+          "$APKSIGNER" verify --verbose --print-certs build/PhoenixPixArena-native-debug.apk > /tmp/ppa-original-signing.txt
+          grep -q 'Number of signers: 1' /tmp/ppa-original-signing.txt
+          # Fingerprint extracted from the user's installed-compatible 0.3.152
+          # upload; a different cert cannot update that package over Android.
+          if ! grep -qi 'ab559f31d136981c1536f49014741d8a8ff73fae0193c59fcee7d79b08934fa3' /tmp/ppa-original-signing.txt; then
+            echo "SIGNING_CERT_MISMATCH: APK cannot update the supplied 0.3.152 installation"
+            exit 1
+          fi
+          echo "PPA_INSTALLED_SIGNING_CERT_MATCH_OK"
           ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -1)"
           test -x "$ZIPALIGN"
           "$ZIPALIGN" -c -v 4 build/PhoenixPixArena-native-debug.apk
