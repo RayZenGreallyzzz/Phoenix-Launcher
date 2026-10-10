@@ -24,6 +24,7 @@ const CLAN_SERVICE = preload("res://scripts/ppa_native_clan_service.gd")
 const MERCHANT_SERVICE = preload("res://scripts/ppa_native_merchant_service.gd")
 const FORGE_SERVICE = preload("res://scripts/ppa_native_forge_service.gd")
 const INVENTORY_SERVICE = preload("res://scripts/ppa_native_inventory_service.gd")
+const PERSONAL_STORAGE_SERVICE = preload("res://scripts/ppa_native_personal_storage_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -96,6 +97,7 @@ var _clan_service: Node
 var _merchant_service: Node
 var _forge_service: Node
 var _inventory_service: Node
+var _personal_storage_service: Node
 var _pending_save_refresh := false
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
@@ -472,6 +474,18 @@ func _build_server_readonly_bridge() -> void:
         _forge_service.request_state()
         _refresh_server_readonly_save())
     _inventory_service.loading_changed.connect(_on_inventory_loading)
+    _personal_storage_service = PERSONAL_STORAGE_SERVICE.new()
+    _personal_storage_service.name = "PPACanonicalPersonalStorage"
+    add_child(_personal_storage_service)
+    _personal_storage_service.state_ready.connect(_on_personal_storage_state)
+    _personal_storage_service.request_failed.connect(_on_personal_storage_notice)
+    _personal_storage_service.command_finished.connect(func(message: String):
+        _on_personal_storage_notice(message)
+        _refresh_server_readonly_save()
+        _forge_service.request_state()
+        _inventory_service.request_state()
+        _personal_storage_service.request_state())
+    _personal_storage_service.loading_changed.connect(_on_personal_storage_loading)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -495,6 +509,8 @@ func _build_server_readonly_bridge() -> void:
         test_menu.forge_retry_requested.connect(_forge_service.retry_pending)
         test_menu.inventory_action_requested.connect(_request_inventory_action)
         test_menu.inventory_retry_requested.connect(_inventory_service.retry_pending)
+        test_menu.personal_storage_action_requested.connect(_request_personal_storage_action)
+        test_menu.personal_storage_retry_requested.connect(_personal_storage_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
@@ -507,6 +523,10 @@ func _request_npc_service(service: String) -> void:
     elif service == "forge":
         _forge_service.request_state()
         _inventory_service.request_state()
+    elif service == "storage":
+        _personal_storage_service.request_state()
+        _clan_service.request_state()
+        _npc_service_loader.request_service(service)
     else:
         _npc_service_loader.request_service(service)
 
@@ -596,6 +616,29 @@ func _on_inventory_loading(busy: bool) -> void:
 func _on_inventory_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_inventory_notice(message,_inventory_service.has_pending())
+
+func _request_personal_storage_action(fields: Dictionary) -> void:
+    if _personal_storage_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["put","take"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _personal_storage_service.request_action(action, payload)
+
+func _on_personal_storage_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_personal_storage(payload)
+        test_menu.set_personal_storage_loading(false, _personal_storage_service.has_pending())
+
+func _on_personal_storage_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_personal_storage_loading(busy, _personal_storage_service.has_pending())
+
+func _on_personal_storage_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_personal_storage_notice(message, _personal_storage_service.has_pending())
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
