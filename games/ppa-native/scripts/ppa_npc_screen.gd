@@ -1166,7 +1166,7 @@ func _request_original_equipment_move(action: String, target: String, version: i
         return
     if action == "unequip":
         var equipped: Variant = inventory_state.get("equipped", {})
-        if not (equipped is Dictionary) or not (equipped as Dictionary).get(target) is Dictionary:
+        if not (equipped is Dictionary) or not ((equipped as Dictionary).get(target) is Dictionary):
             return
         inventory_action_requested.emit({"action":"unequip","slot":target,"version":version})
     elif action == "equip":
