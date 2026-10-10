@@ -33,6 +33,7 @@ signal dungeon_visual_test_requested
 signal arena_training_requested
 signal native_realtime_requested
 signal refresh_readonly_save_requested
+signal force_refresh_readonly_save_requested
 
 
 var account: Dictionary = {}
@@ -222,7 +223,7 @@ func _ready() -> void:
         _character_screen.select_item_requested.connect(_open_item)
         _character_screen.unequip_requested.connect(_on_character_unequip)
         _character_screen.refresh_readonly_save_requested.connect(
-            func(): refresh_readonly_save_requested.emit()
+            func(): force_refresh_readonly_save_requested.emit()
         )
         _character_screen.visible = false
     _panel.visible = false
@@ -539,9 +540,9 @@ func open_page(page: String) -> void:
         # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
-        # Re-read the SAME authenticated PPA save whenever the character
-        # panel is reopened, just as global and NPC menus already do.
-        # One GET per opening, not per page/scroll; no local save or writes.
+        # Use the authenticated save already prefetched on city entry.
+        # The world adapter checks freshness/identity before any new GET.
+        # The explicit refresh button and successful writes bypass this cache.
         refresh_readonly_save_requested.emit()
         return
     if _native_web_ui != null and _web_open:
