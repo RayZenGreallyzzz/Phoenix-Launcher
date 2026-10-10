@@ -104,6 +104,9 @@ var clan_storage_pending := false
 var clan_storage_notice := ""
 var _clan_put_uid := ""
 var _clan_take_uid := ""
+var auction_state: Dictionary = {}
+var auction_notice := ""
+var auction_loading := false
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -334,7 +337,7 @@ func clear_player_save_readonly() -> void:
     personal_storage_actions.clear()
     clan_storage_state.clear()
     clan_storage_actions.clear()
-    clan_state.clear()
+    auction_state.clear()
     if visible:
         _render()
 
@@ -384,6 +387,9 @@ func open_npc(source: Dictionary) -> void:
     clan_storage_notice = ""
     _clan_put_uid = ""
     _clan_take_uid = ""
+    auction_state.clear()
+    auction_notice = ""
+    auction_loading = false
     inventory_state.clear()
     inventory_actions.clear()
     inventory_notice = ""
@@ -424,6 +430,9 @@ func close_npc() -> void:
     clan_storage_notice = ""
     _clan_put_uid = ""
     _clan_take_uid = ""
+    auction_state.clear()
+    auction_notice = ""
+    auction_loading = false
     _enhance_uid = ""
     _enhance_mode = "normal"
 
@@ -509,6 +518,37 @@ func apply_native_personal_storage(payload: Dictionary) -> void:
     personal_storage_state = state.duplicate(true)
     personal_storage_actions = payload["actions"].duplicate()
     _render()
+
+func apply_native_auction(payload: Dictionary) -> void:
+    if not visible or service != "auction" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-auction-readonly-v1" \
+        or not (payload.get("state") is Dictionary):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("lots") is Array) or not (state.get("mine") is Array) \
+        or not (state.get("pendingCredits") is Array) \
+        or not (state.get("wallet") is Dictionary) \
+        or state.get("settlementEnabled") != false \
+        or int(state.get("version", 0)) < 1:
+        return
+    auction_state = state.duplicate(true)
+    auction_loading = false
+    _render()
+
+func set_native_auction_loading(busy: bool) -> void:
+    auction_loading = busy
+    if visible and service == "auction":
+        _render()
+
+func set_native_auction_notice(message: String) -> void:
+    auction_notice = message.left(220)
+    auction_loading = false
+    if visible and service == "auction":
+        _render()
 
 func apply_native_clan_storage(payload: Dictionary) -> void:
     if not visible or service not in ["storage","clan"] \
@@ -1850,9 +1890,68 @@ func _show_storage() -> void:
         _message("ПРЕМИУМ ДОСТУП", "Содержимое премиум-хранилища читается только с сервера PPA.")
         _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
 
+func _auction_matches(item: Dictionary) -> bool:
+    if _auction_category == "all":
+        return true
+    var slot_name := str(item.get("slot", ""))
+    var kind := str(item.get("kind", ""))
+    if _auction_category == "weapon":
+        return slot_name == "weapon"
+    if _auction_category == "armor":
+        return slot_name in ["helmet","armor","gloves","legs","boots"]
+    if _auction_category == "accessories":
+        return slot_name in ["ring","necklace","artifact","cloak","wings","pet"]
+    if _auction_category == "consumables":
+        return kind in ["consumable","stone","feather"]
+    if _auction_category == "materials":
+        return kind == "material"
+    if _auction_category == "books":
+        return kind == "grimoire"
+    if _auction_category == "quest":
+        return kind == "quest"
+    return true
+
+func _show_auction_lots(rows: Array, own: bool) -> void:
+    var count := 0
+    for raw in rows:
+        if not (raw is Dictionary):
+            continue
+        var entry: Dictionary = raw
+        var item: Variant = entry.get("item", null)
+        if not (item is Dictionary):
+            continue
+        if not own and not _auction_matches(item):
+            continue
+        var price: Variant = entry.get("price", null)
+        var currency := str(entry.get("currency", "ppa")).to_upper()
+        var desc := str(item.get("name", "Предмет PPA")).left(45)
+        desc += "  +" + str(item.get("enh", 0))
+        _mini_row(desc, str(entry.get("qty", 1)) + " шт. · " + str(price) + " " + currency)
+        _body.add_child(_label("Продавец: " + str(entry.get("sellerName", "Игрок")).left(24), 11, SUB))
+        count += 1
+        if count >= 50:
+            break
+    if count == 0:
+        _body.add_child(_label("Подходящих активных объявлений нет.", 12, SUB))
+    elif count >= 50:
+        _body.add_child(_label("Показаны первые 50 лотов из серверной выборки.", 11, SUB))
+
 func _show_auction() -> void:
-    var captions := {"all":"КУПИТЬ", "mine":"МОИ ЛОТЫ", "sell":"ПРОДАТЬ"}
-    _section("АУКЦИОН · " + str(captions.get(tab, "")), "Выбор вещи и параметры лота независимы от операций на сервере PPA.")
+    var verified := _owns_verified_state(auction_state)
+    _section("АУКЦИОН · PPA", "Реальные лоты и начисления из общего сервера Telegram PPA.")
+    if not auction_notice.is_empty():
+        _body.add_child(_label(auction_notice, 11, GOLD))
+    var refresh := _button("ОБНОВИТЬ АУКЦИОН", not auction_loading)
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("auction"))
+    _body.add_child(refresh)
+    if not verified:
+        _message("ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ", "Без подтверждённого персонажа PPA аукцион недоступен.")
+        _locked_action("КУПИТЬ / ПРОДАТЬ")
+        return
+    var wallet: Dictionary = auction_state.get("wallet", {})
+    _mini_row("PPA", str(wallet.get("ppa", "—")))
+    _mini_row("Gram", str(wallet.get("gram", "—")))
+    _mini_row("Комиссия аукциона", "10% · начисление продавцу 90%")
     if tab != "mine":
         _choice_tiles([
             {"key":"all","label":"ВСЕ"}, {"key":"weapon","label":"ОРУЖИЕ"},
@@ -1861,53 +1960,31 @@ func _show_auction() -> void:
             {"key":"books","label":"КНИГИ"}, {"key":"quest","label":"КВЕСТОВЫЕ"},
             {"key":"misc","label":"РАЗНОЕ"}], _auction_category, _auction_filter)
     if tab == "all":
-        _message("ТОРГОВЫЕ ПРЕДЛОЖЕНИЯ", "Реальные объявления появятся после подключения серверного аукциона.")
+        _section("АКТИВНЫЕ ЛОТЫ", "Общий рынок PPA · существующие объявления Telegram.")
+        _show_auction_lots(auction_state.get("lots", []), false)
         _locked_action("КУПИТЬ")
+        _body.add_child(_label("Покупку включим после проверки атомарного расчёта двух клиентов.", 11, SUB))
+    elif tab == "mine":
+        _section("МОИ ЛОТЫ", "Только объявления этого персонажа на общем сервере.")
+        _show_auction_lots(auction_state.get("mine", []), true)
+        _section("НАЧИСЛЕНИЯ ПРОДАВЦУ", "Подтверждённые Telegram PPA credits, пока без автоматического списания.")
+        var credits: Array = auction_state.get("pendingCredits", [])
+        if credits.is_empty():
+            _body.add_child(_label("Ожидающих начислений нет.", 12, SUB))
+        for credit in credits.slice(0, 30):
+            if credit is Dictionary:
+                _mini_row("Продажа · " + str(credit.get("lotId", "")).left(20),
+                    str(credit.get("amount", 0)) + " " + str(credit.get("currency", "ppa")).to_upper())
+        _locked_action("СНЯТЬ С ПРОДАЖИ / ЗАБРАТЬ PPA")
     elif tab == "sell":
-        _section("ЧТО ПРОДАЁМ", "Только вещи из инвентаря, подходящие по правилам PPA. Нажми на слот.")
-        _add_picker("sell", _auction_item_key, _choose_auction)
-        _details(_auction_item_key)
-        _section("УСЛОВИЯ ПРОДАЖИ", "Цена, количество и валюта выбираются до отправки лота.")
-        var selected := _chosen_item(_auction_item_key)
-        var settings := GridContainer.new()
-        settings.name = "NpcAuctionListingInputs"
-        settings.columns = 2
-        settings.add_theme_constant_override("h_separation", 10)
-        settings.add_theme_constant_override("v_separation", 8)
-        _body.add_child(settings)
-        settings.add_child(_label("Цена за единицу", 12, GOLD))
-        var price := SpinBox.new()
-        price.name = "NpcAuctionPrice"
-        price.min_value = 1
-        price.max_value = 999999999
-        price.step = 1
-        price.value = _asking_price
-        price.custom_minimum_size = Vector2(130, 38)
-        price.value_changed.connect(_set_asking_price)
-        settings.add_child(price)
-        settings.add_child(_label("Количество", 12, GOLD))
-        var amount := SpinBox.new()
-        amount.name = "NpcAuctionQuantity"
-        amount.min_value = 1
-        amount.max_value = maxi(1, int(selected.get("qty", 1)))
-        amount.value = mini(_asking_quantity, int(amount.max_value))
-        amount.custom_minimum_size = Vector2(130, 38)
-        amount.value_changed.connect(_set_asking_qty)
-        settings.add_child(amount)
-        settings.add_child(_label("Валюта", 12, GOLD))
-        var currency := OptionButton.new()
-        currency.name = "NpcAuctionCurrency"
-        currency.custom_minimum_size = Vector2(130, 38)
-        currency.add_item("PPA")
-        currency.add_item("Gram")
-        currency.select(0 if _asking_currency == "PPA" else 1)
-        currency.item_selected.connect(_set_currency)
-        settings.add_child(currency)
-        _mini_row("Комиссия / число свободных лотов", "рассчитает сервер")
+        _section("НАСТОЯЩАЯ СУМКА", "Оригинальные предметы персонажа, никакой временной торговой копии.")
+        var items: Array = auction_state.get("bag", [])
+        for item in items.slice(0, 50):
+            if item is Dictionary:
+                _mini_row(str(item.get("name", "Вещь")).left(28),
+                    "+" + str(item.get("enh", 0)) + " · " + str(item.get("rarity", "common")))
         _locked_action("ВЫСТАВИТЬ ЛОТ")
-    else:
-        _message("МОИ ЛОТЫ", "Только подтверждённые объявления из серверного аукциона.")
-        _locked_action("СНЯТЬ С ПРОДАЖИ")
+        _body.add_child(_label("Размещение пока заблокировано: сервер должен изъять вещь в защищённый лот.", 11, SUB))
 
 func _show_clan() -> void:
     if not clan_state.is_empty():
