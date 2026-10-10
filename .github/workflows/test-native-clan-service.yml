@@ -52,6 +52,7 @@ jobs:
           mkdir -p /tmp/npc-test/scripts
           cp games/ppa-native/scripts/*.gd /tmp/npc-test/scripts/
           printf '[application]\nconfig/name="PPA shared NPC controls test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/npc-test/project.godot
+          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --check-only --script res://scripts/audit_native_shared_npc_actions.gd
           timeout --preserve-status 90s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/audit_native_shared_npc_actions.gd
       - name: Test every original Telegram PPA recipe in Godot
         run: |
