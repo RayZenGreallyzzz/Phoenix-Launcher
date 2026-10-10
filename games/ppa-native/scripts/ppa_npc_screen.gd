@@ -1964,6 +1964,13 @@ func _send_real_auction_action(action: String, fields: Dictionary) -> void:
                 and str(entry.get("id", "")) == str(fields.get("lotId", "")):
                 valid = true
                 break
+    elif action == "claim":
+        if bool(auction_state.get("serverCreditClaimsEnabled", false)):
+            for entry in auction_state.get("pendingCredits", []):
+                if entry is Dictionary and bool(entry.get("canClaim", false)) \
+                    and str(entry.get("id", "")) == str(fields.get("creditId", "")):
+                    valid = true
+                    break
     elif action == "cancel":
         for entry in auction_state.get("mine", []):
             if entry is Dictionary and bool(entry.get("canCancel", false)) \
@@ -1982,6 +1989,9 @@ func _auction_buy_lot(lotId: String, price: float, currency: String) -> void:
 
 func _auction_cancel_lot(lotId: String) -> void:
     _send_real_auction_action("cancel", {"lotId":lotId})
+
+func _auction_claim_credit(creditId: String) -> void:
+    _send_real_auction_action("claim", {"creditId":creditId})
 
 func _auction_recover_lot(lotId: String) -> void:
     _send_real_auction_action("recover", {"lotId":lotId})
@@ -2091,7 +2101,15 @@ func _show_auction() -> void:
             if credit is Dictionary:
                 _mini_row("Продажа · " + str(credit.get("lotId", "")).left(20),
                     str(credit.get("amount", 0)) + " " + str(credit.get("currency", "ppa")).to_upper())
-        _body.add_child(_label("Новые лоты можно снять выше. Получение начислений пока требует отдельной серверной проверки.", 11, SUB))
+                if auction_actions.has("claim") and bool(credit.get("canClaim", false)) \
+                    and bool(auction_state.get("serverCreditClaimsEnabled", false)):
+                    var claim := _button("ПОЛУЧИТЬ · " + str(credit.get("amount", 0)), \
+                        not auction_pending and not auction_loading)
+                    claim.name = "PPARealAuctionClaim_" + str(credit.get("id", ""))
+                    claim.pressed.connect(_auction_claim_credit.bind(str(credit.get("id", ""))))
+                    _body.add_child(claim)
+        if not bool(auction_state.get("serverCreditClaimsEnabled", false)):
+            _body.add_child(_label("Выплаты заблокированы, пока Telegram и Godot не используют единый серверный расчёт.", 11, SUB))
     elif tab == "sell":
         _section("ПРОДАЖА РЕАЛЬНОЙ ВЕЩИ", "Вещь будет изъята сервером из сумки и сохранена в лоте.")
         var items: Array = auction_state.get("bag", [])
