@@ -14,6 +14,8 @@ signal forge_action_requested(fields: Dictionary)
 signal forge_retry_requested
 signal inventory_action_requested(fields: Dictionary)
 signal inventory_retry_requested
+signal personal_storage_action_requested(fields: Dictionary)
+signal personal_storage_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -86,6 +88,13 @@ var inventory_actions: Array = []
 var inventory_busy := false
 var inventory_pending := false
 var inventory_notice := ""
+var personal_storage_state: Dictionary = {}
+var personal_storage_actions: Array = []
+var personal_storage_busy := false
+var personal_storage_pending := false
+var personal_storage_notice := ""
+var _storage_bag_uid := ""
+var _storage_personal_uid := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -312,6 +321,9 @@ func clear_player_save_readonly() -> void:
     forge_actions.clear()
     inventory_state.clear()
     inventory_actions.clear()
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    clan_state.clear()
     if visible:
         _render()
 
@@ -351,6 +363,11 @@ func open_npc(source: Dictionary) -> void:
     forge_state.clear()
     forge_actions.clear()
     forge_notice = ""
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    personal_storage_notice = ""
+    _storage_bag_uid = ""
+    _storage_personal_uid = ""
     inventory_state.clear()
     inventory_actions.clear()
     inventory_notice = ""
@@ -377,11 +394,18 @@ func close_npc() -> void:
     inventory_notice = ""
     inventory_busy = false
     inventory_pending = false
+    personal_storage_state.clear()
+    personal_storage_actions.clear()
+    personal_storage_notice = ""
+    personal_storage_busy = false
+    personal_storage_pending = false
+    _storage_bag_uid = ""
+    _storage_personal_uid = ""
     _enhance_uid = ""
     _enhance_mode = "normal"
 
 func apply_native_clan(payload: Dictionary) -> void:
-    if not visible or service != "clan" or payload.get("gameId") != "phoenix-pix-arena" \
+    if not visible or service not in ["clan","storage"] or payload.get("gameId") != "phoenix-pix-arena" \
         or payload.get("contract") != "ppa-clan-v1" \
         or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
         return
@@ -392,7 +416,7 @@ func apply_native_clan(payload: Dictionary) -> void:
         or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner:
         return
     clan_state = state.duplicate(true)
-    clan_actions = payload["actions"].duplicate()
+    clan_actions = payload["actions"].duplicate() if service == "clan" else []
     _render()
 
 func apply_native_merchant(payload: Dictionary) -> void:
@@ -445,6 +469,35 @@ func apply_native_inventory(payload: Dictionary) -> void:
     inventory_state = state.duplicate(true)
     inventory_actions = payload["actions"].duplicate()
     _render()
+
+func apply_native_personal_storage(payload: Dictionary) -> void:
+    if not visible or service != "storage" or payload.get("gameId") != "phoenix-pix-arena" \
+        or payload.get("contract") != "ppa-personal-storage-v1" \
+        or not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var state: Dictionary = payload["state"]
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner \
+        or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
+        or not (state.get("bag") is Array) or not (state.get("personal") is Array) \
+        or int(state.get("version", 0)) < 1:
+        return
+    personal_storage_state = state.duplicate(true)
+    personal_storage_actions = payload["actions"].duplicate()
+    _render()
+
+func set_personal_storage_loading(busy: bool, pending: bool) -> void:
+    personal_storage_busy = busy
+    personal_storage_pending = pending
+    if visible and service == "storage":
+        _render()
+
+func set_personal_storage_notice(message: String, pending: bool) -> void:
+    personal_storage_notice = message.left(240)
+    personal_storage_pending = pending
+    if visible and service == "storage":
+        _render()
 
 func set_inventory_loading(busy: bool, pending: bool) -> void:
     inventory_busy = busy
@@ -1495,6 +1548,23 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
             if bool(seen.get(scope, false)):
                 saved_items = scopes.get(scope, [])
                 known = true
+    if service == "storage" and _owns_verified_state(personal_storage_state):
+        if scope == "inventory" or scope == "personal":
+            var live_key := "bag" if scope == "inventory" else "personal"
+            var live: Variant = personal_storage_state.get(live_key, null)
+            if live is Array:
+                saved_items = live
+                known = true
+    # Clan items are stored in a shared clan D1 record, NOT player's
+    # legacy storage.clan array. Display only signed clan state.
+    if scope == "clan":
+        known = false
+        saved_items = []
+        if service == "storage" and _owns_verified_state(clan_state):
+            var clan_storage: Variant = clan_state.get("storage", null)
+            if clan_storage is Dictionary and (clan_storage as Dictionary).get("items") is Array:
+                saved_items = (clan_storage as Dictionary)["items"]
+                known = true
     var occupied := 0
     for raw in saved_items:
         if raw is Dictionary and not (raw as Dictionary).is_empty():
@@ -1534,6 +1604,81 @@ func _storage_pair(scope: String) -> void:
     _storage_slot_panel(split, "inventory")
     _storage_slot_panel(split, scope)
 
+func _select_personal_uid(which: String, uid: String) -> void:
+    if which == "bag":
+        _storage_bag_uid = uid
+    elif which == "personal":
+        _storage_personal_uid = uid
+
+func _request_personal_storage_move(action: String, uid: String, version: int) -> void:
+    if not visible or service != "storage" or tab != "personal" \
+        or personal_storage_busy or personal_storage_pending \
+        or not personal_storage_actions.has(action) \
+        or not _owns_verified_state(personal_storage_state) \
+        or int(personal_storage_state.get("version", -1)) != version:
+        return
+    var records: Variant = personal_storage_state.get("bag", null) if action == "put" else personal_storage_state.get("personal", null)
+    if not (records is Array):
+        return
+    var matches := 0
+    for entry in records:
+        if entry is Dictionary and str(entry.get("uid", "")) == uid and not uid.is_empty():
+            matches += 1
+    if matches != 1:
+        return
+    personal_storage_action_requested.emit({"action":action,"uid":uid,"version":version})
+
+func _show_personal_storage_controls() -> void:
+    if not personal_storage_notice.is_empty():
+        _body.add_child(_label(personal_storage_notice, 12, GOLD))
+    if personal_storage_pending:
+        var pending_button := _button("ПРОВЕРИТЬ ТО ЖЕ ПЕРЕМЕЩЕНИЕ", not personal_storage_busy)
+        pending_button.pressed.connect(func(): personal_storage_retry_requested.emit())
+        _body.add_child(pending_button)
+    if not _owns_verified_state(personal_storage_state):
+        _body.add_child(_label("Ожидаем серверный список предметов PPA.", 11, SUB))
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
+        return
+    var version := int(personal_storage_state.get("version", 0))
+    var bag: Array = personal_storage_state.get("bag", [])
+    var stored: Array = personal_storage_state.get("personal", [])
+    _mini_row("Настоящая сумка", str(bag.size()) + " / 100")
+    _mini_row("Личный склад", str(stored.size()) + " / 200")
+    for direction in ["put","take"]:
+        var source_items: Array = bag if direction == "put" else stored
+        var which := "bag" if direction == "put" else "personal"
+        var chosen_uid := _storage_bag_uid if direction == "put" else _storage_personal_uid
+        var chooser := OptionButton.new()
+        chooser.name = "PPAStorageChoose_" + direction
+        var selected_index := 0
+        for entry in source_items:
+            if not (entry is Dictionary):
+                continue
+            var uid := str(entry.get("uid", ""))
+            if uid.is_empty():
+                continue
+            var text_value := str(entry.get("name", "Предмет")).left(28) + " · +" + str(entry.get("enh", 0))
+            var index := chooser.item_count
+            chooser.add_item(text_value)
+            chooser.set_item_metadata(index, uid)
+            if uid == chosen_uid:
+                selected_index = index
+        if chooser.item_count > 0:
+            chooser.select(selected_index)
+            chosen_uid = str(chooser.get_item_metadata(selected_index))
+            _select_personal_uid(which, chosen_uid)
+        chooser.item_selected.connect(func(i: int): _select_personal_uid(which, str(chooser.get_item_metadata(i))))
+        _body.add_child(chooser)
+        var can_move := chooser.item_count > 0 and not personal_storage_busy and not personal_storage_pending \
+            and personal_storage_actions.has(direction) \
+            and (stored.size() < 200 if direction == "put" else bag.size() < 100)
+        var button := _button("ПОЛОЖИТЬ В СКЛАД" if direction == "put" else "ЗАБРАТЬ В СУМКУ", can_move)
+        button.name = "PPARealPersonalStorage_" + direction
+        button.pressed.connect(func():
+            var selected := _storage_bag_uid if direction == "put" else _storage_personal_uid
+            _request_personal_storage_move(direction, selected, version))
+        _body.add_child(button)
+
 func _show_storage() -> void:
     var captions := {"personal":"ЛИЧНОЕ ХРАНИЛИЩЕ", "clan":"КЛАНОВОЕ ХРАНИЛИЩЕ",
         "premium":"ПРЕМИУМ ХРАНИЛИЩЕ", "sort":"СОРТИРОВКА"}
@@ -1547,12 +1692,15 @@ func _show_storage() -> void:
         _locked_action("СОХРАНИТЬ ПОРЯДОК")
         return
     _storage_pair(tab)
-    if tab == "clan":
-        _message("КЛАНОВЫЕ ПРАВА", "Переносить вещи смогут только участники с подтверждёнными правами.")
+    if tab == "personal":
+        _show_personal_storage_controls()
+    elif tab == "clan":
+        _message("КЛАНОВЫЙ СКЛАД · ТОЛЬКО ПРОСМОТР",
+            "Настоящий общий склад и права клана загружаются с сервера. Перемещения включим только после атомарной серверной операции между кланом и сумкой.")
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
     elif tab == "premium":
         _message("ПРЕМИУМ ДОСТУП", "Содержимое премиум-хранилища читается только с сервера PPA.")
-    _locked_action("ПОЛОЖИТЬ")
-    _locked_action("ЗАБРАТЬ")
+        _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
 
 func _show_auction() -> void:
     var captions := {"all":"КУПИТЬ", "mine":"МОИ ЛОТЫ", "sell":"ПРОДАТЬ"}
