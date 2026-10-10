@@ -1110,7 +1110,7 @@ func _set_craft_rarity(key: String) -> void:
 func _forge_owned_material(material_name: String) -> Variant:
     # Most recent signed forge projection wins over a potentially stale
     # full save. No local stash/resource totals or invented zero values.
-    if service == "forge" and not forge_state.is_empty():
+    if service == "forge" and not forge_state.is_empty() and _owns_verified_state(forge_state):
         var live: Variant = forge_state.get("feathers", null) if material_name == "Перо Феникса" else forge_state.get("materials", null)
         if live is Dictionary:
             return (live as Dictionary).get("phoenix" if material_name == "Перо Феникса" else material_name, null)
@@ -1185,7 +1185,7 @@ func _show_original_forge_recipes() -> void:
         and authoritative.get("service") == "forge" and authoritative.get("readOnly") == true:
         var live_currency: Variant = authoritative.get("currency", null)
         balance = (live_currency as Dictionary).get("ppa", null) if live_currency is Dictionary else null
-    if service == "forge" and not forge_state.is_empty():
+    if service == "forge" and not forge_state.is_empty() and _owns_verified_state(forge_state):
         var wallet: Variant = forge_state.get("wallet", null)
         balance = (wallet as Dictionary).get("ppa", null) if wallet is Dictionary else null
     var price := int(chosen.get("price",0))
@@ -1216,7 +1216,7 @@ func _show_original_forge_recipes() -> void:
     # PPA Forge server. Compare costs/materials with displayed original cards:
     # stale catalogs or client-supplied prices can NEVER authorize a craft.
     var offered := false
-    if tab == "equipment" and not forge_state.is_empty():
+    if tab == "equipment" and not forge_state.is_empty() and _owns_verified_state(forge_state):
         for server_row in forge_state.get("offers", []):
             if server_row is Dictionary and str(server_row.get("id", "")) == selected_id \
                 and int(server_row.get("price", -1)) == price \
@@ -1232,7 +1232,7 @@ func _show_original_forge_recipes() -> void:
         create_button.name = "PPARealForgeCraft"
         create_button.pressed.connect(func():
             if visible and service == "forge" and not forge_busy and not forge_pending \
-                and forge_actions.has("craft"):
+                and forge_actions.has("craft") and _owns_verified_state(forge_state):
                 forge_action_requested.emit({"id":selected_id,
                     "version":int(forge_state.get("version", 0))}))
         _body.add_child(create_button)
