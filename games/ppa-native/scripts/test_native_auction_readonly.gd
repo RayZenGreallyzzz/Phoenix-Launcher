@@ -27,7 +27,7 @@ func _run() -> void:
     npc.size = host.size
     npc.open_npc({"service":"auction","name":"Аукционист"})
     check(npc.auction_state.is_empty(), "Unsigned PPA auction should not be shown")
-    var signed := {"gameId":"phoenix-pix-arena","contract":"ppa-auction-readonly-v1",
+    var signed := {"gameId":"phoenix-pix-arena","contract":"ppa-auction-v1",
         "ownerId":OWNER,"actions":[],"state":{
         "connected":true,"self":{"id":OWNER},"version":19,
         "commissionPct":10,"source":"Telegram PPA auction_lots/auction_credits",
@@ -63,7 +63,8 @@ func _run() -> void:
     check(npc.auction_state["bag"][0]["enh"] == 7,
         "Speculative Godot auction altered original +7 gear")
     var bridge := BRIDGE.new()
-    check(bridge.supported_actions.is_empty(),"Unreviewed trade action allowed")
+    check(bridge.supported_actions.has("buy"),"Server escrow service missing")
+    check(npc.auction_actions.is_empty(), "Auction actions enabled with flags off")
     bridge.free()
     npc.close_npc()
     check(npc.auction_state.is_empty(),"Old auction account state survived NPC close")
