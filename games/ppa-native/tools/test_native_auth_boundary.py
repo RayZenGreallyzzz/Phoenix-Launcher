@@ -38,4 +38,7 @@ assert 'resized.connect(_adapt_orientation)' in select, "Phone/tablet responsive
 assert 'func _adapt_orientation()' in select
 assert '/api/game/npc/' not in main, "Entry flow must not issue NPC mutations"
 assert '"/api/save"' not in main, "Native account flow must never write legacy player state"
+assert 'data.get("ok", false) != true' in main, "Never trust unconfirmed JSON"
+assert '["exchange", "me", "state"].has(request_mode)' in main, "Reject wrong game responses"
+assert 'confirmed_account as Dictionary' in main and 'account.get("accountId"' in main, "Character identity must match bound Phoenix account"
 print('PPA_NATIVE_INTEGRATION_GUARD_OK fresh_ticket=1 identity=1 handoff=1 read_only=1 orientation=1 class_locked=1')
