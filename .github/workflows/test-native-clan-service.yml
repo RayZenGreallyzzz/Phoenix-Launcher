@@ -22,6 +22,7 @@ on:
       - 'games/ppa-native/scripts/ppa_native_auction_service.gd'
       - 'games/ppa-native/scripts/test_native_auction_readonly.gd'
       - 'games/ppa-native/scripts/test_native_auction_actions.gd'
+      - 'games/ppa-native/scripts/test_native_auction_recovery.gd'
       - 'games/ppa-native/scripts/test_native_forge_full_catalog.gd'
       - 'games/ppa-native/scripts/ppa_native_forge_service.gd'
       - 'games/ppa-native/scripts/test_world_menu.gd'
@@ -85,6 +86,9 @@ jobs:
       - name: Verify escrow-backed auction place, buy and cancel on same PPA character
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_actions.gd
+      - name: Verify owner-only expired PPA escrow gear recovery in Godot
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_auction_recovery.gd
       - name: Verify original forge uses only real PPA materials and feathers
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_material_view.gd
