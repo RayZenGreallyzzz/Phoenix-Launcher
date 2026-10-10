@@ -27,6 +27,7 @@ func _run() -> void:
     remove_meta("ppa_native_game_session")
     # Compile the complete menu/world wiring without launching an offline
     # scene, duplicating monsters or loading a second 3D renderer.
+    print("PPA_NPC_AUDIT_PHASE creating_world")
     var world := WORLD.new()
     world.free()
     var menu := MENU.new()
@@ -35,11 +36,13 @@ func _run() -> void:
     var host := Control.new()
     root.add_child(host)
     host.size = Vector2(1280, 720)
+    print("PPA_NPC_AUDIT_PHASE creating_npc")
     var npc := NPC.new()
     host.add_child(npc)
     npc.size = host.size
     var sent: Array = []
     npc.merchant_action_requested.connect(func(fields: Dictionary): sent.append(fields.duplicate(true)))
+    print("PPA_NPC_AUDIT_PHASE opening_merchant")
     npc.open_npc({"service":"merchant", "name":"Торговец"})
     npc._select_item("hp_small")
     check(npc._body.find_child("MerchantCommand_buy", true, false) == null, "Reference catalog permits a live purchase")
@@ -47,6 +50,7 @@ func _run() -> void:
         "actions":["buy"], "state":{"connected":true,"self":{"id":OWNER},"version":8,
         "wallet":{"gold":1000,"ppa":40},"offers":[{"id":"hp_small","name":"Малое зелье HP",
         "price":102,"currency":"gold","owned":6}]}}
+    print("PPA_NPC_AUDIT_PHASE applying_merchant")
     npc.apply_native_merchant(merchant)
     npc._change_quantity(1)
     var products: Array = npc._merchant_products()
@@ -92,7 +96,9 @@ func _run() -> void:
         "storage":{"used":1,"max":500,"items":[{"uid":"server-item","name":"Общая вещь"}]},
         "clanProgress":{"level":2,"coins":500,"freePoints":1,"bonuses":{"hp":0}},
         "events":[],"history":[],"wars":[],"bosses":[]}}
+    print("PPA_NPC_AUDIT_PHASE opening_clan")
     npc.open_npc({"service":"clan","name":"Магистр кланов"})
+    print("PPA_NPC_AUDIT_PHASE applying_clan")
     npc.apply_native_clan(clan)
     check(npc.clan_state["clan"]["name"] == "Shared", "Canonical clan not displayed")
     npc._select_tab("storage")
