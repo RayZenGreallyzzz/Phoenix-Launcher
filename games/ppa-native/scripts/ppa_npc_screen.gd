@@ -1764,6 +1764,16 @@ func _request_clan_storage_move(action: String, uid: String, version: int, revis
         return
     clan_storage_action_requested.emit({"action":action,"uid":uid,"version":version,"clanRevision":revision})
 
+func _clan_storage_choice_selected(index: int, chooser: OptionButton, action: String) -> void:
+    if index < 0 or index >= chooser.item_count:
+        return
+    _choose_clan_vault_uid("bag" if action == "put" else "items",
+        str(chooser.get_item_metadata(index)))
+
+func _submit_selected_clan_storage_move(action: String, version: int, revision: String) -> void:
+    var uid := _clan_put_uid if action == "put" else _clan_take_uid
+    _request_clan_storage_move(action, uid, version, revision)
+
 func _show_clan_storage_controls() -> void:
     _section("КЛАНОВЫЙ СКЛАД · ОБЩИЙ МИР",
         "Сервер одновременно переносит вещь между сумкой и общим складом клана.")
@@ -1808,9 +1818,7 @@ func _show_clan_storage_controls() -> void:
             choices.select(selected)
             _choose_clan_vault_uid("bag" if action == "put" else "items",
                 str(choices.get_item_metadata(selected)))
-        choices.item_selected.connect(func(i: int):
-            _choose_clan_vault_uid("bag" if action == "put" else "items",
-                str(choices.get_item_metadata(i))))
+        choices.item_selected.connect(_clan_storage_choice_selected.bind(choices, action))
         _body.add_child(choices)
         var allowed: bool = choices.item_count > 0 and clan_storage_actions.has(action) \
             and not clan_storage_busy and not clan_storage_pending \
@@ -1818,9 +1826,7 @@ func _show_clan_storage_controls() -> void:
                 if action == "put" else bag.size() < 100)
         var button := _button("ВНЕСТИ В КЛАН" if action == "put" else "ЗАБРАТЬ ИЗ КЛАНА", allowed)
         button.name = "PPARealClanStorage_" + action
-        button.pressed.connect(func():
-            var uid := _clan_put_uid if action == "put" else _clan_take_uid
-            _request_clan_storage_move(action, uid, version, revision))
+        button.pressed.connect(_submit_selected_clan_storage_move.bind(action, version, revision))
         _body.add_child(button)
 
 func _show_storage() -> void:
