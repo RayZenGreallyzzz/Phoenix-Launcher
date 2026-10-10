@@ -19,6 +19,7 @@ const HERO_CATALOG = preload("res://scripts/test_hero_catalog.gd")
 const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
+const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -83,6 +84,7 @@ var fps_label: Label
 var coords_label: Label
 var input_label: Label
 var _server_snapshot_loader: Node
+var _npc_service_loader: Node
 var _server_snapshot_status: Label
 
 var _joy_touch_id := -1
@@ -386,6 +388,28 @@ func _build_server_readonly_bridge() -> void:
     _server_snapshot_loader.snapshot_ready.connect(_on_readonly_snapshot_ready)
     _server_snapshot_loader.snapshot_failed.connect(_on_readonly_snapshot_failed)
     _server_snapshot_loader.call("fetch_once")
+    # A single small NPC request is made only when the player opens its menu.
+    _npc_service_loader = NPC_SERVICE_READONLY.new()
+    _npc_service_loader.name = "PPANativeNpcReadOnly"
+    add_child(_npc_service_loader)
+    _npc_service_loader.service_ready.connect(_on_npc_service_ready)
+    _npc_service_loader.service_failed.connect(_on_npc_service_failed)
+    if test_menu != null:
+        test_menu.npc_snapshot_requested.connect(_request_npc_service)
+
+func _request_npc_service(service: String) -> void:
+    if _npc_service_loader == null or test_menu == null:
+        return
+    _npc_service_loader.request_service(service)
+
+func _on_npc_service_ready(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_npc_service(payload)
+
+func _on_npc_service_failed(_service: String, _code: String) -> void:
+    # The server feature flags default OFF. Local NPC menus must keep working
+    # without creating fake purchases, blocking input or spamming retries.
+    pass
 
 func _refresh_server_readonly_save() -> void:
     # Authenticated GET only, no save writes. Never cache another character.
