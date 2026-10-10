@@ -152,14 +152,14 @@ def main() -> None:
             })
     # The original Telegram legendary equipment uses an independent list,
     # not GEAR or ACC. Copy its six canonical rows; no invented recipes.
-    match = re.search(r"\\bLEGENDARY_CRAFT\\s*=\\s*\\[(.*?)\\];", source, re.S)
+    match = re.search(r"\bLEGENDARY_CRAFT\s*=\s*\[(.*?)\];", source, re.S)
     if not match:
         raise RuntimeError("Original legendary smith equipment list missing")
     legendary_items = []
-    for raw in re.findall(r"\\{([^{}]+)\\}", match.group(1)):
+    for raw in re.findall(r"\{([^{}]+)\}", match.group(1)):
         props = {}
         for key, value, digits in re.findall(
-                r"(\\w+)\\s*:\\s*(?:'([^']*)'|(\\d+))", raw):
+                r"(\w+)\s*:\s*(?:'([^']*)'|(\d+))", raw):
             props[key] = int(digits) if digits else value
         if not {"name","slot","kind","icon","price","mat"} <= props.keys():
             raise RuntimeError("Original legendary equipment entry changed")
