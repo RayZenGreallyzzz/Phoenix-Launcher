@@ -5,7 +5,7 @@ extends "res://scripts/ppa_native_command_service.gd"
 func _init() -> void:
     service_key = "auction"
     contract_key = "ppa-auction-v1"
-    supported_actions = ["place", "buy", "cancel", "recover"]
+    supported_actions = ["place", "buy", "cancel", "recover", "claim"]
 
 func _valid_state(state: Dictionary) -> bool:
     return super._valid_state(state) and state.get("lots") is Array \
