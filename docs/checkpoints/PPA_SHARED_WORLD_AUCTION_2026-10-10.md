@@ -29,6 +29,15 @@
 5. Build original signed Android package `com.phoenixgames.ppa`, with higher versionCode and the **same signer as previously installed PPA**, only after dependency branches integrated and Godot CI plus APK workflow confirmed; do not reuse an old debug APK.
 6. Then manually test Telegram and Godot shared world, same account/gear/HP/mob/NPC/shop/inventory/clan/market and FPS on tablet/phone.
 
+## 2026-10-10 continuation: command receipt parity FIXED (test branch only)
+
+- Server PR #34 advanced to `7ae31a06a705f44bdfd8295d66a2786b8767b560` (5/5 green CI). It now retains the post-cutoff seller-credit visibility barrier during rollback, blocks stale Telegram saves on ambiguous claim responses, and has a dedicated seller-credit CI. Production is unchanged.
+- Godot PR #33 code at `e10f4813ae9a03348ab75dae4d0a7556c89f526b` passed BOTH headless CI workflows (shared city; clan/merchant/NPC).
+- Discovered and fixed real response-contract mismatch in `games/ppa-native/scripts/ppa_native_command_service.gd`: successful canonical server command envelopes have `gameId`, `contract`, `ownerId`, `requestId`, `commandStatus=done` and a receipt, but intentionally omit `state/actions`. Previously Godot incorrectly required a full state snapshot before emitting `command_finished`, so a successful PPA operation appeared to fail in the NPC UI.
+- Now the native client accepts only a properly matched command acknowledgement, emits success, and GETs fresh canonical state; full `state/actions` validation still applies strictly to read-only state responses.
+- Offline Godot test `test_native_command_receipt.gd` plus `test_native_command_receipt_probe.gd` checks receipt-only success, fresh state request, stale requestId, terminal refusal, and wrong-account snapshot. Verified green in Godot PR #33 CI.
+- Next NOT YET DONE: staging D1 / two real clients, old cached Telegram mini-app behaviour, installed APK signer and Android performance. Do not deploy Cloudflare, merge stacked PRs, enable economy write flags, or claim full shared-world PvE/PK/Arena based on headless CI.
+
 ## How to resume after chat limit
 
 In a new chat, say:
