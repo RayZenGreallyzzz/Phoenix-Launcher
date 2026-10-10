@@ -22,6 +22,9 @@ var selection_screen: Control
 
 func _ready() -> void:
     _build_ui()
+    # A restored APK must never enter the prior user's PPA without a fresh
+    # account-bound one-time Launcher ticket. Delete legacy beta token cache.
+    _clear_saved_session()
     http = HTTPRequest.new()
     http.timeout = 20.0
     add_child(http)
@@ -37,10 +40,7 @@ func _ready() -> void:
         _exchange_ticket(ticket)
         return
 
-    if _restore_saved_session():
-        _load_profile()
-    else:
-        _show_error("Открой Phoenix Pix Arena через Phoenix Launcher, чтобы получить игровую сессию.")
+    _show_error("Открой Phoenix Pix Arena через Phoenix Launcher, чтобы получить новую игровую сессию.")
 
 func _build_ui() -> void:
     var background := TextureRect.new()
@@ -233,7 +233,6 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         if session_token.is_empty():
             _show_error("Phoenix Server не вернул игровую сессию.")
             return
-        _save_session(session_token)
         account = data.get("account", {})
         _show_connected()
         return
@@ -287,15 +286,16 @@ func _show_error(message: String) -> void:
 
 func _retry() -> void:
     retry_button.visible = false
-    if _restore_saved_session():
-        _load_profile()
-    else:
-        _show_error("Нужен новый запуск через Phoenix Launcher.")
+    _show_error("Нужен новый запуск через Phoenix Launcher.")
 
 func _enter_native_world() -> void:
     # The selection is server-owned. A client-side class preview is NEVER
     # permission to enter with an unregistered or different character.
-    if str(account.get("ppaNickname", "")).strip_edges().is_empty() or str(account.get("classKey", "")).strip_edges().is_empty():
+    var ppa_name: Variant = account.get("ppaNickname", null)
+    var hero_class: Variant = account.get("classKey", null)
+    if not (ppa_name is String) or not (hero_class is String) \
+        or (ppa_name as String).strip_edges().is_empty() \
+        or (hero_class as String).strip_edges().is_empty():
         _show_error("В Phoenix Account пока нет зарегистрированного персонажа PPA.")
         return
     var registered_class := str(account.get("classKey", "")).to_lower().strip_edges()
@@ -312,23 +312,6 @@ func _enter_native_world() -> void:
     var err := get_tree().change_scene_to_file("res://world.tscn")
     if err != OK:
         _show_error("Не удалось открыть native world: %s" % error_string(err))
-
-func _save_session(token: String) -> void:
-    var file := FileAccess.open(SESSION_FILE, FileAccess.WRITE)
-    if file:
-        file.store_string(JSON.stringify({"token": token}))
-
-func _restore_saved_session() -> bool:
-    if not FileAccess.file_exists(SESSION_FILE):
-        return false
-    var file := FileAccess.open(SESSION_FILE, FileAccess.READ)
-    if file == null:
-        return false
-    var parsed = JSON.parse_string(file.get_as_text())
-    if typeof(parsed) != TYPE_DICTIONARY:
-        return false
-    session_token = str(parsed.get("token", ""))
-    return not session_token.is_empty()
 
 func _clear_saved_session() -> void:
     session_token = ""

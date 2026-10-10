@@ -17,6 +17,7 @@ signal npc_snapshot_requested(service: String)
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
+signal native_realtime_requested
 signal refresh_readonly_save_requested
 
 
@@ -64,6 +65,22 @@ func apply_readonly_snapshot(payload: Dictionary) -> void:
         _global_hub.apply_player_save_readonly(_verified_save)
     if _panel != null and _panel.visible:
         _refresh()
+
+func apply_native_npc_service(payload: Dictionary) -> void:
+    # Service payload is an authenticated, READ-ONLY projection of the same
+    # Telegram PPA save already used by every character/inventory panel.
+    if payload.get("readOnly", false) != true:
+        return
+    if _npc_screen != null:
+        _npc_screen.apply_authoritative_snapshot(payload)
+
+func apply_native_presence(count: int, room_total: int) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_online_presence(count, room_total)
+
+func apply_native_presence_failure(message: String) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_online_failure(message)
 
 func clear_readonly_snapshot() -> void:
     _verified_save.clear()
@@ -122,6 +139,7 @@ func _ready() -> void:
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     _npc_screen.arena_training_requested.connect(func(): arena_training_requested.emit())
+    _npc_screen.native_realtime_requested.connect(func(): native_realtime_requested.emit())
     _global_hub = GLOBAL_HUB.new()
     _global_hub.z_index = 110
     add_child(_global_hub)
