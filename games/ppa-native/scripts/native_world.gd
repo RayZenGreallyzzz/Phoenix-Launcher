@@ -23,6 +23,7 @@ const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridg
 const CLAN_SERVICE = preload("res://scripts/ppa_native_clan_service.gd")
 const MERCHANT_SERVICE = preload("res://scripts/ppa_native_merchant_service.gd")
 const FORGE_SERVICE = preload("res://scripts/ppa_native_forge_service.gd")
+const INVENTORY_SERVICE = preload("res://scripts/ppa_native_inventory_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
@@ -94,6 +95,7 @@ var _npc_service_loader: Node
 var _clan_service: Node
 var _merchant_service: Node
 var _forge_service: Node
+var _inventory_service: Node
 var _pending_save_refresh := false
 var _known_clan_identity := "unknown"
 var _native_global_realtime: Node
@@ -460,6 +462,16 @@ func _build_server_readonly_bridge() -> void:
         _on_forge_notice(message)
         _refresh_server_readonly_save())
     _forge_service.loading_changed.connect(_on_forge_loading)
+    _inventory_service = INVENTORY_SERVICE.new()
+    _inventory_service.name = "PPACanonicalInventoryService"
+    add_child(_inventory_service)
+    _inventory_service.state_ready.connect(_on_inventory_state)
+    _inventory_service.request_failed.connect(_on_inventory_notice)
+    _inventory_service.command_finished.connect(func(message: String):
+        _on_inventory_notice(message)
+        _forge_service.request_state()
+        _refresh_server_readonly_save())
+    _inventory_service.loading_changed.connect(_on_inventory_loading)
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -481,6 +493,8 @@ func _build_server_readonly_bridge() -> void:
         test_menu.merchant_retry_requested.connect(_merchant_service.retry_pending)
         test_menu.forge_action_requested.connect(_request_forge_action)
         test_menu.forge_retry_requested.connect(_forge_service.retry_pending)
+        test_menu.inventory_action_requested.connect(_request_inventory_action)
+        test_menu.inventory_retry_requested.connect(_inventory_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
@@ -492,6 +506,7 @@ func _request_npc_service(service: String) -> void:
         _merchant_service.request_state()
     elif service == "forge":
         _forge_service.request_state()
+        _inventory_service.request_state()
     else:
         _npc_service_loader.request_service(service)
 
@@ -558,6 +573,29 @@ func _on_forge_loading(busy: bool) -> void:
 func _on_forge_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_forge_notice(message, _forge_service.has_pending())
+
+func _request_inventory_action(fields: Dictionary) -> void:
+    if _inventory_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["equip","unequip"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _inventory_service.request_action(action,payload)
+
+func _on_inventory_state(payload: Dictionary) -> void:
+    if test_menu != null:
+        test_menu.apply_native_inventory(payload)
+        test_menu.set_inventory_loading(false,_inventory_service.has_pending())
+
+func _on_inventory_loading(busy: bool) -> void:
+    if test_menu != null:
+        test_menu.set_inventory_loading(busy,_inventory_service.has_pending())
+
+func _on_inventory_notice(message: String) -> void:
+    if test_menu != null:
+        test_menu.set_inventory_notice(message,_inventory_service.has_pending())
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
