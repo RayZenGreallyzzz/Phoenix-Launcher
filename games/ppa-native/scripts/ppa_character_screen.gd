@@ -79,9 +79,14 @@ var _server_save_version: Variant = null
 var _server_saved_at: Variant = null
 var _server_diagnostics: Dictionary = {}
 var _icon_loader: Node
+# Keep already constructed bag widgets when reopening the SAME unchanged page.
+var _drawn_page := -1
+var _page_dirty := true
+var _drawn_viewport := Vector2.ZERO
 
 func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_at: Variant = null) -> void:
     # This is a VIEW only. Never merge with the local test bag/equipment.
+    _page_dirty = true
     _server_inventory = SERVER_VIEW.from_save(save)
     _server_diagnostics = SERVER_VIEW.diagnose(save)
     _server_skills = _project_server_skill_cards(save)
@@ -96,6 +101,7 @@ func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_a
         _draw_page()
 
 func clear_readonly_save() -> void:
+    _page_dirty = true
     _server_inventory.clear()
     _server_diagnostics.clear()
     _server_save_version = null
@@ -163,12 +169,14 @@ func apply_authoritative_skill_snapshot(snapshot: Dictionary) -> void:
         return
     if not (snapshot["active"] is Array and snapshot["passive"] is Array):
         return
+    _page_dirty = true
     _server_skills = snapshot.duplicate(true)
     _server_skills_received = true
     if is_node_ready() and visible and (_page == 2 or _page == 3):
         _draw_page()
 
 func clear_authoritative_skill_snapshot() -> void:
+    _page_dirty = true
     _server_skills_received = false
     _server_skills.clear()
     if is_node_ready() and visible and (_page == 2 or _page == 3):
@@ -176,6 +184,7 @@ func clear_authoritative_skill_snapshot() -> void:
 
 
 func configure(profile: Dictionary, hero: String, shared_stash: RefCounted) -> void:
+    _page_dirty = true
     account = profile.duplicate(true)
     class_key = hero
     stash = shared_stash
@@ -414,14 +423,19 @@ func _fit_to_viewport() -> void:
     _frame.offset_bottom = height * 0.5
 
 func open_index(index: int) -> void:
-    _page = posmod(index, 5)
+    var requested_page := posmod(index, 5)
+    var reuse_widgets := not _page_dirty and _drawn_page == requested_page \
+        and _drawn_viewport == size and _page_container != null \
+        and _page_container.get_child_count() > 0
+    _page = requested_page
     if _book_overlay != null:
         _book_overlay.visible = false
     if _item_overlay != null:
         _item_overlay.visible = false
     visible = true
     _fit_to_viewport()
-    _draw_page()
+    if not reuse_widgets:
+        _draw_page()
     if _scroll != null:
         _scroll.set_deferred("scroll_vertical", 0)
 
@@ -526,6 +540,9 @@ func _draw_page() -> void:
     if _page_container == null or stash == null:
         return
     _clear_page()
+    _drawn_page = _page
+    _drawn_viewport = size
+    _page_dirty = false
     _caption.text = CAPTIONS[_page]
     for i in range(_dots.size()):
         var active := i == _page
