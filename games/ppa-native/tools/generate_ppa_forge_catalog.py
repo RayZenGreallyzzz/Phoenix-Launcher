@@ -174,9 +174,18 @@ def main() -> None:
             "currency":"ppa","icon":item["icon"],"desc":"Легендарный тир",
             "materials":[{"name":item["mat"],"count":1000}],"img":""
         })
+    # Price/material parity with server. Differences in images, markup and
+    # HTML order must not make two identical recipes appear incompatible.
+    signed_rows = [[x["id"], int(x["price"]), x["rarity"],
+                    [[v["name"], int(v["count"])] for v in x["materials"]]]
+                   for x in sorted(rows,key=lambda row:row["id"])]
+    recipe_signature = hashlib.sha256(json.dumps(
+        signed_rows,ensure_ascii=False,separators=(",",":")
+    ).encode()).hexdigest()
     # Client uses this immutable display catalog, never as an authorization
     # source for deduction. Real purchase/forge must be a server-side atomic action.
     data = {
+        "recipe_sha256":recipe_signature,
         "source":"public-live-PPA:blacksmithFrame",
         "sha256":hashlib.sha256(source.encode()).hexdigest(),
         "rows":rows
