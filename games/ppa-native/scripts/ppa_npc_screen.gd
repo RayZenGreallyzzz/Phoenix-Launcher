@@ -18,6 +18,8 @@ signal personal_storage_action_requested(fields: Dictionary)
 signal personal_storage_retry_requested
 signal clan_storage_action_requested(fields: Dictionary)
 signal clan_storage_retry_requested
+signal auction_action_requested(fields: Dictionary)
+signal auction_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
@@ -107,6 +109,9 @@ var _clan_take_uid := ""
 var auction_state: Dictionary = {}
 var auction_notice := ""
 var auction_loading := false
+var auction_actions: Array = []
+var auction_pending := false
+var _auction_sell_uid := ""
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -338,6 +343,7 @@ func clear_player_save_readonly() -> void:
     clan_storage_state.clear()
     clan_storage_actions.clear()
     auction_state.clear()
+    auction_actions.clear()
     if visible:
         _render()
 
@@ -390,6 +396,9 @@ func open_npc(source: Dictionary) -> void:
     auction_state.clear()
     auction_notice = ""
     auction_loading = false
+    auction_actions.clear()
+    auction_pending = false
+    _auction_sell_uid = ""
     inventory_state.clear()
     inventory_actions.clear()
     inventory_notice = ""
@@ -433,6 +442,9 @@ func close_npc() -> void:
     auction_state.clear()
     auction_notice = ""
     auction_loading = false
+    auction_actions.clear()
+    auction_pending = false
+    _auction_sell_uid = ""
     _enhance_uid = ""
     _enhance_mode = "normal"
 
@@ -521,7 +533,7 @@ func apply_native_personal_storage(payload: Dictionary) -> void:
 
 func apply_native_auction(payload: Dictionary) -> void:
     if not visible or service != "auction" or payload.get("gameId") != "phoenix-pix-arena" \
-        or payload.get("contract") != "ppa-auction-readonly-v1" \
+        or payload.get("contract") != "ppa-auction-v1" \
         or not (payload.get("state") is Dictionary):
         return
     var state: Dictionary = payload["state"]
@@ -532,15 +544,22 @@ func apply_native_auction(payload: Dictionary) -> void:
         or not (state.get("lots") is Array) or not (state.get("mine") is Array) \
         or not (state.get("pendingCredits") is Array) \
         or not (state.get("wallet") is Dictionary) \
-        or state.get("settlementEnabled") != false \
+        or not (state.get("settlementEnabled") is bool) \
         or int(state.get("version", 0)) < 1:
         return
     auction_state = state.duplicate(true)
+    auction_actions = payload.get("actions", []).duplicate()
     auction_loading = false
     _render()
 
 func set_native_auction_loading(busy: bool) -> void:
     auction_loading = busy
+    if visible and service == "auction":
+        _render()
+
+func set_native_auction_pending(busy: bool, pending: bool) -> void:
+    auction_loading = busy
+    auction_pending = pending
     if visible and service == "auction":
         _render()
 
