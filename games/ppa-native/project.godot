@@ -36,4 +36,4 @@ enabled=PackedStringArray("res://addons/PPAOriginalWebUI/plugin.cfg")
 [ppa]
 # Godot-native five-page character UI is the Android default.
 # Opt in to the original Telegram HTML pilot only for a controlled comparison.
-ui/use_original_webview=false
+# On Android, compare previous lightweight menu vs slow native 100-slot UI.\nui/use_original_webview=true
