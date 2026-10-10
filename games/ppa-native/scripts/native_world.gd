@@ -537,8 +537,14 @@ func _on_merchant_notice(message: String) -> void:
         test_menu.set_merchant_notice(message, _merchant_service.has_pending())
 
 func _request_forge_action(fields: Dictionary) -> void:
-    if _forge_service != null:
-        _forge_service.request_action("craft", fields)
+    if _forge_service == null:
+        return
+    var action := str(fields.get("action", "craft"))
+    if action not in ["craft", "enhance"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _forge_service.request_action(action, payload)
 
 func _on_forge_state(payload: Dictionary) -> void:
     if test_menu != null:
