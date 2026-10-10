@@ -51,7 +51,7 @@ func _run() -> void:
             stocks[str(req.get("name", ""))] = 10000
     var forge := {"ok":true,"gameId":"phoenix-pix-arena","contract":"ppa-forge-v1",
         "ownerId":OWNER,"actions":["craft"],"state":{"connected":true,"self":{"id":OWNER},
-        "version":8,"wallet":{"ppa":100000},"materials":stocks,"feathers":{"phoenix":100},
+        "version":8,"catalogSourceSha":str(CATALOG.CATALOG.get("sha256", "")),"wallet":{"ppa":100000},"materials":stocks,"feathers":{"phoenix":100},
         "offers":[{"id":offered["id"],"name":offered["name"],"price":offered["price"],
         "currency":"ppa","materials":offered["materials"]}]}}
     var sent: Array = []
