@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_CODE=$((700000 + GITHUB_RUN_NUMBER))
+          VERSION_CODE=$((710000 + GITHUB_RUN_NUMBER))
           VERSION_NAME="0.5.${GITHUB_RUN_NUMBER}-arena-beta"
           test "$VERSION_CODE" -gt 500042
           grep -q '^package/unique_name="com.phoenixgames.ppa"$' games/ppa-native/export_presets.cfg
