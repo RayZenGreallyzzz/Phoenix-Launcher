@@ -20,6 +20,7 @@ const NPC_CATALOG = preload("res://scripts/test_city_npcs.gd")
 const TEST_WORLD_MENU = preload("res://scripts/test_world_menu.gd")
 const PPA_READONLY = preload("res://scripts/ppa_server_readonly_snapshot.gd")
 const NPC_SERVICE_READONLY = preload("res://scripts/ppa_native_npc_service_bridge.gd")
+const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -85,6 +86,7 @@ var coords_label: Label
 var input_label: Label
 var _server_snapshot_loader: Node
 var _npc_service_loader: Node
+var _native_global_realtime: Node
 var _server_snapshot_status: Label
 
 var _joy_touch_id := -1
@@ -394,8 +396,14 @@ func _build_server_readonly_bridge() -> void:
     add_child(_npc_service_loader)
     _npc_service_loader.service_ready.connect(_on_npc_service_ready)
     _npc_service_loader.service_failed.connect(_on_npc_service_failed)
+    _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
+    _native_global_realtime.name = "PPASharedRealtimePresenceOnly"
+    add_child(_native_global_realtime)
+    _native_global_realtime.presence_changed.connect(_on_native_presence)
+    _native_global_realtime.presence_failed.connect(_on_native_presence_failure)
     if test_menu != null:
         test_menu.npc_snapshot_requested.connect(_request_npc_service)
+        test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
     if _npc_service_loader == null or test_menu == null:
@@ -410,6 +418,19 @@ func _on_npc_service_failed(_service: String, _code: String) -> void:
     # The server feature flags default OFF. Local NPC menus must keep working
     # without creating fake purchases, blocking input or spamming retries.
     pass
+
+func _connect_native_realtime() -> void:
+    # Only an explicit tap at the arena NPC can displace Telegram's socket.
+    if _native_global_realtime != null:
+        _native_global_realtime.connect_explicitly()
+
+func _on_native_presence(count: int, room_total: int) -> void:
+    if test_menu != null:
+        test_menu.apply_native_presence(count, room_total)
+
+func _on_native_presence_failure(message: String) -> void:
+    if test_menu != null:
+        test_menu.apply_native_presence_failure(message)
 
 func _refresh_server_readonly_save() -> void:
     # Authenticated GET only, no save writes. Never cache another character.
