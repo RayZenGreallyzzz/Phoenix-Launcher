@@ -510,6 +510,13 @@ func _build_server_readonly_bridge() -> void:
     _auction_service.state_ready.connect(_on_auction_state)
     _auction_service.request_failed.connect(_on_auction_notice)
     _auction_service.loading_changed.connect(_on_auction_loading)
+    _auction_service.command_finished.connect(func(message: String):
+        _on_auction_notice(message)
+        _auction_service.request_state()
+        _inventory_service.request_state()
+        _forge_service.request_state()
+        _personal_storage_service.request_state()
+        _refresh_server_readonly_save())
     _native_global_realtime = GLOBAL_REALTIME_READONLY.new()
     _native_global_realtime.name = "PPASharedCityRealtime"
     add_child(_native_global_realtime)
@@ -537,6 +544,8 @@ func _build_server_readonly_bridge() -> void:
         test_menu.personal_storage_retry_requested.connect(_personal_storage_service.retry_pending)
         test_menu.clan_storage_action_requested.connect(_request_clan_storage_action)
         test_menu.clan_storage_retry_requested.connect(_clan_storage_service.retry_pending)
+        test_menu.auction_action_requested.connect(_request_auction_action)
+        test_menu.auction_retry_requested.connect(_auction_service.retry_pending)
         test_menu.native_realtime_requested.connect(_connect_native_realtime)
 
 func _request_npc_service(service: String) -> void:
@@ -693,18 +702,29 @@ func _on_clan_storage_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_clan_storage_notice(message, _clan_storage_service.has_pending())
 
+func _request_auction_action(fields: Dictionary) -> void:
+    if _auction_service == null:
+        return
+    var action := str(fields.get("action", ""))
+    if action not in ["place", "buy", "cancel"]:
+        return
+    var payload := fields.duplicate(true)
+    payload.erase("action")
+    _auction_service.request_action(action, payload)
+
 func _on_auction_state(payload: Dictionary) -> void:
     if test_menu != null:
         test_menu.apply_native_auction(payload)
-        test_menu.set_native_auction_loading(false)
+        test_menu.set_native_auction_pending(false, _auction_service.has_pending())
 
 func _on_auction_loading(busy: bool) -> void:
     if test_menu != null:
-        test_menu.set_native_auction_loading(busy)
+        test_menu.set_native_auction_pending(busy, _auction_service.has_pending())
 
 func _on_auction_notice(message: String) -> void:
     if test_menu != null:
         test_menu.set_native_auction_notice(message)
+        test_menu.set_native_auction_pending(false, _auction_service.has_pending())
 
 func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
