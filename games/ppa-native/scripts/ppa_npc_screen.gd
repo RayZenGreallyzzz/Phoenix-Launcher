@@ -543,6 +543,7 @@ func apply_native_auction(payload: Dictionary) -> void:
         or not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner \
         or not (state.get("lots") is Array) or not (state.get("mine") is Array) \
         or not (state.get("pendingCredits") is Array) \
+        or not (state.get("recoverable") is Array) \
         or not (state.get("wallet") is Dictionary) \
         or not (state.get("settlementEnabled") is bool) \
         or int(state.get("version", 0)) < 1:
@@ -1957,6 +1958,12 @@ func _send_real_auction_action(action: String, fields: Dictionary) -> void:
                 and str(entry.get("currency", "")) == str(fields.get("currency", "")):
                 valid = true
                 break
+    elif action == "recover":
+        for entry in auction_state.get("recoverable", []):
+            if entry is Dictionary and bool(entry.get("canRecover", false)) \
+                and str(entry.get("id", "")) == str(fields.get("lotId", "")):
+                valid = true
+                break
     elif action == "cancel":
         for entry in auction_state.get("mine", []):
             if entry is Dictionary and bool(entry.get("canCancel", false)) \
@@ -1975,6 +1982,9 @@ func _auction_buy_lot(lotId: String, price: float, currency: String) -> void:
 
 func _auction_cancel_lot(lotId: String) -> void:
     _send_real_auction_action("cancel", {"lotId":lotId})
+
+func _auction_recover_lot(lotId: String) -> void:
+    _send_real_auction_action("recover", {"lotId":lotId})
 
 func _auction_place_selected() -> void:
     _send_real_auction_action("place", {"uid":_auction_sell_uid,
@@ -2052,6 +2062,27 @@ func _show_auction() -> void:
     elif tab == "mine":
         _section("МОИ ЛОТЫ", "Только объявления этого персонажа на общем сервере.")
         _show_auction_lots(auction_state.get("mine", []), true)
+        _section("ИСТЁКШИЕ ЛОТЫ · ВОЗВРАТ ВЕЩЕЙ",
+            "Непроданная вещь хранится на сервере до безопасного возврата в сумку.")
+        var recoverable: Array = auction_state.get("recoverable", [])
+        if recoverable.is_empty():
+            _body.add_child(_label("Вещей, ожидающих возврата, нет.", 12, SUB))
+        for entry in recoverable.slice(0, 50):
+            if not (entry is Dictionary):
+                continue
+            var lot: Dictionary = entry
+            var item: Variant = lot.get("item", {})
+            var item_name := str(item.get("name", "Вещь")) if item is Dictionary else "Вещь"
+            _mini_row(item_name, "UID · " + str(lot.get("uid", "")).left(22))
+            var enabled: bool = auction_actions.has("recover") and \
+                bool(lot.get("canRecover", false)) and \
+                not auction_pending and not auction_loading and \
+                bool(auction_state.get("settlementEnabled", false)) and \
+                (auction_state.get("bag", []) as Array).size() < 100
+            var reclaim := _button("ВЕРНУТЬ ИЗ ИСТЁКШЕГО ЛОТА", enabled)
+            reclaim.name = "PPARealAuctionRecover_" + str(lot.get("id", ""))
+            reclaim.pressed.connect(_auction_recover_lot.bind(str(lot.get("id", ""))))
+            _body.add_child(reclaim)
         _section("НАЧИСЛЕНИЯ ПРОДАВЦУ", "Подтверждённые Telegram PPA credits, пока без автоматического списания.")
         var credits: Array = auction_state.get("pendingCredits", [])
         if credits.is_empty():
