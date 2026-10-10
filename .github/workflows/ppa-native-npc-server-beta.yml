@@ -475,6 +475,14 @@ jobs:
           grep -q 'PPA_NATIVE_NPC_BRIDGE_OK' /tmp/ppa-npc-server-bridge.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:|PPA_NPC_BRIDGE_FAIL' /tmp/ppa-npc-server-bridge.log; then exit 1; fi
 
+      - name: Verify realtime presence from same PPA hub is opt-in only
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path games/ppa-native --script res://scripts/audit_native_shared_realtime_presence.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-online-audit.log
+          grep -q 'PPA_SHARED_REALTIME_PRESENCE_OK' /tmp/ppa-native-online-audit.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:|PPA_NATIVE_REALTIME_PRESENCE_FAIL' /tmp/ppa-native-online-audit.log; then exit 1; fi
+
       - name: Build native PPA APK
         shell: bash
         run: |
