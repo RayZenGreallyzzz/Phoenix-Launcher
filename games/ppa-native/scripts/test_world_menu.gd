@@ -16,6 +16,7 @@ signal change_class_requested
 signal npc_snapshot_requested(service: String)
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
+signal arena_training_requested
 signal refresh_readonly_save_requested
 
 
@@ -120,6 +121,7 @@ func _ready() -> void:
     # Offline map preview uses the same scene route from the Keeper and Hub.
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
+    _npc_screen.arena_training_requested.connect(func(): arena_training_requested.emit())
     _global_hub = GLOBAL_HUB.new()
     _global_hub.z_index = 110
     add_child(_global_hub)
