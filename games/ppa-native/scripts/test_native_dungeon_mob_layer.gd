@@ -33,7 +33,7 @@ func _run() -> void:
     var ordinals: Array[int] = [0,0]
     check(not layer.configure("safe",spawns,branches,ordinals,0,false,[1,2]),
         "A city was mistaken for a mob authority dungeon")
-    check(layer.configure("dungeon-1",spawns,branches,ordinals,0,false),
+    check(layer.configure("dungeon-1",spawns,branches,ordinals,0,false,[1,2]),
         "Signed dungeon room was not accepted")
     layer.observe_player_position(Vector2(400,500))
     check(layer.apply_authenticated_packet(packet(
