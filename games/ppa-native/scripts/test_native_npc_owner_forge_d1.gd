@@ -92,6 +92,16 @@ func _run() -> void:
     # Forge now prioritizes the active Telegram-style tab. The full signed
     # D1 inventory is still accessible through an explicit resources toggle.
     # Assert both the compact default and the real contents after expanding.
+    # Video parity: Telegram forge has 4+2 tabs and a fixed 10-column
+    # inventory preview (up to 100 slots), followed by the recipe pane.
+    check(npc._tabs.columns == 4 and npc._tabs.get_child_count() == 6,
+        "Blacksmith tabs no longer match Telegram 4+2 arrangement")
+    var bag_grid := npc._forge_inventory_host.find_child("PPAForgeInventoryGrid", true, false) as GridContainer
+    check(bag_grid != null and bag_grid.columns == 10 and bag_grid.get_child_count() == 100,
+        "Blacksmith lost the original 100-slot, ten-column inventory")
+    var bag_first := bag_grid.get_child(0) as Button
+    check(bag_first != null and bag_first.disabled,
+        "Blacksmith must never turn the D1 bag preview into a local spending action")
     var resources_toggle := npc._body.find_child("PPAForgeResourcesToggle", true, false) as Button
     check(resources_toggle != null, "Forge resources button missing")
     check(not sees_text(npc._body,"813 / 96 / 3"),
@@ -105,6 +115,13 @@ func _run() -> void:
         "D1 resource view fabricated merchant buy action")
     check(npc.forge_actions.is_empty() and npc.forge_state.is_empty(),
         "Viewing D1 stock silently enabled forge actions")
+    npc._select_tab("equipment")
+    var forge_cards := npc._body.find_child("NpcProductGrid", true, false) as GridContainer
+    check(forge_cards != null and forge_cards.columns == 2 and forge_cards.get_child_count() > 0,
+        "Blacksmith recipes must be compact two-column clickable cards")
+    npc._select_item("gear:epic:weapon")
+    check(npc._forge_recipe_target != null,
+        "Selected blacksmith recipe must appear below the product list")
     npc.apply_authoritative_snapshot(fake_response("990000002"))
     check(not npc.has_verified_state, "NPC view accepted forged different-owner data")
     npc.apply_authoritative_snapshot(fake_response(OWNER))
