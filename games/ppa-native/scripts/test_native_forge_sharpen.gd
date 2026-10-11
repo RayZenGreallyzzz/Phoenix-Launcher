@@ -57,6 +57,20 @@ func _run() -> void:
     var chance_table := npc._body.find_child("PPAForgeStoneChanceTable", true, false) as GridContainer
     check(chance_table != null and chance_table.columns == 2 and chance_table.get_child_count() == 14,
         "Screenshot parity: seven rows of signed sharpening chances")
+    # Android recording: the first summary label collapsed to one glyph wide.
+    var summary := npc._body.find_child("PPAForgeSharpenSummary", true, false) as GridContainer
+    check(summary != null and summary.get_child_count() == 8,
+        "Forge lost the four visible sharpening summary rows")
+    var summary_name := summary.get_child(0) as Label
+    var summary_value := summary.get_child(1) as Label
+    check(summary_name.autowrap_mode == TextServer.AUTOWRAP_OFF and
+        summary_name.custom_minimum_size.x >= 160.0 and
+        summary_value.autowrap_mode == TextServer.AUTOWRAP_OFF and
+        summary_value.custom_minimum_size.x >= 160.0,
+        "Summary text wraps vertically on Android")
+    var stone_level := chance_table.get_child(0) as Label
+    check(stone_level.autowrap_mode == TextServer.AUTOWRAP_OFF,
+        "Stone chance level labels must never wrap vertically")
     var official_stone := npc._body.find_child("PPAForgeOfficialStoneIcon", true, false) as Button
     check(official_stone != null, "Canonical original PPA stone artwork slot missing")
     var gear_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
