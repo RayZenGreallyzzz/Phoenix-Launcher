@@ -704,11 +704,20 @@ func show_canonical_clan_storage(items: Array) -> void:
 # Read-only future bridge contract. Call ONLY after authenticated server
 # account+service validation; rendering these fields is not permission to buy.
 func apply_authoritative_snapshot(snapshot: Dictionary) -> void:
-    if not visible or str(snapshot.get("service", "")) != service:
+    if not visible or str(snapshot.get("service", "")) != service \
+            or snapshot.get("readOnly", false) != true \
+            or str(snapshot.get("gameId", "")) != "phoenix-pix-arena":
+        return
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or str(snapshot.get("ownerId", "")) != owner:
         return
     if not snapshot.has("data") or not (snapshot["data"] is Dictionary):
         return
-    authoritative = (snapshot["data"] as Dictionary).duplicate(true)
+    var data: Dictionary = snapshot["data"]
+    if data.get("readOnly", false) != true or data.get("actionsEnabled", true) != false:
+        return
+    authoritative = data.duplicate(true)
     authoritative["saveVersion"] = int(snapshot.get("version", 0))
     has_verified_state = true
     _render()
