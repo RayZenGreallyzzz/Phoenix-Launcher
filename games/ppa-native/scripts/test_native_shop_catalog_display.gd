@@ -61,7 +61,7 @@ func _run() -> void:
     var saved := {"blackMarket":{"refreshAt":int(Time.get_unix_time_from_system()*1000.0)+7200000,
         "offers":[{"id":"real_bm_1","category":"materials","price":770,
             "currency":"ppa","limit":2,"item":{"name":"Кристалл PPA","icon":"◆"}},
-            {"id":"real_bm_2","category":"materials",
+            {"id":"real_bm_2","category":"materials","limit":2,
             "item":{"name":"Редкий камень","icon":"◇"}}],
         "bought":{"real_bm_1":1}}}
     var original := JSON.stringify(saved)
@@ -75,6 +75,12 @@ func _run() -> void:
         "Personal stock lost its nested PPA item name or original price")
     check(has_label(npc._body, "Цена не подтверждена"),
         "Missing price must not become invented 0 Gold")
+    npc._select_item("real_bm_1")
+    check(has_label(npc._body, "осталось 1"),
+        "Black Market forgot one prior purchase from D1 bought counter")
+    npc._select_item("real_bm_2")
+    check(has_label(npc._body, "остаток не подтверждён"),
+        "Missing Black Market purchase counter was shown as available stock")
     check(npc._body.find_child("MerchantCommand_buy", true, false) == null,
         "Black Market received unsigned native merchant buy action")
     check(JSON.stringify(saved) == original, "Shop preview modified original D1 stock")
