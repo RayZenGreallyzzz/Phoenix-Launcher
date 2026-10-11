@@ -571,9 +571,11 @@ func _request_npc_service(service: String) -> void:
         _personal_storage_service.request_state()
         _clan_service.request_state()
         _clan_storage_service.request_state()
-        _npc_service_loader.request_service(service)
-    else:
-        _npc_service_loader.request_service(service)
+    # Always request the shared NPC projection, even where a typed merchant,
+    # forge, auction or clan endpoint is separately present. Those endpoints
+    # can be independently gated; never let one hide a successful read-only
+    # NPC response or quietly turn real stock into a fake local catalog.
+    _npc_service_loader.request_service(service)
 
 func _request_clan_action(action: String, fields: Dictionary) -> void:
     if _clan_service != null:
@@ -736,10 +738,11 @@ func _on_npc_service_ready(payload: Dictionary) -> void:
     if test_menu != null:
         test_menu.apply_native_npc_service(payload)
 
-func _on_npc_service_failed(_service: String, _code: String) -> void:
-    # The server feature flags default OFF. Local NPC menus must keep working
-    # without creating fake purchases, blocking input or spamming retries.
-    pass
+func _on_npc_service_failed(service: String, code: String) -> void:
+    # Never hide an unavailable production endpoint behind an apparently
+    # complete NPC menu. Show the reason, keeping real spend disabled.
+    if test_menu != null:
+        test_menu.set_npc_service_failure(service, code)
 
 func _connect_native_realtime() -> void:
     if not _supports_shared_city():
