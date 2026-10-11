@@ -96,9 +96,19 @@ func _run() -> void:
     # inventory preview (up to 100 slots), followed by the recipe pane.
     check(npc._tabs.columns == 4 and npc._tabs.get_child_count() == 6,
         "Blacksmith tabs no longer match Telegram 4+2 arrangement")
+    check(npc._scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
+        and npc._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER,
+        "NPC content must swipe vertically with the side scrollbar hidden")
+    check(npc._tab_scroller.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+        "NPC tabs must wrap into rows instead of horizontal side scroll")
     var bag_grid := npc._forge_inventory_host.find_child("PPAForgeInventoryGrid", true, false) as GridContainer
     check(bag_grid != null and bag_grid.columns == 10 and bag_grid.get_child_count() == 100,
         "Blacksmith lost the original 100-slot, ten-column inventory")
+    var bag_scroll := npc._forge_inventory_host.find_child("PPAForgeBagScroller", true, false) as ScrollContainer
+    check(bag_scroll != null
+        and bag_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
+        and bag_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER,
+        "Original bag must allow vertical swipe without a right-side slider")
     var bag_count := npc._forge_inventory_host.find_child("PPAForgeBagCount", true, false) as Label
     check(bag_count != null and bag_count.autowrap_mode == TextServer.AUTOWRAP_OFF
         and bag_count.custom_minimum_size.x >= 70.0,
@@ -151,6 +161,20 @@ func _run() -> void:
     npc._select_item("gear:epic:weapon")
     check(npc._forge_recipe_target != null,
         "Selected blacksmith recipe must appear below the product list")
+    var materials_grid := npc._body.find_child("PPAForgeOriginalMaterialCards", true, false) as GridContainer
+    check(materials_grid != null and materials_grid.columns == 2
+        and materials_grid.custom_minimum_size.x >= 230.0,
+        "Forge materials must keep proper card widths on Android")
+    var material_card := materials_grid.get_child(0) as PanelContainer
+    var material_name := material_card.find_child("PPAForgeMaterialName", true, false) as Label
+    check(material_card.custom_minimum_size.x >= 125.0 and
+        material_name != null and material_name.autowrap_mode == TextServer.AUTOWRAP_OFF,
+        "Material names must not break into vertical single-letter columns")
+    npc.open_npc({"service":"storage","name":"Склад"})
+    check(npc._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER
+        and npc._tab_scroller.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+        "NPC swipe-only layout must apply to other services too")
+    npc.open_npc({"service":"forge","name":"Кузнец"})
     npc.apply_authoritative_snapshot(fake_response("990000002"))
     check(not npc.has_verified_state, "NPC view accepted forged different-owner data")
     npc.apply_authoritative_snapshot(fake_response(OWNER))
