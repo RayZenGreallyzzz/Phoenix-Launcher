@@ -62,6 +62,11 @@ func _run() -> void:
         check(npc._body.find_child("PPARealForgeCraft",true,false) == null,
             "Reference-only recipe can craft before signed offer " + str(r["id"]))
         npc.apply_native_forge(quote)
+        var picture := npc._body.find_child("PPAForgeSelectedRecipeIcon", true, false) as Button
+        var ingredient_cards := npc._body.find_child("PPAForgeOriginalMaterialCards", true, false) as GridContainer
+        check(picture != null and ingredient_cards != null and ingredient_cards.columns == 2
+            and ingredient_cards.get_child_count() == (r["materials"] as Array).size(),
+            "Original PPA recipe image/material layout missing for " + str(r["id"]))
         var button := npc._body.find_child("PPARealForgeCraft",true,false) as Button
         check(button != null and not button.disabled,
             "Server-verified original smith recipe unavailable " + str(r["id"]))
