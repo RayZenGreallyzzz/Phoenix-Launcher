@@ -66,6 +66,8 @@ func _run() -> void:
     check(npc._body.find_child("MerchantCommand_buy", true, false) == null,
         "A reference-only merchant product gained a live buy action")
     npc._select_item("hp_small")
+    # Selecting a different item resets quantity to one (original UI rule).
+    npc._change_quantity(1)
     var button: Button = npc._body.find_child("MerchantCommand_buy", true, false)
     check(button != null and not button.disabled, "Verified merchant buy is unavailable")
     button.pressed.emit()
