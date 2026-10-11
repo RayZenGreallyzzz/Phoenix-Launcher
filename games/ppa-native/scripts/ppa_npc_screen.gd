@@ -31,6 +31,7 @@ const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
 const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
+const OFFICIAL_ITEMS = preload("res://scripts/ppa_item_catalog_generated.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
@@ -1003,7 +1004,10 @@ func _item_picture(path: String, side: float = 64.0) -> TextureRect:
 func _readonly_icon_item(item: Dictionary, side: float = 62.0) -> Button:
     # One icon resolver for inventory, warehouse, forge and arena. This is
     # not a purchase button and never transmits anything to PPA.
-    var button := _button("◆")
+    # Use the source item's own glyph if a verified Telegram image is absent.
+    # Never substitute an unrelated icon for jewelry or craft materials.
+    var glyph := str(item.get("icon", "◆"))
+    var button := _button(glyph if not glyph.is_empty() and glyph.length() <= 4 else "◆")
     button.custom_minimum_size = Vector2(side, side)
     button.disabled = true
     button.tooltip_text = str(item.get("name", "Предмет PPA"))
@@ -2011,9 +2015,11 @@ func _show_original_forge_recipes() -> void:
     _section("РЕЦЕПТ · " + str(chosen.get("name","")),
         str(chosen.get("desc","")) + " · " + str(chosen.get("rarity","")).to_upper())
     _forge_recipe_target = _body.get_child(recipe_index) as Control
-    var art := str(chosen.get("img", ""))
-    if not art.is_empty() and ResourceLoader.exists(art):
-        _body.add_child(_item_picture(art, 88))
+    # Exact native item art resolver: epic/legendary class gear and pet
+    # assets come from Telegram; missing art falls back to source icon only.
+    var recipe_icon := _readonly_icon_item(chosen, 88)
+    recipe_icon.name = "PPAForgeSelectedRecipeIcon"
+    _body.add_child(recipe_icon)
     var money: Dictionary = _player_view_readonly.get("money", {})
     var balance: Variant = money.get("ppa", null)
     if service == "forge" and has_verified_state \
@@ -2028,6 +2034,14 @@ func _show_original_forge_recipes() -> void:
         str(price) + (" · есть " + str(balance) if balance != null else " · баланс не загружен"))
     var enough := balance != null and float(balance) >= float(price)
     var all_known := balance != null
+    var materials_grid := GridContainer.new()
+    materials_grid.name = "PPAForgeOriginalMaterialCards"
+    materials_grid.columns = 2
+    materials_grid.add_theme_constant_override("h_separation", 5)
+    materials_grid.add_theme_constant_override("v_separation", 5)
+    _body.add_child(materials_grid)
+    var material_art: Dictionary = OFFICIAL_ITEMS.ITEMS.get("materials", {})
+    var stone_art: Dictionary = OFFICIAL_ITEMS.ITEMS.get("stone_art", {})
     for raw_material in chosen.get("materials", []):
         if not (raw_material is Dictionary):
             continue
@@ -2039,8 +2053,26 @@ func _show_original_forge_recipes() -> void:
             all_known = false
         elif int(owned) < required:
             enough = false
-        _mini_row(material_name + " ×" + str(required),
-            "есть " + str(owned) if owned != null else "нет данных")
+        var art_item := {"name":material_name, "kind":"material", "rarity":"common"}
+        var info: Variant = material_art.get(material_name, null)
+        if info is Dictionary:
+            art_item["img"] = str((info as Dictionary).get("img", ""))
+            art_item["rarity"] = str((info as Dictionary).get("rarity", "common"))
+        elif material_name == "Перо Феникса":
+            art_item["img"] = str(stone_art.get("feather", ""))
+        var material_panel := PanelContainer.new()
+        material_panel.add_theme_stylebox_override("panel",
+            _style(Color("#10171B"), Color("#5E4B35"), 5))
+        materials_grid.add_child(material_panel)
+        var material_line := HBoxContainer.new()
+        material_panel.add_child(material_line)
+        material_line.add_theme_constant_override("separation", 5)
+        material_line.add_child(_readonly_icon_item(art_item, 53))
+        var labels := VBoxContainer.new()
+        labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        material_line.add_child(labels)
+        labels.add_child(_label(material_name + " ×" + str(required), 10, GOLD))
+        labels.add_child(_label("Есть " + str(owned) if owned != null else "Нет данных", 10, SUB))
     if not all_known:
         _body.add_child(_label("Не все остатки удалось прочитать из подтверждённого сохранения PPA.", 11, SUB))
     elif not enough:
