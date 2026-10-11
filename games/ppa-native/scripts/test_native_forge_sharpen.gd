@@ -27,6 +27,14 @@ func _run() -> void:
     var sent: Array = []
     npc.forge_action_requested.connect(func(fields: Dictionary): sent.append(fields.duplicate(true)))
     npc.open_npc({"service":"forge", "name":"Кузнец"})
+    # The screenshot's two bordered panels must appear even while the
+    # signed owner state is still loading; the action stays disabled.
+    check(npc._body.find_child("PPAForgeOriginalSharpenPanel", true, false) != null and
+        npc._body.find_child("PPAForgeOriginalStonePanel", true, false) != null,
+        "Telegram sharpening panels must show even without server state")
+    var unverified_action := npc._body.find_child("PPAForgeEnhanceUnavailable", true, false) as Button
+    check(unverified_action != null and unverified_action.disabled,
+        "Preview sharpening must not spend without server permission")
     check(npc._body.find_child("PPARealForgeEnhance", true, false) == null,
         "Unknown server state must never enable sharpening")
     var state := {"ok":true, "gameId":"phoenix-pix-arena", "contract":"ppa-forge-v1",
@@ -43,6 +51,14 @@ func _run() -> void:
     npc.apply_native_forge(state)
     # The original smith presents item/stone dropdowns, then the +N→+N+1
     # preview, rather than a separate huge grid of native action buttons.
+    var rarity_picker := npc._body.find_child("PPAForgeRarityDropdown", true, false) as OptionButton
+    check(rarity_picker != null and rarity_picker.item_count == 5,
+        "Screenshot parity: first dropdown chooses the five item rarities")
+    var chance_table := npc._body.find_child("PPAForgeStoneChanceTable", true, false) as GridContainer
+    check(chance_table != null and chance_table.columns == 2 and chance_table.get_child_count() == 14,
+        "Screenshot parity: seven rows of signed sharpening chances")
+    var official_stone := npc._body.find_child("PPAForgeOfficialStoneIcon", true, false) as Button
+    check(official_stone != null, "Canonical original PPA stone artwork slot missing")
     var gear_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
     var stone_picker := npc._body.find_child("PPAForgeStoneDropdown", true, false) as OptionButton
     var progression := npc._body.find_child("PPAForgeEnhancementBeforeAfter", true, false) as HBoxContainer
