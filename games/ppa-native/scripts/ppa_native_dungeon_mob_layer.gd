@@ -5,7 +5,6 @@ extends Node2D
 # Nothing here emits attacks, loot, XP, save changes or target commands.
 const AUTHORITY = preload("res://scripts/ppa_native_mob_authority_view.gd")
 const ART = preload("res://scripts/ppa_new_dungeon_mob_visual.gd")
-const CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
 const MAX_VISIBLE := 24
 const CULL_RADIUS := 675.0
 const WALK_MASK_OFFSET := Vector2(0.0, 14.0)
@@ -15,6 +14,7 @@ var _approved_art := false
 var _tier := 0
 var _branch: Array[int] = []
 var _ordinal: Array[int] = []
+var _approved_levels: Array = []
 var _source_spawns: Array[Vector2] = []
 var _player := Vector2.ZERO
 var _visible: Dictionary = {}
@@ -22,7 +22,7 @@ var packets_accepted := 0
 
 func configure(room: String, source_spawns: Array[Vector2],
         branches: Array[int], ordinals: Array[int], tier: int,
-        art_ready: bool) -> bool:
+        art_ready: bool, room_levels: Array) -> bool:
     if not room.begins_with("dungeon-") or source_spawns.size() != branches.size() \
             or branches.size() != ordinals.size() or tier < 0 or tier > 2:
         return false
@@ -32,6 +32,7 @@ func configure(room: String, source_spawns: Array[Vector2],
     _branch = branches.duplicate()
     _ordinal = ordinals.duplicate()
     _approved_art = art_ready
+    _approved_levels = room_levels.duplicate()
     authority.bind_room(room)
     return true
 
@@ -82,9 +83,9 @@ func _visual_level(index: int) -> int:
     if index < 0 or index >= _branch.size():
         return -1
     var branch := _branch[index]
-    if branch < 0 or branch >= CATALOG.ROOM_LEVELS.size():
+    if branch < 0 or branch >= _approved_levels.size():
         return -1
-    return int(CATALOG.ROOM_LEVELS[branch]) + _tier * 20
+    return int(_approved_levels[branch]) + _tier * 20
 
 func _create_mob(key: String, index: int) -> Node2D:
     var wrapper := Node2D.new()
