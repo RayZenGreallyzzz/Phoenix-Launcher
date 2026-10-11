@@ -103,6 +103,12 @@ func _run() -> void:
     check(bag_count != null and bag_count.autowrap_mode == TextServer.AUTOWRAP_OFF
         and bag_count.custom_minimum_size.x >= 70.0,
         "Forge bag count must remain on one line on Android, not one character per row")
+    var has_original_stone := false
+    for slot in bag_grid.get_children():
+        if slot is Button and (slot as Button).tooltip_text.contains("Обычный камень заточки"):
+            has_original_stone = slot.find_child("PPAForgeVirtualStackCount", true, false) != null
+    check(has_original_stone,
+        "Original Telegram smith bag must show confirmed stone stacks with quantity badge")
     var bag_first := bag_grid.get_child(0) as Button
     check(bag_first != null and bag_first.disabled,
         "Blacksmith must never turn the D1 bag preview into a local spending action")
