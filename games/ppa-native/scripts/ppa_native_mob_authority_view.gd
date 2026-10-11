@@ -129,6 +129,40 @@ func apply_packet(packet: Dictionary) -> bool:
             mob["_at"] = at
             accepted = true
         return accepted
+    if kind == "mob-authority":
+        # Real PPA Durable Object sends this after a server-confirmed respawn
+        # or authoritative enemy state change. It may update ONLY an enemy
+        # already identified in a full room snapshot.
+        var confirmed_key := str(packet.get("key", ""))
+        if not mobs.has(confirmed_key):
+            return false
+        var existing: Dictionary = mobs[confirmed_key]
+        if at < float(existing.get("_at", 0.0)):
+            return false
+        var hp_now: Variant = packet.get("hp", null)
+        var max_now: Variant = packet.get("mhp", null)
+        var x_now: Variant = packet.get("x", null)
+        var y_now: Variant = packet.get("y", null)
+        var dir_now: Variant = packet.get("dir", null)
+        if not _number(hp_now) or not _number(max_now) \
+                or float(max_now) < 1.0 or float(hp_now) < 0.0 \
+                or float(hp_now) > float(max_now) \
+                or not _number(x_now) or not _number(y_now) \
+                or not _number(dir_now) or float(dir_now) != floorf(float(dir_now)) \
+                or int(dir_now) < -8 or int(dir_now) > 8:
+            return false
+        existing["hp"] = float(hp_now)
+        existing["mhp"] = float(max_now)
+        existing["x"] = float(x_now)
+        existing["y"] = float(y_now)
+        existing["dir"] = int(dir_now)
+        existing["aggro"] = packet.get("aggro", false) == true
+        existing["moving"] = packet.get("moving", false) == true
+        var respawn_now: Variant = packet.get("respawnAt", null)
+        if _number(respawn_now) and float(respawn_now) >= 0.0:
+            existing["respawnAt"] = float(respawn_now)
+        existing["_at"] = at
+        return true
     if kind == "mob-hp" or kind == "mob-dead":
         var key := str(packet.get("key", ""))
         if not mobs.has(key):
