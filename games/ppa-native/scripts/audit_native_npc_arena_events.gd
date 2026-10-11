@@ -70,6 +70,13 @@ func _check() -> void:
     npc.inventory_action_requested.connect(
         func(command: Dictionary): sent_equips.append(command.duplicate(true)))
     npc.apply_native_inventory(inventory_snapshot)
+    # Smith parity: optional equip/unequip actions live below sharpening
+    # behind an explicit toggle, not above the main stone selectors.
+    var equip_toggle := npc.find_child("PPAForgeEquipmentToolsToggle", true, false) as Button
+    if equip_toggle == null or equip_toggle.disabled:
+        fail("Forge has no path to reveal signed equipment controls")
+        return
+    equip_toggle.pressed.emit()
     var equip_button = npc.find_child(
         "PPARealEquip_" + "real-armor".to_utf8_buffer().hex_encode(),true,false) as Button
     if equip_button == null or equip_button.disabled:
