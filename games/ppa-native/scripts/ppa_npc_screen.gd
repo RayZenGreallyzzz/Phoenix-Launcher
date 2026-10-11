@@ -1882,25 +1882,29 @@ func _show_authoritative_enhancement() -> void:
     gear_picker.add_theme_font_size_override("font_size", 11)
     main.add_child(gear_picker)
     var chosen_index := 0
+    var matching_items := 0
     for entry in items:
         if not (entry is Dictionary):
             continue
         var uid := str(entry.get("uid", ""))
-        if uid.is_empty():
+        if uid.is_empty() or str(entry.get("rarity", "")).to_lower() != rarity:
             continue
         gear_picker.add_item(str(entry.get("name","Вещь")).left(23) + "  +" + str(entry.get("enh",0)))
         var index := gear_picker.item_count - 1
         gear_picker.set_item_metadata(index, uid)
+        matching_items += 1
         if uid == _enhance_uid:
             chosen_index = index
-    if gear_picker.item_count > 0:
+    if matching_items > 0:
         gear_picker.select(chosen_index)
         gear_picker.item_selected.connect(func(index: int):
             _choose_enhancement_item(str(gear_picker.get_item_metadata(index))))
     else:
-        gear_picker.add_item("Нет подтверждённых предметов")
+        gear_picker.add_item("Нет вещей выбранной редкости")
         gear_picker.disabled = true
-    gear_picker.visible = items.size() > 1
+    # One authenticated candidate is selected automatically. Show a second
+    # item dropdown only if multiple real UIDs have the selected rarity.
+    gear_picker.visible = matching_items > 1 or (verified and matching_items == 0)
 
     var preview := HBoxContainer.new()
     preview.name = "PPAForgeEnhancementBeforeAfter"
