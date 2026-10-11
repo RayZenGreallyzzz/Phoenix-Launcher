@@ -69,6 +69,7 @@ var _forge_filter := "equipment"
 var _craft_rarity := "all"
 var _forge_resources_expanded := false
 var _forge_inventory_host: VBoxContainer
+var _forge_wallet_host: HBoxContainer
 var _forge_recipe_target: Control
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _enhance_uid := ""
@@ -277,6 +278,14 @@ func _create_shell() -> void:
     _body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _body.add_theme_constant_override("separation", 10)
     scroller_margin.add_child(_body)
+
+    # Keep the three real PPA currency balances in sight, as in the Telegram
+    # smith. Unknown server balances are shown as an em dash, NEVER zero.
+    _forge_wallet_host = HBoxContainer.new()
+    _forge_wallet_host.name = "PPAForgeFixedWallet"
+    _forge_wallet_host.visible = false
+    _forge_wallet_host.add_theme_constant_override("separation", 4)
+    layout.add_child(_forge_wallet_host)
 
     var foot := PanelContainer.new()
     foot.add_theme_stylebox_override("panel", _style(Color("#171B1E"), Color("#494033"), 6))
@@ -806,8 +815,11 @@ func _render() -> void:
     _clear(_body)
     _forge_recipe_target = null
     _layout_tabs()
-    _heading.text = str(npc.get("name", "NPC"))
-    _subheading.text = "МИРНЫЙ ГОРОД · " + _service_name()
+    _heading.text = "КУЗНЕЦ" if service == "forge" else str(npc.get("name", "NPC"))
+    _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
+    _subheading.text = ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name())
+    _subheading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
+    _portrait.visible = service != "forge"
     _portrait.texture = null
     var portrait_path := str(npc.get("image", ""))
     if ResourceLoader.exists(portrait_path):
@@ -839,6 +851,11 @@ func _render() -> void:
         _forge_inventory_host.visible = service == "forge"
         if service == "forge":
             _show_forge_pinned_inventory()
+    if _forge_wallet_host != null:
+        _clear(_forge_wallet_host)
+        _forge_wallet_host.visible = service == "forge"
+        if service == "forge":
+            _show_forge_wallet()
     match service:
         "merchant": _show_merchant()
         "blackmarket": _show_blackmarket()
@@ -917,7 +934,7 @@ func _choice_tiles(options: Array, current: String, selected: Callable) -> void:
     _body.add_child(tiles)
     for opt in options:
         var key := str(opt.get("key", ""))
-        var b := _button(str(opt.get("label", "")))
+        var b := _button(str(opt.get("label", "")), bool(opt.get("enabled", true)))
         b.add_theme_color_override("font_color", GOLD if key == current else SUB)
         b.pressed.connect(selected.bind(key))
         tiles.add_child(b)
@@ -986,7 +1003,7 @@ func _readonly_icon_item(item: Dictionary, side: float = 62.0) -> Button:
         button.expand_icon = true
         button.text = ""
     elif _preview_icons != null:
-        _preview_icons.bind_button(item, "", button)
+        _preview_icons.bind_button(item, _forge_player_class() if service == "forge" else "", button)
     return button
 
 func _readonly_owned_grid(title: String, items: Array, limit: int = 24) -> void:
@@ -1463,6 +1480,50 @@ func _show_verified_d1_forge_stock() -> void:
             _readonly_owned_grid("ВАША ЭКИПИРОВКА В СУМКЕ · ТОЛЬКО ПРОСМОТР", owned_gear, 32)
 
 
+func _show_forge_wallet() -> void:
+    if _forge_wallet_host == null:
+        return
+    var balances: Dictionary = _player_view_readonly.get("money", {})
+    if not forge_state.is_empty() and _owns_verified_state(forge_state):
+        var signed_wallet: Variant = forge_state.get("wallet", null)
+        if signed_wallet is Dictionary:
+            balances = balances.duplicate()
+            for code in ["gold", "gram", "ppa"]:
+                if (signed_wallet as Dictionary).get(code, null) != null:
+                    balances[code] = signed_wallet[code]
+    for spec in [
+        {"code":"gold","name":"Gold","symbol":"●"},
+        {"code":"gram","name":"Gram","symbol":"◆"},
+        {"code":"ppa","name":"PPA","symbol":"✹"}
+    ]:
+        var panel := PanelContainer.new()
+        panel.name = "PPAForgeWallet_" + str(spec["code"])
+        panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        panel.add_theme_stylebox_override("panel", _style(Color("#12191C"), Color("#77532E"), 4))
+        _forge_wallet_host.add_child(panel)
+        var value: Variant = balances.get(spec["code"], null)
+        var shown := str(value) if value is int or value is float else "—"
+        var caption := _label(str(spec["symbol"]) + " " + str(spec["name"]) + "  " + shown, 10, GOLD)
+        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        panel.add_child(caption)
+
+
+func _forge_player_class() -> String:
+    # Extract only an explicitly authenticated class from the shared save.
+    # The public smith art must never be assigned to an invented class.
+    for key in ["classKey", "class", "cls", "playerClass", "heroClass"]:
+        var value := str(_player_save_readonly.get(key, "")).to_lower()
+        if ORIGINAL_ITEM_ICONS.CLASS_KEYS.has(value):
+            return value
+    var player: Variant = _player_save_readonly.get("player", null)
+    if player is Dictionary:
+        for key in ["classKey", "class", "cls"]:
+            var value := str((player as Dictionary).get(key, "")).to_lower()
+            if ORIGINAL_ITEM_ICONS.CLASS_KEYS.has(value):
+                return value
+    return ""
+
+
 func _show_forge_pinned_inventory() -> void:
     # Same hierarchy as the Telegram original: 4+2 tabs, short 100-slot bag
     # preview, then the independently scrollable forge/recipe panel. All items
@@ -1528,7 +1589,8 @@ func _show_forge() -> void:
     var source_note := ("Оригинальные рецепты PPA · стоимость и материалы из каталога."
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Вещи из сохранения PPA · операции проверяет игровой сервер.")
-    _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
+    if tab == "enhance" or tab == "rune_fusion":
+        _section("ЗАТОЧКА" if tab == "enhance" else "СЛИЯНИЕ РУН", source_note)
     if not forge_notice.is_empty():
         _body.add_child(_label(forge_notice, 12, GOLD))
     if forge_pending:
@@ -1761,8 +1823,31 @@ func _show_authoritative_enhancement() -> void:
 # srcdoc). Inventory/balances are ONLY from the authenticated game-state save.
 # This intentionally never emits a craft/enhance/spend request.
 func _set_craft_rarity(key: String) -> void:
+    var former_slot := ""
+    if tab == "accessories" and selected_id.begins_with("acc:"):
+        former_slot = selected_id.get_slice(":", 1)
     _craft_rarity = key
     selected_id = ""
+    if not former_slot.is_empty():
+        _select_forge_accessory_slot(former_slot)
+    else:
+        _render()
+
+
+func _select_forge_accessory_slot(slot: String) -> void:
+    # The four shortcuts in the original Telegram smith SELECT an item but
+    # do not remove the other accessory cards from the catalog.
+    selected_id = ""
+    for raw in LIVE_FORGE.CATALOG.get("rows", []):
+        if not (raw is Dictionary):
+            continue
+        var item: Dictionary = raw
+        if str(item.get("tab", "")) != "accessories" or str(item.get("slot", "")) != slot:
+            continue
+        if _craft_rarity != "all" and str(item.get("rarity", "")) != _craft_rarity:
+            continue
+        selected_id = str(item.get("id", ""))
+        break
     _render()
 
 func _forge_owned_material(material_name: String) -> Variant:
@@ -1795,20 +1880,35 @@ func _forge_owned_material(material_name: String) -> Variant:
 func _show_original_forge_recipes() -> void:
     var descriptions := {
         "equipment":"ЭПИЧЕСКОЕ СНАРЯЖЕНИЕ",
-        "legendary":"ЛЕГЕНДАРНЫЕ АКСЕССУАРЫ",
-        "accessories":"КРЫЛЬЯ · ПЛАЩИ · ОЖЕРЕЛЬЯ · АРТЕФАКТЫ",
+        "legendary":"ЛЕГЕНДАРНОЕ СНАРЯЖЕНИЕ",
+        "accessories":"АКСЕССУАРЫ",
         "pets":"ПИТОМЦЫ"
     }
     _section(str(descriptions.get(tab, "КРАФТ PPA")),
         "Подлинные рецепты кузнеца из работающей Telegram PPA · актуальная цена в PPA")
-    if tab == "accessories" or tab == "pets":
-        var rarities: Array = [
-            {"key":"all","label":"ВСЕ"}, {"key":"common","label":"СЕРЫЕ"},
-            {"key":"uncommon","label":"ЗЕЛЁНЫЕ"}, {"key":"rare","label":"СИНИЕ"}
-        ]
-        if tab == "accessories":
-            rarities.append({"key":"epic","label":"ЭПИК"})
-        _choice_tiles(rarities, _craft_rarity, _set_craft_rarity)
+    if tab == "accessories":
+        # Original Telegram order: cloak, necklace, artifact, wings.
+        # A highlighted shortcut selects the corresponding original recipe.
+        var selected_slot := selected_id.get_slice(":", 1) if selected_id.begins_with("acc:") else ""
+        _choice_tiles([
+            {"key":"cloak","label":"ПЛАЩ"},
+            {"key":"necklace","label":"ОЖЕРЕЛЬЕ"},
+            {"key":"artifact","label":"АРТЕФАКТ"},
+            {"key":"wings","label":"КРЫЛЬЯ"}
+        ], selected_slot, _select_forge_accessory_slot)
+        _choice_tiles([
+            {"key":"all","label":"ВСЕ"},
+            {"key":"common","label":"ОБЫЧНЫЙ"},
+            {"key":"uncommon","label":"НЕОБЫЧНЫЙ"},
+            {"key":"rare","label":"РЕДКИЙ"},
+            {"key":"epic","label":"ЭПИЧЕСКИЙ"},
+            {"key":"legendary","label":"ЛЕГЕНДАРНЫЙ · СКОРО","enabled":false}
+        ], _craft_rarity, _set_craft_rarity)
+    elif tab == "pets":
+        _choice_tiles([
+            {"key":"all","label":"ВСЕ"}, {"key":"common","label":"ОБЫЧНЫЙ"},
+            {"key":"uncommon","label":"НЕОБЫЧНЫЙ"}, {"key":"rare","label":"РЕДКИЙ"}
+        ], _craft_rarity, _set_craft_rarity)
     var offers: Array = []
     for raw in LIVE_FORGE.CATALOG.get("rows", []):
         if not (raw is Dictionary):
