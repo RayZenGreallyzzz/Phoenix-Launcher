@@ -31,7 +31,7 @@ func _run() -> void:
     var spawns: Array[Vector2] = [Vector2(400,500),Vector2(470,500)]
     var branches: Array[int] = [0,1]
     var ordinals: Array[int] = [0,0]
-    check(not layer.configure("safe",spawns,branches,ordinals,0,false),
+    check(not layer.configure("safe",spawns,branches,ordinals,0,false,[1,2]),
         "A city was mistaken for a mob authority dungeon")
     check(layer.configure("dungeon-1",spawns,branches,ordinals,0,false),
         "Signed dungeon room was not accepted")
