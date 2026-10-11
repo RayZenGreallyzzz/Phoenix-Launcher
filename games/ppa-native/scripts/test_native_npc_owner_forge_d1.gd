@@ -102,6 +102,13 @@ func _run() -> void:
     var bag_first := bag_grid.get_child(0) as Button
     check(bag_first != null and bag_first.disabled,
         "Blacksmith must never turn the D1 bag preview into a local spending action")
+    # Wallet footer mirrors Telegram: all three confirmed balances stay
+    # visible while switching smith tabs, without opening the resource list.
+    var wallet := npc._forge_wallet_host
+    check(wallet != null and wallet.get_child_count() == 3,
+        "Forge lost its fixed Gold / Gram / PPA footer")
+    check(sees_text(wallet, "813") and sees_text(wallet, "96") and sees_text(wallet, "3"),
+        "Forge footer must display only signed save balances")
     var resources_toggle := npc._body.find_child("PPAForgeResourcesToggle", true, false) as Button
     check(resources_toggle != null, "Forge resources button missing")
     check(not sees_text(npc._body,"813 / 96 / 3"),
@@ -115,6 +122,13 @@ func _run() -> void:
         "D1 resource view fabricated merchant buy action")
     check(npc.forge_actions.is_empty() and npc.forge_state.is_empty(),
         "Viewing D1 stock silently enabled forge actions")
+    npc._select_tab("accessories")
+    npc._set_craft_rarity("rare")
+    npc._select_forge_accessory_slot("wings")
+    check(npc.selected_id.begins_with("acc:wings:rare"),
+        "Original Telegram accessory shortcut does not pick the rare wings recipe")
+    check(npc._forge_recipe_target != null,
+        "Accessory shortcut must reveal the real canonical recipe")
     npc._select_tab("equipment")
     var forge_cards := npc._body.find_child("NpcProductGrid", true, false) as GridContainer
     check(forge_cards != null and forge_cards.columns == 2 and forge_cards.get_child_count() > 0,
