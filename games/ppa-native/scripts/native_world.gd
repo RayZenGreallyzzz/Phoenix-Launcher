@@ -30,6 +30,7 @@ const AUCTION_SERVICE = preload("res://scripts/ppa_native_auction_service.gd")
 const GLOBAL_REALTIME_READONLY = preload("res://scripts/ppa_native_shared_realtime.gd")
 const SHARED_CITY_PLAYERS = preload("res://scripts/ppa_shared_city_players.gd")
 const PPA_COMBAT_HUD = preload("res://scripts/ppa_combat_hud.gd")
+const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
 const PLAZA_POINTS := [
     Vector2(191.0, 293.0),
     Vector2(977.0, 293.0),
@@ -814,13 +815,17 @@ func _on_readonly_snapshot_ready(payload: Dictionary) -> void:
     # Display real values exactly as received; never replace with fabricated
     # class stats or mutate a save from this visual 3D testing client.
     var level_text := str(save.get("lvl", save.get("level", "—")))
-    var hp_text := str(save.get("hp", "—"))
-    var mp_text := str(save.get("mp", "—"))
+    var vitals: Dictionary = VERIFIED_PLAYER.vitals(save)
+    var hp_text := str(int(vitals["hp"])) if vitals["hp"] != null else "—"
+    var mp_text := str(int(vitals["mp"])) if vitals["mp"] != null else "—"
     var name_text := str(save.get("playerName", save.get("nickname", "PPA")))
     if _server_snapshot_status != null:
-        _server_snapshot_status.text = "PPA СЕРВЕР · %s · ур.%s · HP %s · MP %s · чтение" % [
-            name_text, level_text, hp_text, mp_text
-        ]
+        if vitals["hp"] == null and vitals["mp"] == null:
+            _server_snapshot_status.text = "PPA СЕРВЕР · %s · ур.%s · HP/MP нужны из realtime" % [name_text, level_text]
+        else:
+            _server_snapshot_status.text = "PPA СЕРВЕР · %s · ур.%s · HP %s · MP %s" % [
+                name_text, level_text, hp_text, mp_text
+            ]
         _server_snapshot_status.add_theme_color_override("font_color", Color("#76D4A0"))
     print("PPA_NATIVE_SAVE_READONLY_OK version=", payload.get("version", null),
         " linked=1 server_writes=0")
