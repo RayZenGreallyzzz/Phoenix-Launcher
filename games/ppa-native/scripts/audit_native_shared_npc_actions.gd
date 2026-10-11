@@ -54,7 +54,18 @@ func _run() -> void:
     npc.apply_native_merchant(merchant)
     npc._change_quantity(1)
     var products: Array = npc._merchant_products()
-    check(products.size() == 1 and products[0].get("price") == 102, "UI overrides live price with APK catalog")
+    check(products.size() == 12 and products[0].get("price") == 102
+        and products[0].get("ppa_reference_only", true) == false,
+        "The server price must override the visual catalog without hiding other PPA goods")
+    var references := 0
+    for product in products:
+        if bool(product.get("ppa_reference_only", false)):
+            references += 1
+    check(references == 11, "Only server-advertised goods may be purchasable")
+    npc._select_item("xp_scroll")
+    check(npc._body.find_child("MerchantCommand_buy", true, false) == null,
+        "A reference-only merchant product gained a live buy action")
+    npc._select_item("hp_small")
     var button: Button = npc._body.find_child("MerchantCommand_buy", true, false)
     check(button != null and not button.disabled, "Verified merchant buy is unavailable")
     button.pressed.emit()
