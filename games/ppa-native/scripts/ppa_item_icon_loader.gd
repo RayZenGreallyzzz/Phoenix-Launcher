@@ -187,7 +187,7 @@ func _start_more() -> void:
         var path: String = _queue.pop_front()
         var request := HTTPRequest.new()
         request.timeout = 15.0
-        request.max_body_size = MAX_BYTES
+        request.body_size_limit = MAX_BYTES
         add_child(request)
         _active += 1
         request.request_completed.connect(_received.bind(request, path))
