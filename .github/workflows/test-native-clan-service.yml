@@ -11,6 +11,8 @@ on:
       - 'games/ppa-native/scripts/test_native_clan_service.gd'
       - 'games/ppa-native/scripts/audit_native_shared_npc_actions.gd'
       - 'games/ppa-native/scripts/ppa_npc_screen.gd'
+      - 'games/ppa-native/scripts/ppa_native_npc_service_bridge.gd'
+      - 'games/ppa-native/scripts/test_native_npc_owner_forge_d1.gd'
       - 'games/ppa-native/scripts/test_native_shop_catalog_display.gd'
       - 'games/ppa-native/scripts/ppa_verified_player_projection.gd'
       - 'games/ppa-native/scripts/test_native_verified_player_projection.gd'
@@ -87,6 +89,9 @@ jobs:
       - name: Show every original merchant item and safe personal Black Market stock
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_shop_catalog_display.gd
+      - name: NPC owner and session lock with real D1 forge inventory, no spend
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_npc_owner_forge_d1.gd
       - name: Test every original Telegram PPA recipe in Godot
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_full_catalog.gd
