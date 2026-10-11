@@ -268,6 +268,16 @@ func _handle_packet(packet: Dictionary) -> void:
                     str(packet.get("action", "")) != str(expected.get("action", "")) or \
                     packet.get("targetConfirmed") != true:
                 return
+        # The newer server preflight reports why a native observer cannot
+        # fight. If present it must also stay explicitly read-only. This is
+        # diagnostic only; neither response variant can apply mob damage.
+        if kind == "dungeon-combat-preflight" and packet.has("readiness"):
+            var readiness: Variant = packet["readiness"]
+            if not (readiness is Dictionary) or \
+                    readiness.get("readOnly") != true or \
+                    readiness.get("canAttack") != false or \
+                    not (readiness.get("blockers") is Array):
+                return
         _pve_preflight_pending.erase(request_id)
         dungeon_preflight_checked.emit(packet.duplicate(true))
         return
