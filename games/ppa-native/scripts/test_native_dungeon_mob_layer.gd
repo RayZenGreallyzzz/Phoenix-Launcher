@@ -81,6 +81,14 @@ func _run() -> void:
         "Dead server mob kept attacking visually")
     check(layer.authority.mobs["s0"]["hp"] == 0,
         "Canvas renderer fabricated a respawn")
+    check(layer.apply_authenticated_packet({
+        "type":"mob-authority","room":"dungeon-1","key":"s0",
+        "hp":100,"mhp":100,"x":425,"y":515,"dir":0,
+        "aggro":false,"moving":false,"respawnAt":0,"ts":1350}),
+        "Server-confirmed mob respawn event rejected")
+    check(layer.rendered_keys().size() == 2 and
+        layer.get_node_or_null("ConfirmedServerMob_s0") != null,
+        "Original server mob failed to reappear without local AI")
     check(layer.apply_authenticated_packet(packet([],1400)),
         "Server authoritative empty snapshot failed")
     check(layer.rendered_keys().is_empty(),
