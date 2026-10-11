@@ -888,9 +888,18 @@ func _render() -> void:
     if service == "arena":
         _status.text += " · " + native_online_status
     if service == "forge" and _forge_recipe_target != null:
-        _scroll.call_deferred("ensure_control_visible", _forge_recipe_target)
+        # A redraw may free the previous recipe before deferred scrolling
+        # executes. Resolve the current selected control at callback time.
+        call_deferred("_scroll_to_current_forge_recipe", selected_id)
     else:
         _scroll.set_deferred("scroll_vertical", 0)
+
+
+func _scroll_to_current_forge_recipe(expected_id: String) -> void:
+    if service != "forge" or selected_id != expected_id or not is_instance_valid(_forge_recipe_target):
+        return
+    if _scroll != null and _scroll.is_ancestor_of(_forge_recipe_target):
+        _scroll.ensure_control_visible(_forge_recipe_target)
 
 
 func _auction_filter(key: String) -> void:
