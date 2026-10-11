@@ -32,7 +32,7 @@ func _run() -> void:
     check(npc._body.find_child("PPAForgeOriginalSharpenPanel", true, false) != null and
         npc._body.find_child("PPAForgeOriginalStonePanel", true, false) != null,
         "Telegram sharpening panels must show even without server state")
-    var unverified_action := npc._body.find_child("PPAForgeEnhanceUnavailable", true, false) as Button
+    var unverified_action := npc._body.find_child("ServerActionLocked", true, false) as Button
     check(unverified_action != null and unverified_action.disabled,
         "Preview sharpening must not spend without server permission")
     check(npc._body.find_child("PPARealForgeEnhance", true, false) == null,
