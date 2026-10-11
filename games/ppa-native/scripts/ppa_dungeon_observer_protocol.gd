@@ -29,7 +29,8 @@ static func assignment(packet: Dictionary, requested_base: String) -> String:
     return room if room_of(requested_base, room) else ""
 
 static func mob_packet(packet: Dictionary, confirmed_room: String) -> bool:
-    if confirmed_room.is_empty() or not packet.get("type", "") in MOB_EVENT_TYPES \
+    if confirmed_room.is_empty() \
+            or not (str(packet.get("type", "")) in MOB_EVENT_TYPES) \
             or str(packet.get("room", "")) != confirmed_room:
         return false
     var ts: Variant = packet.get("ts", null)
