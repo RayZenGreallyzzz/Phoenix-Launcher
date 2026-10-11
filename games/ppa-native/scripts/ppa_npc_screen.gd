@@ -1004,7 +1004,9 @@ func _slot_grid(container: VBoxContainer, count: int, tag: String = "") -> void:
 func _product_grid(products: Array, is_merchant: bool) -> void:
     var grid := GridContainer.new()
     grid.name = "NpcProductGrid"
-    grid.columns = 3 if _frame.size.x > 670 else 2
+    # Three columns squeeze Russian item names on portrait tablets.
+    grid.columns = 2 if _frame.size.x >= 780.0 else 1
+    grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     grid.add_theme_constant_override("h_separation", 8)
     grid.add_theme_constant_override("v_separation", 8)
     _body.add_child(grid)
@@ -1021,22 +1023,42 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         tile.name = "NpcProduct_" + id.to_utf8_buffer().hex_encode()
         tile.set_meta("ppa_original_offer_id", id)
         tile.custom_minimum_size.y = 140
+        tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         tile.add_theme_stylebox_override("panel", _style(Color("#161B1F"),
             GOLD if id == selected_id else Color("#5E4B35"), 7))
         grid.add_child(tile)
         var inner := VBoxContainer.new()
         inner.add_theme_constant_override("separation", 4)
+        inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         tile.add_child(inner)
-        # Original images are the same APK-bundled assets used in hero bag.
-        # Do not suppress Black Market artwork when it is available.
-        if not str(item.get("img", "")).is_empty():
-            inner.add_child(_readonly_icon_item(item, 50))
-        elif not str(item.get("icon", "")).is_empty():
-            inner.add_child(_label(str(item.get("icon", "")), 23, GOLD))
-        inner.add_child(_label(str(item.get("name", "")), 12, TEXT))
+        # The canonical Black Market save may carry artwork in offer.item.
+        # Read existing visuals only; do not invent a random personal offer.
+        var display_item := item.duplicate(true)
+        var offer_item: Variant = item.get("item", null)
+        if offer_item is Dictionary:
+            for field in ["img", "image", "iconArt", "art", "src", "icon"]:
+                if str(display_item.get(field, "")).is_empty():
+                    display_item[field] = (offer_item as Dictionary).get(field, "")
+        var image_found := false
+        for field in ["img", "image", "iconArt", "art", "src"]:
+            if not str(display_item.get(field, "")).is_empty():
+                image_found = true
+                break
+        if image_found:
+            inner.add_child(_readonly_icon_item(display_item, 50))
+        elif not str(display_item.get("icon", "")).is_empty():
+            inner.add_child(_label(str(display_item.get("icon", "")), 23, GOLD))
+        else:
+            inner.add_child(_label("◇", 23, GOLD))
+        var product_name := _label(str(item.get("name", "")), 12, TEXT)
+        product_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        product_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        inner.add_child(product_name)
         var currency_code := str(item.get("currency", "gold")).to_lower()
         var currency := " Gram" if currency_code == "gram" else (" PPA" if currency_code == "ppa" else " Gold")
         inner.add_child(_label(str(item.get("price", 0)) + currency, 12, GOLD))
+        if bool(item.get("ppa_reference_only", false)):
+            inner.add_child(_label("Справочная цена · не подтверждена", 10, SUB))
         var choice := _button("ПОДРОБНЕЕ")
         choice.name = "SelectNpcItem_" + id
         choice.pressed.connect(_select_item.bind(id))
@@ -1076,7 +1098,8 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
         plus.pressed.connect(_change_quantity.bind(1))
         row.add_child(plus)
         _body.add_child(_label("Итого: " + str(int(item.get("price", 0)) * quantity) + suffix, 14, GOLD))
-    if service == "merchant" and not merchant_state.is_empty():
+    if service == "merchant" and not merchant_state.is_empty() \
+            and not bool(item.get("ppa_reference_only", true)):
         var wallet: Dictionary = merchant_state.get("wallet", {})
         var total := int(item.get("price", 0)) * quantity
         var enabled: bool = merchant_actions.has("buy") and not merchant_busy and not merchant_pending \
@@ -1093,20 +1116,37 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
         _locked_action("КУПИТЬ")
 
 func _merchant_products() -> Array:
-    if merchant_state.is_empty():
-        return SHOP.MERCHANT
+    # Render ALL approved original Telegram products, even when the signed
+    # merchant endpoint is gated/partial. Missing offers are reference-only.
+    var verified: Dictionary = {}
+    if not merchant_state.is_empty():
+        var rows: Variant = merchant_state.get("offers", [])
+        if rows is Array:
+            for raw in rows:
+                if not (raw is Dictionary):
+                    continue
+                var offer: Dictionary = raw
+                var offer_id := str(offer.get("id", ""))
+                var amount: Variant = offer.get("price", null)
+                var currency := str(offer.get("currency", "")).to_lower()
+                if offer_id.is_empty() or not (amount is int or amount is float) \
+                        or float(amount) < 0.0 or currency not in ["gold", "ppa"]:
+                    continue
+                verified[offer_id] = offer
     var products: Array = []
-    for offer in merchant_state.get("offers", []):
-        if not offer is Dictionary:
-            continue
-        # APK catalog supplies only original art/description/category; live
-        # name, price, currency and owned quantity come from the server.
-        for original in SHOP.MERCHANT:
-            if original.get("id") == offer.get("id"):
-                var product: Dictionary = original.duplicate(true)
-                product.merge(offer, true)
-                products.append(product)
-                break
+    for source in SHOP.MERCHANT:
+        var reference: Dictionary = source
+        var product: Dictionary = reference.duplicate(true)
+        var offer_id := str(reference.get("id", ""))
+        product["ppa_reference_only"] = true
+        if verified.has(offer_id):
+            product.merge(verified[offer_id], true)
+            # Original tab/approved local artwork are presentation-only.
+            # Signed server response owns prices, names and quantities.
+            product["tab"] = reference.get("tab", "")
+            product["img"] = reference.get("img", "")
+            product["ppa_reference_only"] = false
+        products.append(product)
     return products
 
 func _show_merchant() -> void:
@@ -1127,6 +1167,8 @@ func _show_merchant() -> void:
             filtered.append(entry)
     _product_grid(filtered, true)
     _selected_details(filtered, true)
+    if merchant_state.is_empty():
+        _body.add_child(_label("Цены справочные · покупки требуют подтверждения сервером PPA.", 11, SUB))
     var money: Dictionary = _player_view_readonly.get("money", {})
     if not merchant_state.is_empty():
         money = merchant_state.get("wallet", {})
