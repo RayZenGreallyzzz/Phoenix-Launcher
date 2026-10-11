@@ -22,12 +22,12 @@ static func vitals(save: Dictionary) -> Dictionary:
     # The root save is preferred; a signed "vitals" projection may supply
     # current/max values later. Do not treat base equipment/stat HP as live HP.
     var v := _object(save, "vitals")
-    var current_hp := _number(save, ["hp", "currentHp", "hpCurrent"])
-    var maximum_hp := _number(save, ["maxHp", "hpMax", "maxHP"])
-    var current_mp := _number(save, ["mp", "currentMp", "mpCurrent"])
-    var maximum_mp := _number(save, ["maxMp", "mpMax", "maxMP"])
-    var current_xp := _number(save, ["xp"])
-    var maximum_xp := _number(save, ["xpNext", "xpToNext", "nextXp"])
+    var current_hp: Variant = _number(save, ["hp", "currentHp", "hpCurrent"])
+    var maximum_hp: Variant = _number(save, ["maxHp", "hpMax", "maxHP"])
+    var current_mp: Variant = _number(save, ["mp", "currentMp", "mpCurrent"])
+    var maximum_mp: Variant = _number(save, ["maxMp", "mpMax", "maxMP"])
+    var current_xp: Variant = _number(save, ["xp"])
+    var maximum_xp: Variant = _number(save, ["xpNext", "xpToNext", "nextXp"])
     return {
         "hp": current_hp if current_hp != null else _number(v, ["hp", "currentHp", "hpCurrent"]),
         "maxHp": maximum_hp if maximum_hp != null else _number(v, ["maxHp", "hpMax", "maxHP"]),
