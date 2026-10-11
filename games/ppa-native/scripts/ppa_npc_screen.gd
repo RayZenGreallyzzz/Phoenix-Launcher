@@ -1559,11 +1559,16 @@ func _show_forge_pinned_inventory() -> void:
     # are taken from the signed player projection; no simulated inventory.
     if _forge_inventory_host == null:
         return
-    # Unlike the general NPC item picker, Telegram's blacksmith inventory
-    # shows ONLY the real saved bag slots. Do not append virtual material,
-    # stone or rune stacks from the player's separate resources.
+    # Production Telegram inventory combines real saved bag entries with
+    # read-only visual stacks for stones/materials/consumables from the SAME
+    # verified save (not fake D1 item UIDs). The Android recording dropped
+    # the third original sharpening stone because only raw bag was shown.
     var canonical_bag: Dictionary = ORIGINAL_ITEM_VIEWS.from_save(_player_save_readonly)
-    var inventory: Array = canonical_bag.get("bag", [])
+    var inventory: Array = (canonical_bag.get("bag", []) as Array).duplicate()
+    var saved_stacks: Array = canonical_bag.get("resource_items", [])
+    for stack in saved_stacks:
+        if stack is Dictionary and not (stack as Dictionary).is_empty():
+            inventory.append(stack)
     var has_bag := bool(canonical_bag.get("has_bag", false))
     var header := HBoxContainer.new()
     _forge_inventory_host.add_child(header)
@@ -1613,6 +1618,20 @@ func _show_forge_pinned_inventory() -> void:
             real_icon.add_theme_stylebox_override("disabled",
                 _style(Color("#151A20"), SHOP.rarity_tint(str(item.get("rarity", "common"))), 1))
             square = real_icon
+            if bool(item.get("ppa_native_virtual", false)):
+                # Original Telegram shows a quantity badge (e.g. stone ×7).
+                # It is display-only: this slot has no item UID or spend hook.
+                var stack_count := _label(str(item.get("count", 0)), 9, GOLD)
+                stack_count.name = "PPAForgeVirtualStackCount"
+                stack_count.autowrap_mode = TextServer.AUTOWRAP_OFF
+                stack_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+                stack_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+                stack_count.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+                stack_count.offset_left = -29
+                stack_count.offset_right = -2
+                stack_count.offset_top = -16
+                stack_count.offset_bottom = -1
+                real_icon.add_child(stack_count)
         square.name = "PPAForgeBagSlot_" + str(i)
         square.custom_minimum_size = Vector2(cell, cell)
         grid.add_child(square)
