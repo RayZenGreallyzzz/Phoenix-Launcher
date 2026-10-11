@@ -300,12 +300,15 @@ func _layout_tabs() -> void:
     # Three rows in portrait, two in landscape. Other NPCs keep one
     # horizontally scrollable category strip like the live Telegram UI.
     var clan_grid := service == "clan"
-    var columns := (5 if size.x > size.y else 3) if clan_grid else maxi(1, _tab_specs().size())
+    # Forge has six primary Telegram sections. Keep all of them visible in a
+    # compact two-row, three-column navigation instead of hiding the last
+    # categories behind a sideways swipe. Leave every other NPC unchanged.
+    var forge_grid := service == "forge"
+    var columns := (5 if size.x > size.y else 3) if clan_grid else (3 if forge_grid else maxi(1, _tab_specs().size()))
     _tabs.columns = columns
-    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if clan_grid else ScrollContainer.SCROLL_MODE_AUTO
-    # The final clan row used to be clipped: 123px is less than three
-    # touch-sized rows plus gap, margins and theme padding.
-    _tab_scroller.custom_minimum_size.y = 169.0 if (clan_grid and columns == 3) else (112.0 if clan_grid else 54.0)
+    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if (clan_grid or forge_grid) else ScrollContainer.SCROLL_MODE_AUTO
+    # Each row has a >=43px touch target and 5px spacing, plus safety space.
+    _tab_scroller.custom_minimum_size.y = 169.0 if (clan_grid and columns == 3) else (112.0 if clan_grid else (101.0 if forge_grid else 54.0))
     _last_clan_layout = clan_grid
 
 func _outside(event: InputEvent) -> void:
@@ -802,14 +805,15 @@ func _render() -> void:
         var b := _button(str(entry.get("label", "")))
         b.name = "NpcTab_" + id
         b.custom_minimum_size.y = 43.0
-        if service == "clan":
+        if service == "clan" or service == "forge":
             var available := _frame.offset_right - _frame.offset_left - 43.0
             var slot_width := floorf(available / float(_tabs.columns)) - 5.0
             b.custom_minimum_size.x = maxf(68.0, slot_width)
             b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             b.add_theme_font_size_override("font_size", 9 if _tabs.columns == 3 else 10)
-            # Compact only the longest category on narrow portrait screens.
-            if _tabs.columns == 3 and id == "clans":
+            # Keep the original category labels; avoid making a 3-column
+            # button wider than the panel and accidentally enabling swipe.
+            if service == "clan" and _tabs.columns == 3 and id == "clans":
                 b.text = "КЛАНЫ"
         else:
             b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
