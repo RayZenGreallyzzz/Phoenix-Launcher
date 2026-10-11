@@ -8,8 +8,12 @@ signal presence_connected
 signal players_updated(rows: Array)
 signal player_left(pid: String)
 signal players_cleared
+signal dungeon_observer_assigned(room: String)
+signal dungeon_observer_event(packet: Dictionary)
+signal dungeon_observer_ended(reason: String)
 
 const PROTOCOL = preload("res://scripts/ppa_shared_city_protocol.gd")
+const DUNGEON_OBSERVE = preload("res://scripts/ppa_dungeon_observer_protocol.gd")
 const API_BASE := "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
 const WS_BASE := "wss://ppa-phoenixpixarena.1988stella1988.workers.dev"
 var http: HTTPRequest
@@ -30,6 +34,9 @@ var _retry_elapsed := -1.0
 var _send_elapsed := 0.0
 var _ping_elapsed := 0.0
 var _handshake_elapsed := 0.0
+var _observer_only := false
+var _observer_requested_base := ""
+var _observer_room := ""
 
 func _ready() -> void:
     http = HTTPRequest.new()
@@ -56,8 +63,28 @@ func connect_explicitly() -> void:
         connecting = false
         _schedule_retry("Ошибка подключения к серверу")
 
+func connect_dungeon_observer_explicitly(base: String) -> bool:
+    # Only a test harness/operator can opt in; this does not occur during
+    # ordinary scene startup. No fake safe-city position is transmitted.
+    if not DUNGEON_OBSERVE.allowed_base(base) or connecting or peer != null:
+        return false
+    _observer_only = true
+    _observer_requested_base = base
+    _observer_room = ""
+    connect_explicitly()
+    return _wanted
+
+func stop_dungeon_observer() -> void:
+    if peer != null and _observer_room != "":
+        _send({"type":"dungeon-observe-leave"})
+    if _observer_room != "":
+        dungeon_observer_ended.emit("LEFT")
+    _observer_room = ""
+    _observer_requested_base = ""
+
 func set_local_position(point: Vector2, facing: Vector2, animation: String) -> void:
-    _local_position = PROTOCOL.position_packet(point, facing, animation)
+    if not _observer_only:
+        _local_position = PROTOCOL.position_packet(point, facing, animation)
 
 func refresh_clan_identity_if_connected() -> void:
     # Clan identity is included in the server-signed ticket. Refresh an
@@ -122,9 +149,13 @@ func _process(delta: float) -> void:
             _schedule_retry("Общий город отключён · переподключаемся")
         return
     _handshake_elapsed += delta
-    if not _position_ready and _handshake_elapsed > 12.0:
+    if not _position_ready and not _observer_only and _handshake_elapsed > 12.0:
         disconnect_city()
         presence_failed.emit("Нужен серверный пакет перемещения общего города")
+        return
+    if _observer_only and _observer_room.is_empty() and _handshake_elapsed > 12.0:
+        disconnect_city()
+        dungeon_observer_ended.emit("SERVER_TIMEOUT")
         return
     if state != WebSocketPeer.STATE_OPEN:
         return
@@ -141,7 +172,7 @@ func _process(delta: float) -> void:
         return
     _send_elapsed += delta
     _ping_elapsed += delta
-    if _send_elapsed >= 0.12 and not _local_position.is_empty():
+    if not _observer_only and _send_elapsed >= 0.12 and not _local_position.is_empty():
         if _local_position != _last_sent or _send_elapsed >= 1.2:
             if _send(_local_position):
                 _last_sent = _local_position.duplicate()
@@ -167,6 +198,28 @@ func _handle_packet(packet: Dictionary) -> void:
         _last_sent.clear()
         _send_elapsed = 1.2
         _send({"type":"room", "room":PROTOCOL.ROOM})
+        if _observer_only and DUNGEON_OBSERVE.allowed_base(_observer_requested_base):
+            _send({"type":"dungeon-observe", "base":_observer_requested_base})
+        return
+    if kind == "dungeon-observe-assigned":
+        if not _hello_received or not _observer_only:
+            return
+        var assigned := DUNGEON_OBSERVE.assignment(packet, _observer_requested_base)
+        if assigned.is_empty():
+            return
+        _observer_room = assigned
+        _handshake_elapsed = 0.0
+        dungeon_observer_assigned.emit(assigned)
+        return
+    if kind == "dungeon-observe-ended" or kind == "dungeon-observe-rejected":
+        if not _observer_only:
+            return
+        _observer_room = ""
+        dungeon_observer_ended.emit(str(packet.get("reason", packet.get("code", "ENDED"))).left(64))
+        return
+    if _observer_only and _hello_received and \
+            DUNGEON_OBSERVE.mob_packet(packet, _observer_room):
+        dungeon_observer_event.emit(packet.duplicate(true))
         return
     if kind == "online":
         online_count = clampi(int(packet.get("count", -1)), -1, 100000)
@@ -219,6 +272,11 @@ func _schedule_retry(message: String) -> void:
         _retry_delay = minf(8.0, _retry_delay * 1.7)
 
 func _clear_connection() -> void:
+    if not _observer_room.is_empty():
+        dungeon_observer_ended.emit("DISCONNECTED")
+    _observer_room = ""
+    _observer_requested_base = ""
+    _observer_only = false
     peer = null
     self_pid = ""
     _hello_received = false
