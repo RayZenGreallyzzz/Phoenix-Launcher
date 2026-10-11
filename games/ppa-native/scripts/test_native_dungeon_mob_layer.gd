@@ -85,7 +85,7 @@ func _run() -> void:
         "Server authoritative empty snapshot failed")
     check(layer.rendered_keys().is_empty(),
         "Old room NPCs survived a valid empty snapshot")
-    check(layer.configure("dungeon-2",spawns,branches,ordinals,1,false),
+    check(layer.configure("dungeon-2",spawns,branches,ordinals,1,false,[1,2]),
         "Entering a different room failed")
     check(not layer.apply_authenticated_packet(packet([sample("s0",100,400,500,1)],2000)),
         "Old dungeon mob packet leaked into another instance")
