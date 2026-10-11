@@ -821,7 +821,7 @@ func _render() -> void:
     _clear(_body)
     _forge_recipe_target = null
     _layout_tabs()
-    _heading.text = "КУЗНЕЦ" if service == "forge" else str(npc.get("name", "NPC"))
+    _heading.text = str(npc.get("name", "NPC"))
     _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
     _subheading.text = ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name())
     _subheading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
@@ -2005,7 +2005,7 @@ func _show_authoritative_enhancement() -> void:
         line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         table.add_child(line)
     var action := _button("ЗАТОЧИТЬ · " + (str(chance) + "%" if chance >= 0 else "—"), not blocked)
-    action.name = "PPARealForgeEnhance" if not blocked else "PPAForgeEnhanceUnavailable"
+    action.name = "PPARealForgeEnhance" if not blocked else "ServerActionLocked"
     action.custom_minimum_size.y = 43
     action.add_theme_stylebox_override("normal", _style(Color("#342419"), Color("#A97831"), 5))
     lower_content.add_child(action)
