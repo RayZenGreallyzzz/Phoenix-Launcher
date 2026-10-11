@@ -2,7 +2,6 @@ extends SceneTree
 
 # Pure offline checks against REAL NPC formatter; no token, network or saves.
 const NPC = preload("res://scripts/ppa_npc_screen.gd")
-const ORIGINAL_ART = preload("res://scripts/ppa_item_catalog_generated.gd")
 
 func _initialize() -> void:
     call_deferred("_run")
@@ -48,15 +47,6 @@ func _run() -> void:
         "Old verified save feather fallback still works")
     check(forge.has_signal("authoritative_state_requested"),
         "Every NPC must support a server refresh")
-    var jewelry: Dictionary = ORIGINAL_ART.ITEMS.get("jewelry", {})
-    print("PPA_FORGE_ART_CATEGORY_KEYS ", str(jewelry.keys()))
-    for key in jewelry.keys():
-        var value: Variant = jewelry[key]
-        if value is Dictionary:
-            print("PPA_FORGE_JEWELRY_SHAPE ", str(key), " keys=", str((value as Dictionary).keys()),
-                " example=", str((value as Dictionary).values()[0]).left(220) if not (value as Dictionary).is_empty() else "EMPTY")
-        else:
-            print("PPA_FORGE_JEWELRY_SHAPE ", str(key), " type=", type_string(typeof(value)), " value=", str(value).left(220))
     print("PPA_FORGE_MATERIALS_CLIENT_OK owner_view=1 source=1 no_fake_stock=1")
     forge.free()
     quit(0)
