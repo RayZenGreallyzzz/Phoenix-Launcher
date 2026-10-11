@@ -11,9 +11,11 @@ signal players_cleared
 signal dungeon_observer_assigned(room: String)
 signal dungeon_observer_event(packet: Dictionary)
 signal dungeon_observer_ended(reason: String)
+signal dungeon_preflight_checked(result: Dictionary)
 
 const PROTOCOL = preload("res://scripts/ppa_shared_city_protocol.gd")
 const DUNGEON_OBSERVE = preload("res://scripts/ppa_dungeon_observer_protocol.gd")
+const PVE_INTENT = preload("res://scripts/ppa_native_pve_combat_intent.gd")
 const API_BASE := "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
 const WS_BASE := "wss://ppa-phoenixpixarena.1988stella1988.workers.dev"
 var http: HTTPRequest
@@ -37,6 +39,7 @@ var _handshake_elapsed := 0.0
 var _observer_only := false
 var _observer_requested_base := ""
 var _observer_room := ""
+var _pve_preflight_pending: Dictionary = {}
 
 func _ready() -> void:
     http = HTTPRequest.new()
@@ -74,6 +77,21 @@ func connect_dungeon_observer_explicitly(base: String) -> bool:
     connect_explicitly()
     return _wanted
 
+func request_pve_preflight_for_qa(mob_key: String, request_id: String,
+        action: String = "basic", skill_id: String = "") -> bool:
+    # Deliberate test-only action, not wired to the dungeon attack button.
+    # The server will NEVER execute damage, regardless of preflight result.
+    if not _observer_only or not _hello_received or _observer_room.is_empty():
+        return false
+    if _pve_preflight_pending.has(request_id):
+        return false
+    var intent: Dictionary = PVE_INTENT.packet(
+        _observer_room, mob_key, request_id, action, skill_id)
+    if intent.is_empty() or not _send(intent):
+        return false
+    _pve_preflight_pending[request_id] = _observer_room
+    return true
+
 func stop_dungeon_observer() -> void:
     if peer != null and _observer_room != "":
         _send({"type":"dungeon-observe-leave"})
@@ -81,6 +99,7 @@ func stop_dungeon_observer() -> void:
         dungeon_observer_ended.emit("LEFT")
     _observer_room = ""
     _observer_requested_base = ""
+    _pve_preflight_pending.clear()
 
 func set_local_position(point: Vector2, facing: Vector2, animation: String) -> void:
     if not _observer_only:
@@ -208,6 +227,7 @@ func _handle_packet(packet: Dictionary) -> void:
         if assigned.is_empty():
             return
         _observer_room = assigned
+        _pve_preflight_pending.clear()
         _handshake_elapsed = 0.0
         dungeon_observer_assigned.emit(assigned)
         return
@@ -215,7 +235,27 @@ func _handle_packet(packet: Dictionary) -> void:
         if not _observer_only:
             return
         _observer_room = ""
+        _pve_preflight_pending.clear()
         dungeon_observer_ended.emit(str(packet.get("reason", packet.get("code", "ENDED"))).left(64))
+        return
+    if _observer_only and _hello_received and \
+            kind in ["dungeon-combat-preflight", "dungeon-combat-preflight-rejected"]:
+        var request_id := str(packet.get("requestId", ""))
+        if request_id.is_empty() or not _pve_preflight_pending.has(request_id):
+            return
+        var bound_room := str(_pve_preflight_pending[request_id])
+        if bound_room != _observer_room or _observer_room.is_empty():
+            _pve_preflight_pending.erase(request_id)
+            return
+        if packet.get("canAttack") != false:
+            return # Never interpret test preflight as attack authorization.
+        if kind == "dungeon-combat-preflight":
+            if packet.get("readOnly") != true or \
+                    str(packet.get("room", "")) != bound_room or \
+                    packet.get("targetConfirmed") != true:
+                return
+        _pve_preflight_pending.erase(request_id)
+        dungeon_preflight_checked.emit(packet.duplicate(true))
         return
     if _observer_only and _hello_received and \
             DUNGEON_OBSERVE.mob_packet(packet, _observer_room):
@@ -277,6 +317,7 @@ func _clear_connection() -> void:
     _observer_room = ""
     _observer_requested_base = ""
     _observer_only = false
+    _pve_preflight_pending.clear()
     peer = null
     self_pid = ""
     _hello_received = false
