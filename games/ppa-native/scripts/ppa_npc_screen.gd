@@ -33,6 +33,7 @@ const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
 const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
+const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
 const CLAN_CONTENT = preload("res://scripts/ppa_clan_menu_content.gd")
 const SERVICES := ["merchant", "forge", "storage", "auction", "clan", "arena", "blackmarket", "dungeon", "fartzone"]
 # Exact deployed original PPA PVP_SHOP_ITEMS (reference catalog only).
@@ -2237,14 +2238,24 @@ func _show_arena() -> void:
         tokens = authoritative["arenaTokens"]
     _mini_row("⚔ ЖЕТОНЫ АРЕНЫ · ЛИЧНЫЙ СЕЙВ D1",
         str(tokens) if tokens != null else "— · нет данных")
+    # Match the backend arena projection from the same authenticated D1
+    # save even if /api/game/npc/arena is disabled in Cloudflare. Never invent
+    # player victories, rating, purchased limits or real matchmaking.
+    var arena_record: Dictionary = VERIFIED_PLAYER.arena(_player_save_readonly)
     if has_verified_state and service == "arena":
-        var rating = authoritative.get("rating", null)
-        var wins = authoritative.get("wins", null)
-        var losses = authoritative.get("losses", null)
-        var tries_left = authoritative.get("attemptsRemaining", null)
-        _mini_row("СЕРВЕРНЫЙ РЕЙТИНГ", str(rating) if rating != null else "—")
-        _mini_row("ПОБЕДЫ / ПОРАЖЕНИЯ", (str(wins) if wins != null else "—") + " / " + (str(losses) if losses != null else "—"))
-        _mini_row("ОСТАТОК ПОПЫТОК", str(tries_left) if tries_left != null else "—")
+        for field in ["rating", "wins", "losses", "attemptsRemaining"]:
+            if authoritative.get(field, null) != null:
+                arena_record[field] = authoritative[field]
+    var rating: Variant = arena_record.get("rating", null)
+    var wins: Variant = arena_record.get("wins", null)
+    var losses: Variant = arena_record.get("losses", null)
+    var tries_left: Variant = arena_record.get("attemptsRemaining", null)
+    if rating != null or wins != null or losses != null or tries_left != null:
+        _mini_row("РЕЙТИНГ · ПОДТВЕРЖДЁННЫЙ СЕЙВ", str(int(rating)) if rating != null else "—")
+        _mini_row("ПОБЕДЫ / ПОРАЖЕНИЯ", (str(int(wins)) if wins != null else "—") + " / " + (str(int(losses)) if losses != null else "—"))
+        _mini_row("ОСТАТОК ПОПЫТОК", str(int(tries_left)) if tries_left != null else "—")
+    else:
+        _mini_row("РЕЙТИНГ И ПОПЫТКИ", "— · нет подтверждённого статуса арены")
     match tab:
         "fights":
             _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
