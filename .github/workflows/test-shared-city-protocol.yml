@@ -23,8 +23,8 @@ jobs:
       - name: Isolated protocol/runtime test, no live server or player data
         run: |
           mkdir -p /tmp/city-test/scripts
-          for file in ppa_shared_city_protocol.gd ppa_native_shared_realtime.gd ppa_shared_city_players.gd test_shared_city_protocol.gd test_hero_catalog.gd dwarf_model_fit.gd; do
+          for file in ppa_shared_city_protocol.gd ppa_native_shared_realtime.gd ppa_shared_city_players.gd ppa_dungeon_observer_protocol.gd ppa_native_pve_combat_intent.gd test_shared_city_protocol.gd test_hero_catalog.gd dwarf_model_fit.gd; do
             cp "games/ppa-native/scripts/$file" /tmp/city-test/scripts/
           done
           printf '[application]\nconfig/name="PPA city protocol test"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n' > /tmp/city-test/project.godot
-          /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/city-test --script res://scripts/test_shared_city_protocol.gd
+          timeout 120s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/city-test --script res://scripts/test_shared_city_protocol.gd
