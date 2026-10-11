@@ -255,7 +255,8 @@ func _start_verified_dungeon_view_for_qa(room: String) -> bool:
         return false
     var layer := AUTHORITY_LAYER.new() as Node2D
     if not layer.configure(room, _enemy_spawns, _enemy_branch,
-            _enemy_room_ordinal, _preview_mode, APPROVED_DUNGEON_ENEMY_ART_READY):
+            _enemy_room_ordinal, _preview_mode, APPROVED_DUNGEON_ENEMY_ART_READY,
+            ENEMY_CATALOG.ROOM_LEVELS):
         layer.free()
         return false
     _stop_verified_dungeon_view_for_qa()
