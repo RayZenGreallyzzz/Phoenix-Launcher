@@ -16,6 +16,9 @@ on:
       - 'games/ppa-native/scripts/test_native_shop_catalog_display.gd'
       - 'games/ppa-native/scripts/ppa_native_mob_authority_view.gd'
       - 'games/ppa-native/scripts/test_native_mob_authority_view.gd'
+      - 'games/ppa-native/scripts/ppa_native_dungeon_mob_layer.gd'
+      - 'games/ppa-native/scripts/test_native_dungeon_mob_layer.gd'
+      - 'games/ppa-native/scripts/dungeon_world.gd'
       - 'games/ppa-native/scripts/ppa_verified_player_projection.gd'
       - 'games/ppa-native/scripts/test_native_verified_player_projection.gd'
       - 'games/ppa-native/scripts/ppa_combat_hud.gd'
@@ -97,6 +100,9 @@ jobs:
       - name: Verify native read-only original PPA dungeon mob event projection
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_mob_authority_view.gd
+      - name: Verify authoritative dungeon visuals in original world without combat writes
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_dungeon_mob_layer.gd
       - name: Test every original Telegram PPA recipe in Godot
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_full_catalog.gd
