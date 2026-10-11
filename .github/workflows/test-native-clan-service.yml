@@ -11,6 +11,7 @@ on:
       - 'games/ppa-native/scripts/test_native_clan_service.gd'
       - 'games/ppa-native/scripts/audit_native_shared_npc_actions.gd'
       - 'games/ppa-native/scripts/ppa_npc_screen.gd'
+      - 'games/ppa-native/scripts/test_native_shop_catalog_display.gd'
       - 'games/ppa-native/scripts/ppa_verified_player_projection.gd'
       - 'games/ppa-native/scripts/test_native_verified_player_projection.gd'
       - 'games/ppa-native/scripts/ppa_combat_hud.gd'
@@ -83,6 +84,9 @@ jobs:
       - name: Verify saved HP MP and arena rating without fake realtime
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_verified_player_projection.gd
+      - name: Show every original merchant item and safe personal Black Market stock
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_shop_catalog_display.gd
       - name: Test every original Telegram PPA recipe in Godot
         run: |
           /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_forge_full_catalog.gd
