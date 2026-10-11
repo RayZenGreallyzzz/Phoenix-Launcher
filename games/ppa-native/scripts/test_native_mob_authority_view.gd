@@ -64,6 +64,16 @@ func _run() -> void:
     check(not view.apply_packet({"type":"mob-hp","room":"dungeon-1",
         "key":"rat1","hp":100,"mhp":100,"ts":1300}),
         "Stale HP message resurrected an already dead mob")
+    check(view.apply_packet({"type":"mob-authority","room":"dungeon-1",
+        "key":"rat1","hp":100,"mhp":100,"x":430,"y":555,
+        "dir":0,"moving":false,"aggro":false,"respawnAt":0,"ts":1500}),
+        "Signed server monster respawn was not accepted")
+    check(view.mobs["rat1"]["hp"] == 100.0 and view.mobs["rat1"]["dir"] == 0
+        and view.mobs["rat1"]["respawnAt"] == 0.0,
+        "Server confirmed respawn was not projected")
+    check(not view.apply_packet({"type":"mob-authority","room":"dungeon-1",
+        "key":"made-up-boss","hp":100,"mhp":100,"x":0,"y":0,
+        "dir":1,"ts":1501}), "Isolated authority event spawned a fake boss")
     var old_state := JSON.stringify(view.mobs)
     check(not view.apply_packet({"type":"mob-authority-snapshot","room":"dungeon-1",
         "rows":[["rat1"]],"reset":true,"done":true,"ts":2000}),
