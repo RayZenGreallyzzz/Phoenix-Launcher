@@ -37,6 +37,11 @@ func _run() -> void:
         "equipped":{"weapon":{"uid":"old-weapon","name":"Посох мага +7",
             "slot":"weapon","rarity":"epic","enh":7}}}}
     npc.apply_native_inventory(payload)
+    # In Telegram-style sharpening, optional signed gear management is
+    # behind its own toggle instead of preceding the item/stone selectors.
+    var equip_toggle := npc._body.find_child("PPAForgeEquipmentToolsToggle", true, false) as Button
+    check(equip_toggle != null, "No way to reveal server-authenticated gear management")
+    equip_toggle.pressed.emit()
     var remove := npc._body.find_child("PPARealUnequip_weapon", true, false) as Button
     var equip := npc._body.find_child("PPARealEquip_" +
         "new-weapon".to_utf8_buffer().hex_encode(), true, false) as Button
