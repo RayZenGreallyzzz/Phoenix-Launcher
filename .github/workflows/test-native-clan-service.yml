@@ -20,6 +20,8 @@ on:
       - 'games/ppa-native/scripts/test_native_dungeon_mob_layer.gd'
       - 'games/ppa-native/scripts/ppa_dungeon_observer_protocol.gd'
       - 'games/ppa-native/scripts/test_native_dungeon_observer_protocol.gd'
+      - 'games/ppa-native/scripts/ppa_native_pve_combat_intent.gd'
+      - 'games/ppa-native/scripts/test_native_pve_combat_intent.gd'
       - 'games/ppa-native/scripts/ppa_native_shared_realtime.gd'
       - 'games/ppa-native/scripts/dungeon_world.gd'
       - 'games/ppa-native/scripts/ppa_verified_player_projection.gd'
@@ -106,6 +108,9 @@ jobs:
       - name: Verify signed native dungeon assignment and read-only stream
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_dungeon_observer_protocol.gd
+      - name: Reject forged Godot attack intents and replayed preflight replies
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_pve_combat_intent.gd
       - name: Verify authoritative dungeon visuals in original world without combat writes
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_dungeon_mob_layer.gd
