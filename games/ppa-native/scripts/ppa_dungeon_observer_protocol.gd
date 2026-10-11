@@ -16,7 +16,13 @@ static func room_of(base: String, room: String) -> bool:
     if not allowed_base(base) or not room.begins_with(base + "-i"):
         return false
     var suffix := room.substr((base + "-i").length())
-    return suffix.is_valid_int() and not suffix.begins_with("0") and int(suffix) >= 1
+    if suffix.length() < 1 or suffix.length() > 6 or suffix.begins_with("0"):
+        return false
+    for i in range(suffix.length()):
+        var c := suffix.unicode_at(i)
+        if c < 48 or c > 57:
+            return false
+    return int(suffix) >= 1
 
 static func assignment(packet: Dictionary, requested_base: String) -> String:
     if packet.get("type") != "dungeon-observe-assigned" \
