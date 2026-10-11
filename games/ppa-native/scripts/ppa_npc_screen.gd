@@ -336,7 +336,12 @@ func _layout_tabs() -> void:
     _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     # Reserve enough height for the full tab grid without scroll controls.
     var rows := ceili(float(tab_count) / float(columns))
-    _tab_scroller.custom_minimum_size.y = float(rows * 43 + maxi(0, rows - 1) * 3 + 12)
+    var required_height := float(rows * 43 + maxi(0, rows - 1) * 3 + 12)
+    if clan_grid:
+        required_height = maxf(required_height, 169.0 if columns == 3 else 112.0)
+    elif forge_grid:
+        required_height = maxf(required_height, 101.0)
+    _tab_scroller.custom_minimum_size.y = required_height
     _last_clan_layout = clan_grid
 
 func _outside(event: InputEvent) -> void:
