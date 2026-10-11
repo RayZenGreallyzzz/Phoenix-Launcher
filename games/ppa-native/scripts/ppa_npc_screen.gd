@@ -1068,6 +1068,11 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             grid.add_child(forge_choice)
             var product_line := HBoxContainer.new()
             product_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            product_line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+            product_line.offset_left = 6.0
+            product_line.offset_right = -6.0
+            product_line.offset_top = 3.0
+            product_line.offset_bottom = -3.0
             product_line.add_theme_constant_override("separation", 5)
             forge_choice.add_child(product_line)
             var product_icon := _readonly_icon_item(item, 48)
@@ -1829,7 +1834,6 @@ func _show_original_forge_recipes() -> void:
         return
     var recipe_index := _body.get_child_count()
     _section("РЕЦЕПТ · " + str(chosen.get("name","")),
-
         str(chosen.get("desc","")) + " · " + str(chosen.get("rarity","")).to_upper())
     _forge_recipe_target = _body.get_child(recipe_index) as Control
     var art := str(chosen.get("img", ""))
