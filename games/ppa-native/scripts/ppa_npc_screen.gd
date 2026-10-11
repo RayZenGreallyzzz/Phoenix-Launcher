@@ -1071,7 +1071,7 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
     grid.name = "NpcProductGrid"
     # Three columns squeeze Russian item names on portrait tablets.
     var compact_forge := service == "forge" and tab in ["equipment", "legendary", "accessories", "pets"]
-    grid.columns = 2 if (compact_forge and _frame.size.x >= 430.0) or _frame.size.x >= 780.0 else 1
+    grid.columns = 2 if compact_forge or _frame.size.x >= 780.0 else 1
     grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     grid.add_theme_constant_override("h_separation", 8)
     grid.add_theme_constant_override("v_separation", 8)
