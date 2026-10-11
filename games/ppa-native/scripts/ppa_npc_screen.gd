@@ -240,6 +240,7 @@ func _create_shell() -> void:
     _tabs = GridContainer.new()
     _tabs.name = "NpcOnlyCategoryTabs"
     _tabs.columns = 3
+    _tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _tabs.add_theme_constant_override("h_separation", 5)
     _tabs.add_theme_constant_override("v_separation", 5)
     _tab_scroller.add_child(_tabs)
@@ -294,19 +295,32 @@ func _fit() -> void:
 
 
 func _layout_tabs() -> void:
-    if _tabs == null or _tab_scroller == null:
+    if _tabs == null or _tab_scroller == null or _frame == null:
         return
-    # The nine clan destinations are never hidden behind side swipes.
-    # Three rows in portrait, two in landscape. Other NPCs keep one
-    # horizontally scrollable category strip like the live Telegram UI.
+    # Telegram's smith has six named destinations. Keep ALL of them visible,
+    # in their original order, rather than hiding the last buttons off-screen.
+    # This changes ONLY the native Godot forge; clan/other NPCs retain layout.
     var clan_grid := service == "clan"
-    var columns := (5 if size.x > size.y else 3) if clan_grid else maxi(1, _tab_specs().size())
+    var forge_grid := service == "forge"
+    var frame_width := _frame.offset_right - _frame.offset_left
+    var columns := maxi(1, _tab_specs().size())
+    if clan_grid:
+        columns = 5 if size.x > size.y else 3
+    elif forge_grid:
+        columns = 6 if frame_width >= 880.0 else (3 if frame_width >= 560.0 else 2)
     _tabs.columns = columns
-    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if clan_grid else ScrollContainer.SCROLL_MODE_AUTO
-    # The final clan row used to be clipped: 123px is less than three
-    # touch-sized rows plus gap, margins and theme padding.
-    _tab_scroller.custom_minimum_size.y = 169.0 if (clan_grid and columns == 3) else (112.0 if clan_grid else 54.0)
-    _last_clan_layout = clan_grid
+    _tab_scroller.horizontal_scroll_mode = (
+        ScrollContainer.SCROLL_MODE_DISABLED if clan_grid or forge_grid
+        else ScrollContainer.SCROLL_MODE_AUTO)
+    if forge_grid:
+        var rows := int(ceil(float(_tab_specs().size()) / float(columns)))
+        _tab_scroller.custom_minimum_size.y = float(rows * 43 + (rows - 1) * 5 + 8)
+    elif clan_grid:
+        # All nine clan buttons also remain visible on the existing 3x3/5x2 grid.
+        _tab_scroller.custom_minimum_size.y = 169.0 if columns == 3 else 112.0
+    else:
+        _tab_scroller.custom_minimum_size.y = 54.0
+
 
 func _outside(event: InputEvent) -> void:
     if event is InputEventScreenTouch and event.pressed:
@@ -811,6 +825,13 @@ func _render() -> void:
             # Compact only the longest category on narrow portrait screens.
             if _tabs.columns == 3 and id == "clans":
                 b.text = "КЛАНЫ"
+        elif service == "forge":
+            # A full-width 6/3/2-column smith grid: no sideways tab navigation.
+            var available := _frame.offset_right - _frame.offset_left - 44.0
+            var slot_width := floorf(available / float(_tabs.columns)) - 6.0
+            b.custom_minimum_size.x = maxf(102.0, slot_width)
+            b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            b.add_theme_font_size_override("font_size", 10 if _tabs.columns == 6 else 11)
         else:
             b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
         b.add_theme_color_override("font_color", GOLD if id == tab else SUB)
@@ -1410,7 +1431,12 @@ func _show_forge() -> void:
     var source_note := ("Подлинные рецепты из действующей PPA · остатки только из подтверждённого сохранения."
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
-    _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
+    var tab_names := {
+        "enhance":"ЗАТОЧКА", "equipment":"СНАРЯЖЕНИЕ",
+        "legendary":"ЛЕГЕНДАРНОЕ", "accessories":"АКСЕССУАРЫ",
+        "pets":"ПЕТЫ", "rune_fusion":"СЛИЯНИЕ РУН"
+    }
+    _section("КУЗНЕЦ · " + str(tab_names.get(tab, "ЗАТОЧКА")), source_note)
     if not forge_notice.is_empty():
         _body.add_child(_label(forge_notice, 12, GOLD))
     if forge_pending:
@@ -1426,7 +1452,8 @@ func _show_forge() -> void:
             str(authoritative.get("saveVersion", "—")), 11, GOLD))
     else:
         _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
-    _show_verified_d1_forge_stock()
+    # Show the chosen tab's content BEFORE the long resources/gear list.
+    # No inventory, price, or server transaction logic is modified.
     if tab == "enhance":
         _show_authoritative_enhancement()
     elif tab == "rune_fusion":
@@ -1439,6 +1466,7 @@ func _show_forge() -> void:
         _locked_action("СЛИТЬ РУНЫ")
     else:
         _show_original_forge_recipes()
+    _show_verified_d1_forge_stock()
     _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
 
 func _choose_enhancement_item(uid: String) -> void:
