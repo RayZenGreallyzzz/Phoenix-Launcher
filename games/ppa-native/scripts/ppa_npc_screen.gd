@@ -68,6 +68,7 @@ var _asking_currency := "PPA"
 var _forge_filter := "equipment"
 var _craft_rarity := "all"
 var _forge_resources_expanded := false
+var _forge_equipment_tools_expanded := false
 var _forge_inventory_host: VBoxContainer
 var _forge_wallet_host: HBoxContainer
 var _forge_recipe_target: Control
@@ -393,6 +394,7 @@ func open_npc(source: Dictionary) -> void:
     _forge_filter = "equipment"
     _craft_rarity = "all"
     _forge_resources_expanded = false
+    _forge_equipment_tools_expanded = false
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     _enhance_uid = ""
     _enhance_mode = "normal"
@@ -1581,6 +1583,10 @@ func _toggle_forge_resources() -> void:
     _forge_resources_expanded = not _forge_resources_expanded
     _render()
 
+func _toggle_forge_equipment_tools() -> void:
+    _forge_equipment_tools_expanded = not _forge_equipment_tools_expanded
+    _render()
+
 
 func _show_forge() -> void:
     # Show the selected Telegram-style craft or enhancement task FIRST.
@@ -1611,6 +1617,14 @@ func _show_forge() -> void:
         _locked_action("СЛИТЬ РУНЫ")
     else:
         _show_original_forge_recipes()
+
+    if tab == "enhance":
+        var equip_tools := _button("СКРЫТЬ ПЕРЕОДЕВАНИЕ ▲" if _forge_equipment_tools_expanded else "СНЯТЬ ИЛИ НАДЕТЬ ВЕЩЬ ▼")
+        equip_tools.name = "PPAForgeEquipmentToolsToggle"
+        equip_tools.pressed.connect(_toggle_forge_equipment_tools)
+        _body.add_child(equip_tools)
+        if _forge_equipment_tools_expanded:
+            _show_shared_equipment_tools()
 
     var resources := _button("СКРЫТЬ МОИ РЕСУРСЫ ▲" if _forge_resources_expanded else "МОИ РЕСУРСЫ И БАЛАНС ▼")
     resources.name = "PPAForgeResourcesToggle"
@@ -1724,9 +1738,8 @@ func _show_shared_equipment_tools() -> void:
             bag_grid.add_child(b)
 
 func _show_authoritative_enhancement() -> void:
-    _show_shared_equipment_tools()
-    _section("ЗАТОЧКА PPA · ОРИГИНАЛЬНЫЕ ВЕЩИ",
-        "Сервер проверяет камни, шанс и сохранение. Только предметы в сумке: надетую вещь сначала нужно снять.")
+    _section("ЗАТОЧКА СНАРЯЖЕНИЯ / АКСЕССУАРОВ / ПЕТОВ",
+        "Выбери предмет и камень. Система показывает только подтверждённые сервером шансы и остатки.")
     if not _owns_verified_state(forge_state) or not (forge_state.get("enhanceItems") is Array):
         _message("ЖДЁМ ОБЩУЮ КУЗНИЦУ", "Заточка недоступна без подтверждённого сохранения сервера PPA.")
         _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
@@ -1740,41 +1753,89 @@ func _show_authoritative_enhancement() -> void:
     if selected.is_empty() and not items.is_empty() and items[0] is Dictionary:
         selected = items[0]
         _enhance_uid = str(selected.get("uid", ""))
-    var available := GridContainer.new()
-    available.name = "PPARealForgeItemGrid"
-    available.columns = 2 if size.x < 620.0 else 3
-    available.add_theme_constant_override("h_separation", 5)
-    available.add_theme_constant_override("v_separation", 5)
-    _body.add_child(available)
+    var picker_row := HBoxContainer.new()
+    picker_row.name = "PPAForgeOriginalDropdowns"
+    picker_row.add_theme_constant_override("separation", 8)
+    _body.add_child(picker_row)
+    var gear_picker := OptionButton.new()
+    gear_picker.name = "PPAForgeGearDropdown"
+    gear_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    gear_picker.custom_minimum_size.y = 43
+    gear_picker.add_theme_font_size_override("font_size", 11)
+    gear_picker.tooltip_text = "Выбор предмета из подтверждённого инвентаря PPA"
+    picker_row.add_child(gear_picker)
+    var pick_index := 0
     for entry in items:
         if not (entry is Dictionary):
             continue
-        var uid := str(entry.get("uid", ""))
+        var uid := str((entry as Dictionary).get("uid", ""))
         if uid.is_empty():
             continue
-        var label_text := str(entry.get("name", "Вещь")).left(24) + "  +" + str(entry.get("enh", 0))
-        var choose := _button(label_text, uid != _enhance_uid)
-        choose.name = "PPAEnhanceItem_" + uid.to_utf8_buffer().hex_encode()
-        choose.pressed.connect(_choose_enhancement_item.bind(uid))
-        available.add_child(choose)
+        var label_text := str((entry as Dictionary).get("name", "Вещь")).left(22) + "  +" + str((entry as Dictionary).get("enh", 0))
+        gear_picker.add_item(label_text)
+        var idx := gear_picker.item_count - 1
+        gear_picker.set_item_metadata(idx, uid)
+        if uid == _enhance_uid:
+            pick_index = idx
+    if gear_picker.item_count > 0:
+        gear_picker.select(pick_index)
+        gear_picker.item_selected.connect(func(index: int):
+            _choose_enhancement_item(str(gear_picker.get_item_metadata(index))))
+    else:
+        gear_picker.add_item("НЕТ ВЕЩЕЙ")
+        gear_picker.disabled = true
+
+    var mode_picker := OptionButton.new()
+    mode_picker.name = "PPAForgeStoneDropdown"
+    mode_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    mode_picker.custom_minimum_size.y = 43
+    mode_picker.add_theme_font_size_override("font_size", 11)
+    mode_picker.tooltip_text = "Тип камня и руны заточки"
+    picker_row.add_child(mode_picker)
+    for option in [
+        {"key":"normal","label":"ОБЫЧНЫЙ КАМЕНЬ"},
+        {"key":"normal_rune","label":"ОБЫЧНЫЙ + РУНА"},
+        {"key":"premium","label":"ПРЕМИУМ КАМЕНЬ"},
+        {"key":"premium_rune","label":"ПРЕМИУМ + РУНА"}
+    ]:
+        mode_picker.add_item(str(option["label"]))
+        var i := mode_picker.item_count - 1
+        mode_picker.set_item_metadata(i, option["key"])
+        if str(option["key"]) == _enhance_mode:
+            mode_picker.select(i)
+    mode_picker.item_selected.connect(func(index: int):
+        _set_enhancement_mode(str(mode_picker.get_item_metadata(index))))
     if selected.is_empty():
-        _message("НЕТ ВЕЩЕЙ", "В серверной сумке нет предметов для заточки.")
+        _message("НЕТ ВЕЩЕЙ", "В подтверждённой сервером сумке нет предметов для заточки.")
         _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
         return
-    _section(str(selected.get("name", "Вещь")) + " · +" + str(selected.get("enh", 0)),
-        "Заточка конкретного UID из исходного инвентаря Telegram PPA.")
+
+    var level := int(selected.get("enh", 0))
+    var transition := HBoxContainer.new()
+    transition.name = "PPAForgeEnhancementBeforeAfter"
+    transition.alignment = BoxContainer.ALIGNMENT_CENTER
+    transition.add_theme_constant_override("separation", 12)
+    _body.add_child(transition)
+    for shown_level in [level, level + 1]:
+        var panel := PanelContainer.new()
+        panel.custom_minimum_size = Vector2(100, 100)
+        panel.add_theme_stylebox_override("panel", _style(Color("#11191D"), EDGE, 6))
+        transition.add_child(panel)
+        var icon_col := VBoxContainer.new()
+        icon_col.alignment = BoxContainer.ALIGNMENT_CENTER
+        panel.add_child(icon_col)
+        var icon := _readonly_icon_item(selected, 57)
+        icon_col.add_child(icon)
+        var caption := _label("+" + str(shown_level), 12, GOLD)
+        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        icon_col.add_child(caption)
+        if shown_level == level:
+            transition.add_child(_label("➜", 23, GOLD))
+
     var supplied_stones: Variant = forge_state.get("stones", null)
     var supplies: Dictionary = supplied_stones as Dictionary if supplied_stones is Dictionary else {}
-    _mini_row("Обычные камни", str(supplies.get("normal", "нет данных")))
-    _mini_row("Премиум камни", str(supplies.get("premium", "нет данных")))
-    _mini_row("Руны заточки", str(supplies.get("rune", "нет данных")))
-    _choice_tiles([
-        {"key":"normal", "label":"ОБЫЧНЫЙ"},
-        {"key":"normal_rune", "label":"ОБЫЧНЫЙ + РУНА"},
-        {"key":"premium", "label":"ПРЕМИУМ"},
-        {"key":"premium_rune", "label":"ПРЕМИУМ + РУНА"}
-    ], _enhance_mode, _set_enhancement_mode)
-    var level := int(selected.get("enh", 0))
+    _mini_row("Обычные / Премиум / Руны",
+        str(supplies.get("normal", "—")) + " / " + str(supplies.get("premium", "—")) + " / " + str(supplies.get("rune", "—")))
     var premium := _enhance_mode.begins_with("premium")
     var rune := _enhance_mode.ends_with("_rune")
     var rule_data: Variant = forge_state.get("enhanceRules", null)
@@ -1801,7 +1862,7 @@ func _show_authoritative_enhancement() -> void:
     var uid := str(selected.get("uid", ""))
     var mode := _enhance_mode
     var version := int(forge_state.get("version", 0))
-    var action := _button("ЗАТОЧИТЬ · +" + str(level + 1), true)
+    var action := _button("ЗАТОЧИТЬ · " + str(chance) + "%", true)
     action.name = "PPARealForgeEnhance"
     action.pressed.connect(func():
         if premium:
