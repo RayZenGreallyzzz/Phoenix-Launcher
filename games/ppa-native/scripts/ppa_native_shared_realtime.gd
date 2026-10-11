@@ -83,13 +83,19 @@ func request_pve_preflight_for_qa(mob_key: String, request_id: String,
     # The server will NEVER execute damage, regardless of preflight result.
     if not _observer_only or not _hello_received or _observer_room.is_empty():
         return false
-    if _pve_preflight_pending.has(request_id):
+    # Bound memory: a silent server may leave requests pending indefinitely.
+    # Preflight has no gameplay side effects; never queue a flood of intents.
+    if _pve_preflight_pending.has(request_id) or _pve_preflight_pending.size() >= 8:
         return false
     var intent: Dictionary = PVE_INTENT.packet(
         _observer_room, mob_key, request_id, action, skill_id)
     if intent.is_empty() or not _send(intent):
         return false
-    _pve_preflight_pending[request_id] = _observer_room
+    _pve_preflight_pending[request_id] = {
+        "room": _observer_room,
+        "key": mob_key,
+        "action": action
+    }
     return true
 
 func stop_dungeon_observer() -> void:
@@ -243,15 +249,23 @@ func _handle_packet(packet: Dictionary) -> void:
         var request_id := str(packet.get("requestId", ""))
         if request_id.is_empty() or not _pve_preflight_pending.has(request_id):
             return
-        var bound_room := str(_pve_preflight_pending[request_id])
+        var expected: Variant = _pve_preflight_pending[request_id]
+        if not (expected is Dictionary):
+            _pve_preflight_pending.erase(request_id)
+            return
+        var bound_room := str(expected.get("room", ""))
         if bound_room != _observer_room or _observer_room.is_empty():
             _pve_preflight_pending.erase(request_id)
             return
         if packet.get("canAttack") != false:
             return # Never interpret test preflight as attack authorization.
         if kind == "dungeon-combat-preflight":
+            # A valid requestId is not sufficient: a replay with a different
+            # mob/action inside the same room cannot be marked confirmed.
             if packet.get("readOnly") != true or \
                     str(packet.get("room", "")) != bound_room or \
+                    str(packet.get("key", "")) != str(expected.get("key", "")) or \
+                    str(packet.get("action", "")) != str(expected.get("action", "")) or \
                     packet.get("targetConfirmed") != true:
                 return
         _pve_preflight_pending.erase(request_id)
