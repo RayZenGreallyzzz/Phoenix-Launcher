@@ -1334,6 +1334,62 @@ func _set_asking_qty(value: float) -> void:
 func _set_currency(index: int) -> void:
     _asking_currency = "PPA" if index == 0 else "Gram"
 
+func _show_verified_d1_forge_stock() -> void:
+    # The initial signed /api/game/state snapshot already carries the actual
+    # player's money, stones, materials, feathers and bag. Rendering them does
+    # NOT authorize forging and never spends a material.
+    if _player_view_readonly.is_empty():
+        _message("ОЖИДАЕМ СЕЙВ PPA", "Вещи и ресурсы появятся после подтверждения аккаунта.")
+        return
+    _section("ВАШИ РЕСУРСЫ И ВАЛЮТА · D1", "Подтверждено общим сохранением персонажа · только просмотр")
+    var money: Dictionary = _player_view_readonly.get("money", {})
+    _mini_row("Gold / PPA / Gram", \
+        (str(money["gold"]) if money.get("gold", null) != null else "—") + " / " + \
+        (str(money["ppa"]) if money.get("ppa", null) != null else "—") + " / " + \
+        (str(money["gram"]) if money.get("gram", null) != null else "—"))
+    var stones: Variant = _player_save_readonly.get("stones", null)
+    if stones is Dictionary:
+        for row in [
+            {"key":"normal", "title":"Обычные камни заточки"},
+            {"key":"premium", "title":"Премиум камни заточки"},
+            {"key":"rune", "title":"Премиум руны заточки"}
+        ]:
+            var value: Variant = (stones as Dictionary).get(row["key"], null)
+            if value is int or value is float:
+                if float(value) >= 0.0:
+                    _mini_row(str(row["title"]), str(int(value)))
+    var feathers: Variant = _player_save_readonly.get("feathers", null)
+    if feathers is Dictionary:
+        var count: Variant = (feathers as Dictionary).get("phoenix", null)
+        if (count is int or count is float) and float(count) >= 0.0:
+            _mini_row("Перо Феникса", str(int(count)))
+    var materials: Variant = _player_save_readonly.get("materials", null)
+    if materials is Dictionary:
+        var names: Array[String] = []
+        for name in (materials as Dictionary).keys():
+            var value: Variant = (materials as Dictionary).get(name, null)
+            if (value is int or value is float) and float(value) > 0.0:
+                names.append(str(name))
+        names.sort()
+        for name in names.slice(0, 32):
+            _mini_row(name, str(int((materials as Dictionary).get(name, 0))))
+        if names.size() > 32:
+            _body.add_child(_label("Показаны первые 32 ресурса из подтверждённого D1-снимка.", 11, SUB))
+    if tab == "enhance":
+        var real_items: Array = _player_view_readonly.get("inventory", [])
+        var owned_gear: Array = []
+        for entry in real_items:
+            if not (entry is Dictionary):
+                continue
+            var item: Dictionary = entry
+            var slot := str(item.get("ppaEquipmentSlot", item.get("equipSlot", "")))
+            if str(item.get("kind", "")) == "gear" or slot in \
+                    ["weapon","helmet","armor","gloves","ring","legs","boots","necklace","artifact","cloak","wings","pet"]:
+                owned_gear.append(item)
+        if not owned_gear.is_empty():
+            _readonly_owned_grid("ВАША ЭКИПИРОВКА В СУМКЕ · ТОЛЬКО ПРОСМОТР", owned_gear, 32)
+
+
 func _show_forge() -> void:
     # Recipe names, prices and ingredient requirements are sourced from the
     # current PUBLIC original PPA smith. Player possessions are rendered only
@@ -1357,6 +1413,7 @@ func _show_forge() -> void:
             str(authoritative.get("saveVersion", "—")), 11, GOLD))
     else:
         _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
+    _show_verified_d1_forge_stock()
     if tab == "enhance":
         _show_authoritative_enhancement()
     elif tab == "rune_fusion":
