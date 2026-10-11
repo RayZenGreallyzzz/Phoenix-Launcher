@@ -62,8 +62,8 @@ func _run() -> void:
     var gear_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
     var stone_picker := npc._body.find_child("PPAForgeStoneDropdown", true, false) as OptionButton
     var progression := npc._body.find_child("PPAForgeEnhancementBeforeAfter", true, false) as HBoxContainer
-    check(gear_picker != null and gear_picker.item_count == 3,
-        "Forge lost signed equipment dropdown")
+    check(gear_picker != null and gear_picker.item_count == 2,
+        "Forge must show only same-rarity signed equipment, not other rarities")
     check(stone_picker != null and stone_picker.item_count == 4,
         "Forge lost the four original stone/rune combinations")
     check(progression != null and progression.get_child_count() == 3,
@@ -71,6 +71,20 @@ func _run() -> void:
     check(not npc._forge_equipment_tools_expanded and
         npc._body.find_child("PPAForgeEquipmentToolsToggle", true, false) != null,
         "Optional equipment tool actions must not block sharpening view")
+    npc._set_enhancement_rarity("rare")
+    check(npc._enhance_uid == "unique-pet",
+        "Choosing rare must select the authenticated rare pet, not epic gear")
+    var rare_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
+    check(rare_picker != null and rare_picker.item_count == 1 and not rare_picker.visible,
+        "A sole confirmed rarity match should not add an unnecessary dropdown")
+    npc._set_enhancement_rarity("legendary")
+    var empty_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
+    check(empty_picker != null and empty_picker.disabled and
+        npc._body.find_child("PPARealForgeEnhance", true, false) == null,
+        "Choosing a rarity with no signed item must never enable sharpening")
+    npc._set_enhancement_rarity("epic")
+    check(npc._enhance_uid == "unique-epic",
+        "Returning to epic must select the genuine owner's epic weapon")
     check(npc._body.find_child("PPARealForgeEnhance", true, false) == null,
         "Normal stone should not allow +6")
     npc._set_enhancement_mode("premium_rune")
