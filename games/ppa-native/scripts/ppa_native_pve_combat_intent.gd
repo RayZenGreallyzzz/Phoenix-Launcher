@@ -12,8 +12,12 @@ static func valid_target(key: String) -> bool:
     if not key.begins_with("s") or key.length() < 2 or key.length() > 5:
         return false
     var number := key.substr(1)
-    if not number.is_valid_int() or (number.length() > 1 and number.begins_with("0")):
+    if (number.length() > 1 and number.begins_with("0")):
         return false
+    for i in range(number.length()):
+        var c := number.unicode_at(i)
+        if c < 48 or c > 57:
+            return false
     var n := int(number)
     return n >= 0 and n <= 9999
 
