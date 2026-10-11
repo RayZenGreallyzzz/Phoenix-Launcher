@@ -74,6 +74,24 @@ func _run() -> void:
         native._handle_packet(response)
         check(results.is_empty() and native._pve_preflight_pending.size() == 1,
             "Forged preflight response was accepted: " + str(forged))
+    # A new server preflight includes a denial-only readiness explanation.
+    # Malicious or misrouted payloads must not sneak combat permission into
+    # nested fields while keeping top-level canAttack=false.
+    for bad_readiness in [
+        {"readOnly":true,"canAttack":true,"blockers":[]},
+        {"readOnly":false,"canAttack":false,"blockers":[]},
+        {"readOnly":true,"canAttack":false,"blockers":"READY"},
+        {"readOnly":true,"canAttack":false}
+    ]:
+        var forged_readiness: Dictionary = reply.duplicate(true)
+        forged_readiness["readiness"] = bad_readiness
+        native._handle_packet(forged_readiness)
+        check(results.is_empty() and native._pve_preflight_pending.size() == 1,
+            "Forged combat readiness slipped through client: " + str(bad_readiness))
+    reply["readiness"] = {
+        "readOnly":true,"canAttack":false,
+        "blockers":["SERVER_COMBAT_RUNTIME_MISSING"]
+    }
     native._handle_packet(reply)
     check(results.size() == 1 and results[0].get("canAttack") == false,
         "Read-only verified preflight response not handled")
