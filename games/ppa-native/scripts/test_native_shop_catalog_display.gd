@@ -85,6 +85,28 @@ func _run() -> void:
         "Black Market received unsigned native merchant buy action")
     check(JSON.stringify(saved) == original, "Shop preview modified original D1 stock")
 
+    # The optional /api/game/npc/blackmarket read projection must carry
+    # canonical daily purchase counters. Server-confirmed count wins over
+    # the earlier city snapshot, but still cannot authorize a purchase.
+    set_meta("phoenix_account", {"telegramId":"990000001"})
+    npc.apply_authoritative_snapshot({
+        "ok":true, "gameId":"phoenix-pix-arena","ownerId":"990000001",
+        "readOnly":true,"service":"blackmarket","version":32,
+        "data":{"readOnly":true,"actionsEnabled":false,
+            "offers":[{"id":"real_bm_1","name":"Кристалл PPA",
+                "category":"materials","price":770,"currency":"ppa",
+                "limit":2,"bought":2}]}
+    })
+    check(npc.has_verified_state, "Signed Black Market projection was rejected")
+    npc._select_item("real_bm_1")
+    check(has_label(npc._body, "осталось 0"),
+        "Current server bought count did not override older D1 preview")
+    check(npc._body.find_child("MerchantCommand_buy", true, false) == null,
+        "Read-only Black Market projection enabled a real merchant purchase")
+    remove_meta("phoenix_account")
+    check(JSON.stringify(saved) == original,
+        "Applying signed Black Market projection modified legacy Telegram save")
+
     npc.close_npc()
     npc.clear_player_save_readonly()
     npc.open_npc({"service":"blackmarket","name":"Блек Маркет"})
