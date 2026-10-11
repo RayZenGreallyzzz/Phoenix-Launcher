@@ -67,6 +67,7 @@ var _asking_quantity := 1
 var _asking_currency := "PPA"
 var _forge_filter := "equipment"
 var _craft_rarity := "all"
+var _forge_resources_expanded := false
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _enhance_uid := ""
 var _enhance_mode := "normal"
@@ -373,6 +374,7 @@ func open_npc(source: Dictionary) -> void:
     _asking_currency = "PPA"
     _forge_filter = "equipment"
     _craft_rarity = "all"
+    _forge_resources_expanded = false
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     _enhance_uid = ""
     _enhance_mode = "normal"
@@ -1407,13 +1409,18 @@ func _show_verified_d1_forge_stock() -> void:
             _readonly_owned_grid("ВАША ЭКИПИРОВКА В СУМКЕ · ТОЛЬКО ПРОСМОТР", owned_gear, 32)
 
 
+func _toggle_forge_resources() -> void:
+    _forge_resources_expanded = not _forge_resources_expanded
+    _render()
+
+
 func _show_forge() -> void:
-    # Recipe names, prices and ingredient requirements are sourced from the
-    # current PUBLIC original PPA smith. Player possessions are rendered only
-    # from the account-bound read-only server save; crafting is never local.
-    var source_note := ("Подлинные рецепты из действующей PPA · остатки только из подтверждённого сохранения."
+    # Show the selected Telegram-style craft or enhancement task FIRST.
+    # Signed balances and the full D1 material list remain available on demand
+    # without pushing the actual blacksmith controls below the first screen.
+    var source_note := ("Оригинальные рецепты PPA · стоимость и материалы из каталога."
         if tab in ["equipment", "legendary", "accessories", "pets"]
-        else "Выбор вещей из сохранения PPA · заточка и слияние требуют серверной операции.")
+        else "Вещи из сохранения PPA · операции проверяет игровой сервер.")
     _section("КУЗНЕЦ · " + tab.to_upper(), source_note)
     if not forge_notice.is_empty():
         _body.add_child(_label(forge_notice, 12, GOLD))
@@ -1421,20 +1428,12 @@ func _show_forge() -> void:
         var retry := _button("ПРОВЕРИТЬ ТО ЖЕ СОЗДАНИЕ", not forge_busy)
         retry.pressed.connect(func(): forge_retry_requested.emit())
         _body.add_child(retry)
-    var refresh := _button("ОБНОВИТЬ ОСТАТКИ С СЕРВЕРА PPA")
-    refresh.pressed.connect(func(): authoritative_state_requested.emit("forge"))
-    _body.add_child(refresh)
-    if has_verified_state and authoritative.get("service") == "forge" \
-        and authoritative.get("readOnly") == true:
-        _body.add_child(_label("Материалы и валюта подтверждены PPA · версия " +
-            str(authoritative.get("saveVersion", "—")), 11, GOLD))
-    else:
-        _body.add_child(_label("Серверная сверка кузницы пока не получена; данные ниже могут быть старее.", 11, SUB))
-    _show_verified_d1_forge_stock()
+
     if tab == "enhance":
         _show_authoritative_enhancement()
     elif tab == "rune_fusion":
-        _message("СЛИЯНИЕ РУН", "Отображаются реальные руны из отдельной сумки персонажа. Слияние пока не выполняется.")
+        _message("СЛИЯНИЕ РУН",
+            "2 одинаковые руны · попытка 5000 Gold. Серая → зелёная 37%, зелёная → синяя 30%, синяя → фиолетовая 22%.")
         if _player_view_readonly.is_empty():
             _message("НЕТ СЕРВЕРНОГО СНИМКА", "Ожидаем настоящее сохранение персонажа.")
         else:
@@ -1443,7 +1442,24 @@ func _show_forge() -> void:
         _locked_action("СЛИТЬ РУНЫ")
     else:
         _show_original_forge_recipes()
-    _body.add_child(_label("Ни одна операция не списывает реальные предметы без подключения игрового сервера.", 11, SUB))
+
+    var resources := _button("СКРЫТЬ МОИ РЕСУРСЫ ▲" if _forge_resources_expanded else "МОИ РЕСУРСЫ И БАЛАНС ▼")
+    resources.name = "PPAForgeResourcesToggle"
+    resources.pressed.connect(_toggle_forge_resources)
+    _body.add_child(resources)
+    if _forge_resources_expanded:
+        if has_verified_state and authoritative.get("service") == "forge" \
+            and authoritative.get("readOnly") == true:
+            _body.add_child(_label("Серверный снимок · версия " +
+                str(authoritative.get("saveVersion", "—")), 11, GOLD))
+        elif _player_view_readonly.is_empty():
+            _body.add_child(_label("Подтверждённое сохранение ещё не загружено.", 11, SUB))
+        _show_verified_d1_forge_stock()
+
+    var refresh := _button("ОБНОВИТЬ ДАННЫЕ С СЕРВЕРА PPA")
+    refresh.pressed.connect(func(): authoritative_state_requested.emit("forge"))
+    _body.add_child(refresh)
+    _body.add_child(_label("Создание и заточка не выполняются локально: безопасность предметов проверяет сервер PPA.", 11, SUB))
 
 func _choose_enhancement_item(uid: String) -> void:
     _enhance_uid = uid
@@ -1696,7 +1712,6 @@ func _show_original_forge_recipes() -> void:
         if _craft_rarity != "all" and str(row.get("rarity","")) != _craft_rarity:
             continue
         offers.append(row)
-    _product_grid(offers, false)
     if offers.is_empty():
         _message("НЕТ РЕЦЕПТОВ", "В оригинальном каталоге PPA таких рецептов нет.")
         return
@@ -1708,6 +1723,7 @@ func _show_original_forge_recipes() -> void:
     if chosen.is_empty():
         _message("ВЫБЕРИ РЕЦЕПТ",
             "Нажми «Подробнее»: увидишь цену, бонус, каждый материал и остаток в сумке.")
+        _product_grid(offers, false)
         return
     _section("РЕЦЕПТ · " + str(chosen.get("name","")),
         str(chosen.get("desc","")) + " · " + str(chosen.get("rarity","")).to_upper())
@@ -1779,6 +1795,11 @@ func _show_original_forge_recipes() -> void:
             _body.add_child(_label(
                 "Рецепт не подтверждён общим сервером или каталог PPA обновился.", 11, SUB))
     _body.add_child(_label("Создание выполняет сервер PPA, не Godot.", 11, SUB))
+    # A recipe selection re-renders at scroll position 0. Keep its price,
+    # ingredients and CREATE button directly above the catalog instead of
+    # hiding the selected recipe below dozens of cards.
+    _section("ДРУГИЕ РЕЦЕПТЫ")
+    _product_grid(offers, false)
 
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
