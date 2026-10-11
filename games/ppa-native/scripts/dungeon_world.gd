@@ -260,7 +260,7 @@ func _begin_signed_dungeon_observation_for_qa() -> bool:
     # live read-only server stream in a staging test after both clients work.
     if _native_global_realtime == null or _signed_dungeon_observation_attempted:
         return false
-    var base := ["dungeon-1-20", "dungeon-21-40", "dungeon-41-60"][_preview_mode]
+    var base: String = ["dungeon-1-20", "dungeon-21-40", "dungeon-41-60"][_preview_mode]
     if not _native_global_realtime.connect_dungeon_observer_explicitly(base):
         return false
     _signed_dungeon_observation_attempted = true
