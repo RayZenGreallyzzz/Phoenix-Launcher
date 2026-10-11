@@ -1541,7 +1541,12 @@ func _show_forge_pinned_inventory() -> void:
     # are taken from the signed player projection; no simulated inventory.
     if _forge_inventory_host == null:
         return
-    var inventory: Array = _player_view_readonly.get("inventory", [])
+    # Unlike the general NPC item picker, Telegram's blacksmith inventory
+    # shows ONLY the real saved bag slots. Do not append virtual material,
+    # stone or rune stacks from the player's separate resources.
+    var canonical_bag: Dictionary = ORIGINAL_ITEM_VIEWS.from_save(_player_save_readonly)
+    var inventory: Array = canonical_bag.get("bag", [])
+    var has_bag := bool(canonical_bag.get("has_bag", false))
     var header := HBoxContainer.new()
     _forge_inventory_host.add_child(header)
     var title := _label("ИНВЕНТАРЬ", 12, GOLD)
@@ -1551,7 +1556,7 @@ func _show_forge_pinned_inventory() -> void:
     for raw in inventory:
         if raw is Dictionary and not (raw as Dictionary).is_empty():
             shown += 1
-    header.add_child(_label(str(shown) + " / 100" if not _player_view_readonly.is_empty() else "— / 100", 10, SUB))
+    header.add_child(_label(str(shown) + " / 100" if has_bag else "— / 100", 10, SUB))
 
     var clip := ScrollContainer.new()
     clip.name = "PPAForgeBagScroller"
