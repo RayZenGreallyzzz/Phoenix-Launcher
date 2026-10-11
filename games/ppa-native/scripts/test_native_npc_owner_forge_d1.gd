@@ -89,10 +89,18 @@ func _run() -> void:
     npc.apply_player_save_readonly(player_save)
     npc.open_npc({"service":"forge","name":"Кузнец"})
     await process_frame
+    # Forge now prioritizes the active Telegram-style tab. The full signed
+    # D1 inventory is still accessible through an explicit resources toggle.
+    # Assert both the compact default and the real contents after expanding.
+    var resources_toggle := npc._body.find_child("PPAForgeResourcesToggle", true, false) as Button
+    check(resources_toggle != null, "Forge resources button missing")
+    check(not sees_text(npc._body,"813 / 96 / 3"),
+        "Forge default view still forces the full D1 inventory before the task")
+    resources_toggle.pressed.emit()
     check(sees_text(npc._body,"Серебряная руда") and sees_text(npc._body,"813 / 96 / 3"),
-        "Forge ignored real D1 owned materials or balances without native endpoint")
+        "Forge ignored real D1 owned materials or balances after opening resources")
     check(sees_text(npc._body,"Перо Феникса") and sees_text(npc._body,"Премиум"),
-        "Original D1 stones or feathers absent from forge view")
+        "Original D1 stones or feathers absent from expanded forge view")
     check(npc._body.find_child("MerchantCommand_buy", true, false) == null,
         "D1 resource view fabricated merchant buy action")
     check(npc.forge_actions.is_empty() and npc.forge_state.is_empty(),
