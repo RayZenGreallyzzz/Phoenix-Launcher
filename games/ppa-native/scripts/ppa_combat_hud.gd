@@ -6,6 +6,7 @@ extends Control
 signal action_requested(action: String, slot: int)
 
 const GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
+const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
 const GOLD := Color("#AB7740")
 const MAIN_RED := Color("#78252C")
 const DARK := Color("#1B1516")
@@ -146,15 +147,16 @@ func _set_vital(bar: ProgressBar, text_label: Label, current: float, maximum: fl
 func _refresh_vitals() -> void:
     if _hp_bar == null:
         return
+    var data: Dictionary = VERIFIED_PLAYER.vitals(_snapshot)
     _set_vital(_hp_bar, _hp_text,
-        _number(_snapshot, ["hp", "currentHp"]),
-        _number(_snapshot, ["maxHp", "hpMax", "maxHP"]))
+        float(data["hp"]) if data["hp"] != null else -1.0,
+        float(data["maxHp"]) if data["maxHp"] != null else -1.0)
     _set_vital(_mp_bar, _mp_text,
-        _number(_snapshot, ["mp", "currentMp"]),
-        _number(_snapshot, ["maxMp", "mpMax", "maxMP"]))
+        float(data["mp"]) if data["mp"] != null else -1.0,
+        float(data["maxMp"]) if data["maxMp"] != null else -1.0)
     _set_vital(_xp_bar, _xp_text,
-        _number(_snapshot, ["xp"]),
-        _number(_snapshot, ["xpNext", "xpToNext", "nextXp"]))
+        float(data["xp"]) if data["xp"] != null else -1.0,
+        float(data["xpNext"]) if data["xpNext"] != null else -1.0)
 
 func _build_actions() -> void:
     _group = Control.new()

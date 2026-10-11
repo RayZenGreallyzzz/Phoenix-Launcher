@@ -6,6 +6,12 @@ on:
     paths:
       - "games/ppa-native/**"
       - ".github/workflows/ppa-native-original-hud-apk.yml"
+  # Stacked draft PR #33 gets ONE observable, isolated APK QA run. No release.
+  pull_request:
+    branches: [ "feature/godot-shared-clan-merchant-20261010" ]
+    paths:
+      - "games/ppa-native/**"
+      - ".github/workflows/ppa-native-original-hud-apk.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +19,7 @@ permissions:
 
 # One publisher at a time: do not let a slow old build replace a new APK.
 concurrency:
-  group: ppa-native-original-hud-apk
+  group: ppa-native-original-hud-apk-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,6 +33,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check shared PPA HUD and original APK contract
         run: python3 games/ppa-native/tools/test_native_combat_hud.py
+      - name: Confirm original live NPC forge integration contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          scripts=Path('games/ppa-native/scripts')
+          world=(scripts/'test_world_menu.gd').read_text()
+          forge=(scripts/'ppa_npc_screen.gd').read_text()
+          bridge=(scripts/'ppa_native_npc_service_bridge.gd').read_text()
+          assert '_npc_screen.open_npc(npc)' in world
+          assert 'npc_snapshot_requested.emit(service)' in world
+          assert 'authoritative.get("materials", null)' in forge
+          assert 'authoritative.get("currency", null)' in forge
+          assert '_locked_action("СОЗДАТЬ")' in forge
+          assert 'queued_service = service' in bridge
+          print('PPA_FORGE_NPC_APK_SOURCE_OK')
+          PY
 
       - name: Verify Phoenix game-ticket backend is deployed
         shell: bash
@@ -326,6 +348,31 @@ jobs:
           python3 games/ppa-native/tools/generate_ppa_forge_catalog.py 2>&1 | tee /tmp/ppa-forge-catalog.log
           grep -q 'PPA_CANONICAL_FORGE_CATALOG_OK' /tmp/ppa-forge-catalog.log
           test -s games/ppa-native/scripts/ppa_forge_catalog_generated.gd
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          file=Path('games/ppa-native/scripts/ppa_forge_catalog_generated.gd').read_text()
+          sha='c3e1198fc8b3c87df44c075f97961b9b0334aa46fe11785cd6c67319a9550fbe'
+          prefix='const CATALOG = '
+          assert prefix in file, 'Missing original blacksmith CATALOG'
+          catalog=json.loads(file.split(prefix,1)[1].strip())
+          assert catalog.get('recipe_sha256')==sha, 'Telegram/Godot original smith recipe SHA changed'
+          rows=catalog['rows']
+          assert len(rows)==58, 'Incomplete Godot blacksmith: expected all 58 recipes'
+          by_tab={}
+          for row in rows:
+              by_tab[row['tab']]=by_tab.get(row['tab'],0)+1
+              assert row['price']>=0 and row['currency']=='ppa'
+              assert row['materials'] and all(m['count']>0 for m in row['materials'])
+          assert by_tab=={'equipment':7,'legendary':11,'accessories':16,'pets':24}, by_tab
+          ids={row['id'] for row in rows}
+          assert len(ids)==58, 'Duplicate or missing original recipe IDs'
+          for key in ['legend:gear:weapon','acc:wings:legendary',
+                      'pet:Лесной дракончик:rare','acc:necklace:legendary',
+                      'acc:cloak:epic','acc:artifact:legendary']:
+              assert key in ids, 'Missing original PPA recipe '+key
+          print('PPA_ORIGINAL_GODOT_ALL_FORGE_APK_OK recipes=58 categories='+str(by_tab)+' economy_sha='+sha)
+          PY
 
       - name: Generate original Telegram PPA premium shop goods and packs (display only)
         shell: bash
@@ -482,6 +529,14 @@ jobs:
           godot --headless --path games/ppa-native --script res://scripts/audit_native_shared_npc_actions.gd --quit-after 600 2>&1 | tee /tmp/ppa-shared-npc-actions.log
           grep -q 'PPA_SHARED_NPC_ACTIONS_OK' /tmp/ppa-shared-npc-actions.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:|TEST_FAIL' /tmp/ppa-native-clan-commands.log /tmp/ppa-shared-npc-actions.log; then exit 1; fi
+
+      - name: Verify signed NPC commands accept receipt-only responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s godot --headless --path games/ppa-native --script res://scripts/test_native_command_receipt.gd 2>&1 | tee /tmp/ppa-native-receipt.log
+          grep -q "PPA_NATIVE_RECEIPT_PARITY_OK" /tmp/ppa-native-receipt.log
+          if grep -E "SCRIPT ERROR:|Invalid call|Parse Error:|PPA_NATIVE_RECEIPT_FAIL" /tmp/ppa-native-receipt.log; then exit 1; fi
 
       - name: Verify realtime presence from same PPA hub is opt-in only
         shell: bash

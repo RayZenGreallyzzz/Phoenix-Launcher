@@ -13,6 +13,7 @@ const ENEMY_CATALOG = preload("res://scripts/ppa_dungeon_entities_generated.gd")
 var APPROVED_DUNGEON_ENEMY_ART_READY := false
 const APPROVED_DUNGEON_BOSS_ART_READY := false
 const ENEMY_VISUAL = preload("res://scripts/ppa_new_dungeon_mob_visual.gd")
+const AUTHORITY_LAYER = preload("res://scripts/ppa_native_dungeon_mob_layer.gd")
 const PREVIEW_CAP := 24
 const PREVIEW_RADIUS := 675.0
 const PREVIEW_AGGRO_RADIUS := 235.0
@@ -63,6 +64,11 @@ var _preview_mode := 0
 var _preview_clock := 0.0
 var _enemy_ai_clock := 0.0
 var _preview_mode_button: Button
+# Disabled by default. A future signed dungeon-room socket, not a UI button
+# or local timer, must explicitly supply an authorized room and mob packets.
+var _authoritative_mob_layer: Node2D
+var _signed_dungeon_observation_attempted := false
+var _signed_dungeon_observer_status: String = ""
 
 func _ready() -> void:
     super._ready()
@@ -84,6 +90,10 @@ func _ready() -> void:
         " enabled=", APPROVED_DUNGEON_ENEMY_ART_READY, " legacy=0")
     _sync_world_visuals()
     _add_dungeon_hud()
+    if _native_global_realtime != null:
+        _native_global_realtime.dungeon_observer_assigned.connect(_on_dungeon_observer_assigned)
+        _native_global_realtime.dungeon_observer_event.connect(_on_dungeon_observer_event)
+        _native_global_realtime.dungeon_observer_ended.connect(_on_dungeon_observer_ended)
     _refresh_preview_enemies()
     print("PPA_NATIVE_DUNGEON_MAP_OK map=", _dungeon_bounds, " mask=", _mask_image.get_size(), " entry=", _entrance, " mask_offset_y=", MASK_Y_OFFSET_PX)
 
@@ -192,6 +202,11 @@ func _physics_process(delta: float) -> void:
     super._physics_process(delta)
     if _ground_collision_marker != null:
         _ground_collision_marker.position = world_pos_px
+    if _authoritative_mob_layer != null:
+        _authoritative_mob_layer.call("observe_player_position", world_pos_px)
+        return # Never run preview AI next to real server-owned enemy positions.
+    if _signed_dungeon_observation_attempted:
+        return # Never substitute fake local mobs after a signed stream ends.
     if _enemy_layer == null or _enemy_spawns.is_empty():
         return
     if test_menu != null and test_menu.is_open():
@@ -239,6 +254,85 @@ func _load_original_enemy_spawns() -> void:
     _boss_world = _boss_home
     print("PPA_DUNGEON_TEST_ENEMY_CATALOG_OK spawns=", _enemy_spawns.size(),
         " modes=3 boss_center=", _boss_home, " authoritative_spawns=1 server_writes=0")
+
+func _begin_signed_dungeon_observation_for_qa() -> bool:
+    # NOT wired to a game button yet. The operator explicitly opts into a
+    # live read-only server stream in a staging test after both clients work.
+    if _native_global_realtime == null or _signed_dungeon_observation_attempted:
+        return false
+    var base: String = ["dungeon-1-20", "dungeon-21-40", "dungeon-41-60"][_preview_mode]
+    if not _native_global_realtime.connect_dungeon_observer_explicitly(base):
+        return false
+    _signed_dungeon_observation_attempted = true
+    _signed_dungeon_observer_status = "ОЖИДАЕМ ПОДТВЕРЖДЕНИЕ СЕРВЕРА"
+    _clear_local_dungeon_preview()
+    if _preview_mode_button != null:
+        _preview_mode_button.disabled = true
+    return true
+
+func _on_dungeon_observer_assigned(room: String) -> void:
+    if not _signed_dungeon_observation_attempted:
+        return
+    _signed_dungeon_observer_status = "ТОЛЬКО ПРОСМОТР · " + room
+    if not _start_verified_dungeon_view_for_qa(room):
+        _signed_dungeon_observer_status = "ОШИБКА СЕРВЕРНОГО ПРЕДСТАВЛЕНИЯ"
+
+func _on_dungeon_observer_event(packet: Dictionary) -> void:
+    if _signed_dungeon_observation_attempted and _authoritative_mob_layer != null:
+        _accept_verified_dungeon_mob_packet_for_qa(packet)
+
+func _on_dungeon_observer_ended(reason: String) -> void:
+    if not _signed_dungeon_observation_attempted:
+        return
+    _signed_dungeon_observer_status = "ПРОСМОТР ЗАКРЫТ · " + reason.left(50)
+    _stop_verified_dungeon_view_for_qa()
+    if _preview_mode_button != null:
+        _preview_mode_button.disabled = true
+
+func _clear_local_dungeon_preview() -> void:
+    for entry in _enemy_active.values():
+        var node: Node2D = entry["node"]
+        if is_instance_valid(node):
+            node.queue_free()
+    _enemy_active.clear()
+    if _boss_visual != null:
+        _boss_visual.queue_free()
+        _boss_visual = null
+
+func _start_verified_dungeon_view_for_qa(room: String) -> bool:
+    # Offline QA entry only. This does not join a realtime dungeon, update
+    # server presence or authorize fighting; do not expose in production HUD.
+    if not room.begins_with("dungeon-") or _enemy_layer == null \
+            or _enemy_spawns.is_empty():
+        return false
+    var layer := AUTHORITY_LAYER.new() as Node2D
+    if not layer.configure(room, _enemy_spawns, _enemy_branch,
+            _enemy_room_ordinal, _preview_mode, APPROVED_DUNGEON_ENEMY_ART_READY,
+            ENEMY_CATALOG.ROOM_LEVELS):
+        layer.free()
+        return false
+    _stop_verified_dungeon_view_for_qa()
+    _clear_local_dungeon_preview()
+    _enemy_layer.add_child(layer)
+    _authoritative_mob_layer = layer
+    layer.call("observe_player_position", world_pos_px)
+    if _preview_mode_button != null:
+        _preview_mode_button.disabled = true
+    return true
+
+func _accept_verified_dungeon_mob_packet_for_qa(packet: Dictionary) -> bool:
+    # Only test fixtures call this now; a future signed socket will feed it
+    # after the backend authorizes the actual dungeon instance.
+    return _authoritative_mob_layer != null \
+        and _authoritative_mob_layer.call("apply_authenticated_packet", packet) == true
+
+func _stop_verified_dungeon_view_for_qa() -> void:
+    if _authoritative_mob_layer != null:
+        _authoritative_mob_layer.call("clear_authoritative_room")
+        _authoritative_mob_layer.queue_free()
+        _authoritative_mob_layer = null
+    if _preview_mode_button != null:
+        _preview_mode_button.disabled = false
 
 func _mob_preview_level(spawn_idx: int) -> int:
     return int(ENEMY_CATALOG.ROOM_LEVELS[_enemy_branch[spawn_idx]]) + _preview_mode * 20
@@ -367,6 +461,8 @@ func _animate_preview_enemies(dt: float) -> void:
         _boss_visual.call("set_attack", boss_distance < 135.0)
 
 func _cycle_preview_depth() -> void:
+    if _authoritative_mob_layer != null:
+        return # The client cannot change the authoritative dungeon tier.
     _preview_mode = (_preview_mode + 1) % 3
     for state in _enemy_active.values():
         var node := state["node"] as Node2D
@@ -529,8 +625,12 @@ func _add_dungeon_hud() -> void:
     alignment.anchor_right = 0.0
     alignment.offset_left = 16.0
     alignment.offset_right = 222.0
-    alignment.offset_top = 216.0
-    alignment.offset_bottom = 268.0
+    # Preserve the original floating joystick test point (90, 230).
+    # The old 216..268 overlay occupied that point and correctly intercepted
+    # its touch; never weaken _joy_point_allowed() or disable this QA check.
+    # This is an optional diagnostic, not combat/character UI.
+    alignment.offset_top = 280.0
+    alignment.offset_bottom = 332.0
     alignment.mouse_filter = Control.MOUSE_FILTER_STOP
     alignment.focus_mode = Control.FOCUS_ALL
     alignment.z_index = 70
@@ -566,6 +666,9 @@ func _add_dungeon_hud() -> void:
     add_child(_preview_mode_button)
 
 func _back_to_city() -> void:
+    if _native_global_realtime != null:
+        _native_global_realtime.disconnect_city()
+    _stop_verified_dungeon_view_for_qa()
     if is_inside_tree():
         var result := get_tree().change_scene_to_file("res://world.tscn")
         if result != OK:

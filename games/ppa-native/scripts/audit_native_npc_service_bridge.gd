@@ -12,7 +12,14 @@ func fail(message: String) -> void:
     push_error("PPA_NPC_BRIDGE_FAIL: " + message)
     quit(1)
 
+func _arm_signed_request(bridge: Node) -> void:
+    bridge.requested_service = "arena"
+    bridge._requested_owner = "990000001"
+    bridge._requested_session_sha = "offline-qa-npc-session".sha256_text()
+
 func _run() -> void:
+    set_meta("phoenix_account", {"telegramId":"990000001"})
+    set_meta("ppa_native_game_session", "offline-qa-npc-session")
     var bridge := BRIDGE.new()
     root.add_child(bridge)
     await process_frame
@@ -24,8 +31,8 @@ func _run() -> void:
     var data := {"readOnly": true, "actionsEnabled": false, "service": "arena",
         "arenaTokens": 27, "rating": 1250, "currency": {"gold": 300, "ppa": 100}}
     var valid := {"ok": true, "readOnly": true, "gameId": "phoenix-pix-arena",
-        "service": "arena", "version": 8, "data": data}
-    bridge.requested_service = "arena"
+        "ownerId":"990000001", "service": "arena", "version": 8, "data": data}
+    _arm_signed_request(bridge)
     bridge._on_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), JSON.stringify(valid).to_utf8_buffer())
     if successes.size() != 1 or bridge.last_version != 8:
         fail("Genuine versioned read-only NPC data was not delivered")
@@ -45,7 +52,7 @@ func _run() -> void:
         fail("Arena NPC did not accept the real service token balance")
         return
 
-    bridge.requested_service = "arena"
+    _arm_signed_request(bridge)
     var spoofed: Dictionary = valid.duplicate(true)
     spoofed["service"] = "merchant"
     bridge._on_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), JSON.stringify(spoofed).to_utf8_buffer())
@@ -53,7 +60,7 @@ func _run() -> void:
         fail("Client accepted an NPC response from the wrong service")
         return
 
-    bridge.requested_service = "arena"
+    _arm_signed_request(bridge)
     var unsafe: Dictionary = valid.duplicate(true)
     unsafe["data"] = {"readOnly": true, "actionsEnabled": true}
     bridge._on_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), JSON.stringify(unsafe).to_utf8_buffer())
@@ -61,7 +68,7 @@ func _run() -> void:
         fail("Client accepted unsafe purchase permissions from an NPC read route")
         return
 
-    bridge.requested_service = "arena"
+    _arm_signed_request(bridge)
     bridge._on_completed(HTTPRequest.RESULT_SUCCESS, 404, PackedStringArray(), PackedByteArray())
     if failures.size() < 3 or failures[-1] != "HTTP_404":
         fail("Feature flag disabled must fail gracefully without a save")
@@ -69,5 +76,7 @@ func _run() -> void:
     if npc.service != "arena" or not npc.visible:
         fail("A disabled server feature must not close the NPC or freeze the game")
         return
-    print("PPA_NATIVE_NPC_BRIDGE_OK original_save=1 service_id_checked=1 no_mutation=1 feature_flag_fallback=1 arena=1")
+    remove_meta("phoenix_account")
+    remove_meta("ppa_native_game_session")
+    print("PPA_NATIVE_NPC_BRIDGE_OK owner_bound=1 original_save=1 service_id_checked=1 no_mutation=1 feature_flag_fallback=1 arena=1")
     quit()

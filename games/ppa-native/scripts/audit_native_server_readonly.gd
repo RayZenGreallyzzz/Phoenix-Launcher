@@ -12,8 +12,16 @@ func _fail(message: String) -> void:
     push_error("PPA_SERVER_READONLY_AUDIT: " + message)
     quit(1)
 
+func _arm_offline_request(client: Node) -> void:
+    # Simulates the credentials already bound when the real HTTP GET starts;
+    # never sends a request to production.
+    var account: Dictionary = get_meta("phoenix_account", {})
+    client._request_owner = str(account.get("telegramId", ""))
+    client._request_session_sha = str(get_meta("ppa_native_game_session", "")).sha256_text()
+
 func _run() -> void:
     set_meta("phoenix_account", {"telegramId":"test-own-user","ppaNickname":"TestHero","classKey":"gnome"})
+    set_meta("ppa_native_game_session", "offline-signed-session-A")
     var client := CLIENT.new()
     root.add_child(client)
     client.snapshot_ready.connect(func(_payload: Dictionary) -> void: got_snapshot = true)
@@ -25,6 +33,7 @@ func _run() -> void:
         "version":24,"profile":{"telegramId":"test-own-user","nickname":"TestHero"},
         "state":{"lvl":22,"hp":412,"mp":76,"playerName":"TestHero","bag":[{"id":"test_gear","qty":1}]}
     }
+    _arm_offline_request(client)
     client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
     if not got_snapshot or last_failure != "":
         _fail("valid own-player immutable snapshot was refused")
@@ -40,6 +49,7 @@ func _run() -> void:
     got_snapshot=false
     last_failure=""
     saved["profile"]["telegramId"]="other-user"
+    _arm_offline_request(client)
     client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
     if got_snapshot or last_failure != "TELEGRAM_ID_MISMATCH":
         _fail("received a different Telegram account's saved state")
@@ -51,16 +61,39 @@ func _run() -> void:
     last_failure = ""
     saved["profile"]["telegramId"] = "test-own-user"
     saved["state"]["telegramId"] = "other-user"
+    _arm_offline_request(client)
     client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
     if got_snapshot or last_failure != "SAVE_TELEGRAM_ID_MISMATCH" or has_meta("ppa_readonly_snapshot"):
         _fail("a foreign save identity was accepted or stale data was retained")
         return
     got_snapshot=false
     last_failure=""
+    _arm_offline_request(client)
     client._on_completed(HTTPRequest.RESULT_SUCCESS,401,headers,JSON.stringify({"ok":false,"code":"GAME_SESSION_EXPIRED"}).to_utf8_buffer())
     if got_snapshot or not last_failure.begins_with("SERVER_HTTP_401_") or has_meta("ppa_readonly_snapshot"):
         _fail("expired game session left a readable or cached save")
         return
+    # The same Telegram owner with a renewed game session MUST discard
+    # the earlier request; equal owner ID alone is not sufficient.
+    saved["state"].erase("telegramId")
+    saved["profile"]["telegramId"] = "test-own-user"
+    last_failure = ""
+    got_snapshot = false
+    _arm_offline_request(client)
+    set_meta("ppa_native_game_session", "offline-signed-session-B")
+    client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
+    if got_snapshot or last_failure != "STALE_REQUEST_CONTEXT" or has_meta("ppa_readonly_snapshot"):
+        _fail("Old HTTP save response survived a session change for the same Telegram hero")
+        return
+    # Even an unexpired bearer is invalid once this UI selects another hero.
+    last_failure = ""
+    _arm_offline_request(client)
+    set_meta("phoenix_account", {"telegramId":"test-other-user"})
+    client._on_completed(HTTPRequest.RESULT_SUCCESS,200,headers,JSON.stringify(saved).to_utf8_buffer())
+    if got_snapshot or last_failure != "STALE_REQUEST_CONTEXT" or has_meta("ppa_readonly_snapshot"):
+        _fail("Old HTTP save response survived account switching")
+        return
+    set_meta("phoenix_account", {"telegramId":"test-own-user","ppaNickname":"TestHero","classKey":"gnome"})
     if client.ENDPOINT != "/api/game/state" or client.API_BASE.begins_with("http://"):
         _fail("unsafe or wrong server endpoint")
         return
@@ -77,6 +110,6 @@ func _run() -> void:
         return
     gallery.queue_free()
     print("PPA_NATIVE_SERVER_CLASS_PIN_OK preview=archer gameplay=gnome class_writes=0")
-    print("PPA_NATIVE_AUTH_READONLY_SMOKE_OK own_snapshot=1 hp=412 inventory=1 cross_user=blocked stale_cache=cleared expired_session=blocked server_writes=0")
+    print("PPA_NATIVE_AUTH_READONLY_SMOKE_OK own_snapshot=1 hp=412 inventory=1 cross_user=blocked stale_cache=cleared expired_session=blocked session_rotation=blocked account_rotation=blocked server_writes=0")
     client.queue_free()
     quit(0)

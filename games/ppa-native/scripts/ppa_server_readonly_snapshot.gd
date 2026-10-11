@@ -14,6 +14,10 @@ const ENDPOINT := "/api/game/state"
 var http: HTTPRequest
 var loading := false
 var last_status := 0
+# A GET belongs to the exact account and bearer that initiated it.
+# A late response after account/session rotation cannot become the new save.
+var _request_owner := ""
+var _request_session_sha := ""
 
 func _ready() -> void:
     http = HTTPRequest.new()
@@ -27,10 +31,17 @@ func fetch_once() -> void:
     # Never reuse a former hero's save across scene transitions or accounts.
     if get_tree().has_meta("ppa_readonly_snapshot"):
         get_tree().remove_meta("ppa_readonly_snapshot")
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(account.get("telegramId", "")) if account is Dictionary else ""
+    if owner.is_empty() or owner == "<null>":
+        snapshot_failed.emit("NO_LINKED_OWNER")
+        return
     var bearer: String = str(get_tree().get_meta("ppa_native_game_session", ""))
-    if bearer.is_empty():
+    if bearer.is_empty() or bearer == "<null>":
         snapshot_failed.emit("NO_GAME_SESSION")
         return
+    _request_owner = owner
+    _request_session_sha = bearer.sha256_text()
     loading = true
     var err := http.request(
         API_BASE + ENDPOINT,
@@ -43,15 +54,29 @@ func fetch_once() -> void:
     )
     if err != OK:
         loading = false
+        _request_owner = ""
+        _request_session_sha = ""
         snapshot_failed.emit("NETWORK_REQUEST_" + str(err))
 
 func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     loading = false
     last_status = response_code
+    var requested_owner := _request_owner
+    var requested_session_sha := _request_session_sha
+    _request_owner = ""
+    _request_session_sha = ""
     # An auth error, partial response or wrong identity must never leave an
     # earlier account's inventory/stats available in SceneTree metadata.
     if get_tree().has_meta("ppa_readonly_snapshot"):
         get_tree().remove_meta("ppa_readonly_snapshot")
+    var account_now: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner_now := str(account_now.get("telegramId", "")) if account_now is Dictionary else ""
+    var bearer_now := str(get_tree().get_meta("ppa_native_game_session", ""))
+    if requested_owner.is_empty() or requested_owner != owner_now \
+            or requested_session_sha.is_empty() \
+            or requested_session_sha != bearer_now.sha256_text():
+        snapshot_failed.emit("STALE_REQUEST_CONTEXT")
+        return
     if result != HTTPRequest.RESULT_SUCCESS:
         snapshot_failed.emit("TRANSPORT_" + str(result))
         return

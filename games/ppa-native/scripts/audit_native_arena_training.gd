@@ -48,14 +48,20 @@ func _check() -> void:
     if game.bots.size() != 3 or game.player_hp != game.PLAYER_MAX_HP:
         fail("Arena needs three real mobile AI bots and live HP")
         return
-    if game._attack_button == null or game._attack_button.disabled:
-        fail("Player action button unavailable")
+    # All worlds share ONE original Telegram PPA HUD. The old arena-only
+    # _attack_button was intentionally removed; verify the real 80px button.
+    if game._combat_hud == null:
+        fail("Shared PPA combat HUD missing from Arena practice")
+        return
+    var attack_button = game._combat_hud.find_child("PPAOriginalAttackButton", true, false) as Button
+    if attack_button == null or attack_button.disabled:
+        fail("Original shared PPA attack control is unavailable")
         return
     var first: Dictionary = game.bots[0]
     (first["node"] as Node2D).position = game.world_pos_px + Vector2(65, 0)
     game.bots[0] = first
     var hp_before := int(game.bots[0]["hp"])
-    game._player_attack()
+    attack_button.pressed.emit()
     if int(game.bots[0]["hp"]) >= hp_before:
         fail("Pressing attack must DAMAGE an actual AI bot")
         return
@@ -72,5 +78,5 @@ func _check() -> void:
     if not game.get_script().resource_path.ends_with("arena_training_world.gd"):
         fail("Wrong training scene script")
         return
-    print("PPA_ARENA_TRAINING_PLAYABLE_OK merchant=1 arena_npc=1 ai_count=3 player_attack=1 enemy_attack=1 original_world_hero=1 server_writes=0")
+    print("PPA_ARENA_TRAINING_PLAYABLE_OK merchant=1 arena_npc=1 ai_count=3 hud_attack_signal=1 enemy_attack=1 original_world_hero=1 server_writes=0")
     quit()

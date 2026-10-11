@@ -18,11 +18,22 @@ signal clan_action_requested(action: String, fields: Dictionary)
 signal clan_retry_requested
 signal merchant_action_requested(fields: Dictionary)
 signal merchant_retry_requested
+signal forge_action_requested(fields: Dictionary)
+signal forge_retry_requested
+signal inventory_action_requested(fields: Dictionary)
+signal inventory_retry_requested
+signal personal_storage_action_requested(fields: Dictionary)
+signal personal_storage_retry_requested
+signal clan_storage_action_requested(fields: Dictionary)
+signal clan_storage_retry_requested
+signal auction_action_requested(fields: Dictionary)
+signal auction_retry_requested
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
 signal native_realtime_requested
 signal refresh_readonly_save_requested
+signal force_refresh_readonly_save_requested
 
 
 var account: Dictionary = {}
@@ -94,6 +105,70 @@ func apply_native_merchant(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_merchant(payload)
 
+func apply_native_forge(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_forge(payload)
+
+func apply_native_inventory(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_inventory(payload)
+
+func apply_native_personal_storage(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_personal_storage(payload)
+
+func apply_native_auction(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_auction(payload)
+
+func set_native_auction_loading(busy: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_loading(busy)
+
+func set_native_auction_pending(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_pending(busy, pending)
+
+func set_native_auction_notice(message: String) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_native_auction_notice(message)
+
+func apply_native_clan_storage(payload: Dictionary) -> void:
+    if _npc_screen != null:
+        _npc_screen.apply_native_clan_storage(payload)
+
+func set_clan_storage_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_clan_storage_loading(busy, pending)
+
+func set_clan_storage_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_clan_storage_notice(message, pending)
+
+func set_personal_storage_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_personal_storage_loading(busy, pending)
+
+func set_personal_storage_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_personal_storage_notice(message, pending)
+
+func set_inventory_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_inventory_loading(busy, pending)
+
+func set_inventory_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_inventory_notice(message, pending)
+
+func set_forge_loading(busy: bool, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_forge_loading(busy, pending)
+
+func set_forge_notice(message: String, pending: bool) -> void:
+    if _npc_screen != null:
+        _npc_screen.set_forge_notice(message, pending)
+
 func set_merchant_loading(busy: bool, pending: bool) -> void:
     if _npc_screen != null:
         _npc_screen.set_merchant_loading(busy, pending)
@@ -148,7 +223,7 @@ func _ready() -> void:
         _character_screen.select_item_requested.connect(_open_item)
         _character_screen.unequip_requested.connect(_on_character_unequip)
         _character_screen.refresh_readonly_save_requested.connect(
-            func(): refresh_readonly_save_requested.emit()
+            func(): force_refresh_readonly_save_requested.emit()
         )
         _character_screen.visible = false
     _panel.visible = false
@@ -167,6 +242,16 @@ func _ready() -> void:
     _npc_screen.clan_retry_requested.connect(func(): clan_retry_requested.emit())
     _npc_screen.merchant_action_requested.connect(func(fields: Dictionary): merchant_action_requested.emit(fields))
     _npc_screen.merchant_retry_requested.connect(func(): merchant_retry_requested.emit())
+    _npc_screen.forge_action_requested.connect(func(fields: Dictionary): forge_action_requested.emit(fields))
+    _npc_screen.forge_retry_requested.connect(func(): forge_retry_requested.emit())
+    _npc_screen.inventory_action_requested.connect(func(fields: Dictionary): inventory_action_requested.emit(fields))
+    _npc_screen.inventory_retry_requested.connect(func(): inventory_retry_requested.emit())
+    _npc_screen.personal_storage_action_requested.connect(func(fields: Dictionary): personal_storage_action_requested.emit(fields))
+    _npc_screen.personal_storage_retry_requested.connect(func(): personal_storage_retry_requested.emit())
+    _npc_screen.clan_storage_action_requested.connect(func(fields: Dictionary): clan_storage_action_requested.emit(fields))
+    _npc_screen.clan_storage_retry_requested.connect(func(): clan_storage_retry_requested.emit())
+    _npc_screen.auction_action_requested.connect(func(fields: Dictionary): auction_action_requested.emit(fields))
+    _npc_screen.auction_retry_requested.connect(func(): auction_retry_requested.emit())
     # Offline map preview uses the same scene route from the Keeper and Hub.
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
@@ -407,6 +492,9 @@ func open_npc(npc: Dictionary) -> void:
         _global_hub.close_global()
     current_page = "npc_" + valid_service
     _npc_screen.open_npc(npc)
+    # _npc_screen.open_npc() already emits authoritative_state_requested.
+    # That signal is forwarded to npc_snapshot_requested in _ready(); do not
+    # issue a duplicate HTTP request from here.
     # Same authenticated D1 save is shared with character, forge, warehouse,
     # auction and currencies. Do not re-GET for every picker/scroll event.
     refresh_readonly_save_requested.emit()
@@ -452,9 +540,9 @@ func open_page(page: String) -> void:
         # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
-        # Re-read the SAME authenticated PPA save whenever the character
-        # panel is reopened, just as global and NPC menus already do.
-        # One GET per opening, not per page/scroll; no local save or writes.
+        # Use the authenticated save already prefetched on city entry.
+        # The world adapter checks freshness/identity before any new GET.
+        # The explicit refresh button and successful writes bypass this cache.
         refresh_readonly_save_requested.emit()
         return
     if _native_web_ui != null and _web_open:

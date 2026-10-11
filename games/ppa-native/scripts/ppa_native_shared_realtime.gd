@@ -8,8 +8,14 @@ signal presence_connected
 signal players_updated(rows: Array)
 signal player_left(pid: String)
 signal players_cleared
+signal dungeon_observer_assigned(room: String)
+signal dungeon_observer_event(packet: Dictionary)
+signal dungeon_observer_ended(reason: String)
+signal dungeon_preflight_checked(result: Dictionary)
 
 const PROTOCOL = preload("res://scripts/ppa_shared_city_protocol.gd")
+const DUNGEON_OBSERVE = preload("res://scripts/ppa_dungeon_observer_protocol.gd")
+const PVE_INTENT = preload("res://scripts/ppa_native_pve_combat_intent.gd")
 const API_BASE := "https://ppa-phoenixpixarena.1988stella1988.workers.dev"
 const WS_BASE := "wss://ppa-phoenixpixarena.1988stella1988.workers.dev"
 var http: HTTPRequest
@@ -30,6 +36,10 @@ var _retry_elapsed := -1.0
 var _send_elapsed := 0.0
 var _ping_elapsed := 0.0
 var _handshake_elapsed := 0.0
+var _observer_only := false
+var _observer_requested_base := ""
+var _observer_room := ""
+var _pve_preflight_pending: Dictionary = {}
 
 func _ready() -> void:
     http = HTTPRequest.new()
@@ -56,8 +66,50 @@ func connect_explicitly() -> void:
         connecting = false
         _schedule_retry("Ошибка подключения к серверу")
 
+func connect_dungeon_observer_explicitly(base: String) -> bool:
+    # Only a test harness/operator can opt in; this does not occur during
+    # ordinary scene startup. No fake safe-city position is transmitted.
+    if not DUNGEON_OBSERVE.allowed_base(base) or connecting or peer != null:
+        return false
+    _observer_only = true
+    _observer_requested_base = base
+    _observer_room = ""
+    connect_explicitly()
+    return _wanted
+
+func request_pve_preflight_for_qa(mob_key: String, request_id: String,
+        action: String = "basic", skill_id: String = "") -> bool:
+    # Deliberate test-only action, not wired to the dungeon attack button.
+    # The server will NEVER execute damage, regardless of preflight result.
+    if not _observer_only or not _hello_received or _observer_room.is_empty():
+        return false
+    # Bound memory: a silent server may leave requests pending indefinitely.
+    # Preflight has no gameplay side effects; never queue a flood of intents.
+    if _pve_preflight_pending.has(request_id) or _pve_preflight_pending.size() >= 8:
+        return false
+    var intent: Dictionary = PVE_INTENT.packet(
+        _observer_room, mob_key, request_id, action, skill_id)
+    if intent.is_empty() or not _send(intent):
+        return false
+    _pve_preflight_pending[request_id] = {
+        "room": _observer_room,
+        "key": mob_key,
+        "action": action
+    }
+    return true
+
+func stop_dungeon_observer() -> void:
+    if peer != null and _observer_room != "":
+        _send({"type":"dungeon-observe-leave"})
+    if _observer_room != "":
+        dungeon_observer_ended.emit("LEFT")
+    _observer_room = ""
+    _observer_requested_base = ""
+    _pve_preflight_pending.clear()
+
 func set_local_position(point: Vector2, facing: Vector2, animation: String) -> void:
-    _local_position = PROTOCOL.position_packet(point, facing, animation)
+    if not _observer_only:
+        _local_position = PROTOCOL.position_packet(point, facing, animation)
 
 func refresh_clan_identity_if_connected() -> void:
     # Clan identity is included in the server-signed ticket. Refresh an
@@ -122,9 +174,13 @@ func _process(delta: float) -> void:
             _schedule_retry("Общий город отключён · переподключаемся")
         return
     _handshake_elapsed += delta
-    if not _position_ready and _handshake_elapsed > 12.0:
+    if not _position_ready and not _observer_only and _handshake_elapsed > 12.0:
         disconnect_city()
         presence_failed.emit("Нужен серверный пакет перемещения общего города")
+        return
+    if _observer_only and _observer_room.is_empty() and _handshake_elapsed > 12.0:
+        disconnect_city()
+        dungeon_observer_ended.emit("SERVER_TIMEOUT")
         return
     if state != WebSocketPeer.STATE_OPEN:
         return
@@ -141,7 +197,7 @@ func _process(delta: float) -> void:
         return
     _send_elapsed += delta
     _ping_elapsed += delta
-    if _send_elapsed >= 0.12 and not _local_position.is_empty():
+    if not _observer_only and _send_elapsed >= 0.12 and not _local_position.is_empty():
         if _local_position != _last_sent or _send_elapsed >= 1.2:
             if _send(_local_position):
                 _last_sent = _local_position.duplicate()
@@ -167,6 +223,67 @@ func _handle_packet(packet: Dictionary) -> void:
         _last_sent.clear()
         _send_elapsed = 1.2
         _send({"type":"room", "room":PROTOCOL.ROOM})
+        if _observer_only and DUNGEON_OBSERVE.allowed_base(_observer_requested_base):
+            _send({"type":"dungeon-observe", "base":_observer_requested_base})
+        return
+    if kind == "dungeon-observe-assigned":
+        if not _hello_received or not _observer_only:
+            return
+        var assigned := DUNGEON_OBSERVE.assignment(packet, _observer_requested_base)
+        if assigned.is_empty():
+            return
+        _observer_room = assigned
+        _pve_preflight_pending.clear()
+        _handshake_elapsed = 0.0
+        dungeon_observer_assigned.emit(assigned)
+        return
+    if kind == "dungeon-observe-ended" or kind == "dungeon-observe-rejected":
+        if not _observer_only:
+            return
+        _observer_room = ""
+        _pve_preflight_pending.clear()
+        dungeon_observer_ended.emit(str(packet.get("reason", packet.get("code", "ENDED"))).left(64))
+        return
+    if _observer_only and _hello_received and \
+            kind in ["dungeon-combat-preflight", "dungeon-combat-preflight-rejected"]:
+        var request_id := str(packet.get("requestId", ""))
+        if request_id.is_empty() or not _pve_preflight_pending.has(request_id):
+            return
+        var expected: Variant = _pve_preflight_pending[request_id]
+        if not (expected is Dictionary):
+            _pve_preflight_pending.erase(request_id)
+            return
+        var bound_room := str(expected.get("room", ""))
+        if bound_room != _observer_room or _observer_room.is_empty():
+            _pve_preflight_pending.erase(request_id)
+            return
+        if packet.get("canAttack") != false:
+            return # Never interpret test preflight as attack authorization.
+        if kind == "dungeon-combat-preflight":
+            # A valid requestId is not sufficient: a replay with a different
+            # mob/action inside the same room cannot be marked confirmed.
+            if packet.get("readOnly") != true or \
+                    str(packet.get("room", "")) != bound_room or \
+                    str(packet.get("key", "")) != str(expected.get("key", "")) or \
+                    str(packet.get("action", "")) != str(expected.get("action", "")) or \
+                    packet.get("targetConfirmed") != true:
+                return
+        # The newer server preflight reports why a native observer cannot
+        # fight. If present it must also stay explicitly read-only. This is
+        # diagnostic only; neither response variant can apply mob damage.
+        if kind == "dungeon-combat-preflight" and packet.has("readiness"):
+            var readiness: Variant = packet["readiness"]
+            if not (readiness is Dictionary) or \
+                    readiness.get("readOnly") != true or \
+                    readiness.get("canAttack") != false or \
+                    not (readiness.get("blockers") is Array):
+                return
+        _pve_preflight_pending.erase(request_id)
+        dungeon_preflight_checked.emit(packet.duplicate(true))
+        return
+    if _observer_only and _hello_received and \
+            DUNGEON_OBSERVE.mob_packet(packet, _observer_room):
+        dungeon_observer_event.emit(packet.duplicate(true))
         return
     if kind == "online":
         online_count = clampi(int(packet.get("count", -1)), -1, 100000)
@@ -219,6 +336,12 @@ func _schedule_retry(message: String) -> void:
         _retry_delay = minf(8.0, _retry_delay * 1.7)
 
 func _clear_connection() -> void:
+    if not _observer_room.is_empty():
+        dungeon_observer_ended.emit("DISCONNECTED")
+    _observer_room = ""
+    _observer_requested_base = ""
+    _observer_only = false
+    _pve_preflight_pending.clear()
     peer = null
     self_pid = ""
     _hello_received = false
