@@ -75,6 +75,7 @@ var _forge_wallet_host: HBoxContainer
 var _forge_recipe_target: Control
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _enhance_uid := ""
+var _enhance_rarity := ""
 var _enhance_mode := "normal"
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
@@ -398,6 +399,7 @@ func open_npc(source: Dictionary) -> void:
     _forge_equipment_tools_expanded = false
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     _enhance_uid = ""
+    _enhance_rarity = ""
     _enhance_mode = "normal"
     authoritative.clear()
     has_verified_state = false
@@ -473,6 +475,7 @@ func close_npc() -> void:
     auction_pending = false
     _auction_sell_uid = ""
     _enhance_uid = ""
+    _enhance_rarity = ""
     _enhance_mode = "normal"
 
 func apply_native_clan(payload: Dictionary) -> void:
@@ -1664,6 +1667,19 @@ func _show_forge() -> void:
 
 func _choose_enhancement_item(uid: String) -> void:
     _enhance_uid = uid
+    _enhance_rarity = ""
+    _render()
+
+func _set_enhancement_rarity(rarity: String) -> void:
+    if rarity not in ["common", "uncommon", "rare", "epic", "legendary"]:
+        return
+    _enhance_rarity = rarity
+    _enhance_uid = ""
+    if _owns_verified_state(forge_state):
+        for raw in forge_state.get("enhanceItems", []):
+            if raw is Dictionary and str(raw.get("rarity", "")).to_lower() == rarity:
+                _enhance_uid = str(raw.get("uid", ""))
+                break
     _render()
 
 func _set_enhancement_mode(mode: String) -> void:
