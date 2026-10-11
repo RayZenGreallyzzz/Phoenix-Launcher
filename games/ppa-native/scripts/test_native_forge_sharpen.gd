@@ -41,6 +41,20 @@ func _run() -> void:
             {"uid":"unique-pet","name":"Лунный лис","slot":"pet","rarity":"rare","enh":4,"special":false},
             {"uid":"unique-special","name":"Звёздный Хранитель","slot":"pet","rarity":"epic","enh":5,"special":true}]}}
     npc.apply_native_forge(state)
+    # The original smith presents item/stone dropdowns, then the +N→+N+1
+    # preview, rather than a separate huge grid of native action buttons.
+    var gear_picker := npc._body.find_child("PPAForgeGearDropdown", true, false) as OptionButton
+    var stone_picker := npc._body.find_child("PPAForgeStoneDropdown", true, false) as OptionButton
+    var progression := npc._body.find_child("PPAForgeEnhancementBeforeAfter", true, false) as HBoxContainer
+    check(gear_picker != null and gear_picker.item_count == 3,
+        "Forge lost signed equipment dropdown")
+    check(stone_picker != null and stone_picker.item_count == 4,
+        "Forge lost the four original stone/rune combinations")
+    check(progression != null and progression.get_child_count() == 3,
+        "Forge must show previous level, arrow and next level")
+    check(not npc._forge_equipment_tools_expanded and
+        npc._body.find_child("PPAForgeEquipmentToolsToggle", true, false) != null,
+        "Optional equipment tool actions must not block sharpening view")
     check(npc._body.find_child("PPARealForgeEnhance", true, false) == null,
         "Normal stone should not allow +6")
     npc._set_enhancement_mode("premium_rune")
