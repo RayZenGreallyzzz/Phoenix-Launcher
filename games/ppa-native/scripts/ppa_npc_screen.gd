@@ -1076,6 +1076,12 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
     var compact_forge := service == "forge" and tab in ["equipment", "legendary", "accessories", "pets"]
     grid.columns = 2 if compact_forge or _frame.size.x >= 780.0 else 1
     grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    if compact_forge:
+        # During rapid category/rank switches Android may lay out this grid
+        # before its scroll parent has a final width. Reserve real row width,
+        # otherwise cards collapse to ~60 px and Russian names go vertical.
+        grid.custom_minimum_size.x = maxf(250.0,
+            _frame.offset_right - _frame.offset_left - 105.0)
     grid.add_theme_constant_override("h_separation", 8)
     grid.add_theme_constant_override("v_separation", 8)
     _body.add_child(grid)
@@ -1094,6 +1100,8 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             forge_choice.name = "NpcProduct_" + id.to_utf8_buffer().hex_encode()
             forge_choice.set_meta("ppa_original_offer_id", id)
             forge_choice.custom_minimum_size.y = 76.0
+            forge_choice.custom_minimum_size.x = maxf(116.0,
+                (grid.custom_minimum_size.x - 16.0) / 2.0)
             forge_choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             forge_choice.add_theme_stylebox_override("normal",
                 _style(Color("#13191C"), GOLD if id == selected_id else Color("#5E4B35"), 5))
@@ -1118,8 +1126,11 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             captions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             product_line.add_child(captions)
             var text_name := _label(str(item.get("name", "")), 11, GOLD)
+            text_name.autowrap_mode = TextServer.AUTOWRAP_OFF
+            text_name.clip_text = true
             captions.add_child(text_name)
             var forge_price := _label(str(item.get("price", "?")) + " PPA", 10, SUB)
+            forge_price.autowrap_mode = TextServer.AUTOWRAP_OFF
             captions.add_child(forge_price)
             continue
         var tile := PanelContainer.new()
@@ -1563,7 +1574,14 @@ func _show_forge_pinned_inventory() -> void:
     for raw in inventory:
         if raw is Dictionary and not (raw as Dictionary).is_empty():
             shown += 1
-    header.add_child(_label(str(shown) + " / 100" if has_bag else "— / 100", 10, SUB))
+    # Godot's smart-wrap can reduce the count to one glyph wide, turning
+    # "2 / 100" into a vertical column and making the whole bag header tall.
+    var bag_count := _label(str(shown) + " / 100" if has_bag else "— / 100", 10, SUB)
+    bag_count.name = "PPAForgeBagCount"
+    bag_count.autowrap_mode = TextServer.AUTOWRAP_OFF
+    bag_count.custom_minimum_size.x = 78.0
+    bag_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    header.add_child(bag_count)
 
     var clip := ScrollContainer.new()
     clip.name = "PPAForgeBagScroller"
@@ -1934,6 +1952,8 @@ func _show_authoritative_enhancement() -> void:
     var summary := GridContainer.new()
     summary.name = "PPAForgeSharpenSummary"
     summary.columns = 2
+    summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    summary.add_theme_constant_override("h_separation", 8)
     summary.add_theme_constant_override("v_separation", 1)
     main.add_child(summary)
     var on_failure := "ВЕЩЬ И ЗАТОЧКА СОХРАНЯЮТСЯ" if premium else (
@@ -1944,8 +1964,16 @@ func _show_authoritative_enhancement() -> void:
         {"left":"При неудаче","right":on_failure if not selected.is_empty() else "—"},
         {"left":"Максимальная заточка","right":"+7" if premium else "+5"}
     ]:
-        summary.add_child(_label(str(row["left"]), 10, SUB))
+        var left := _label(str(row["left"]), 10, SUB)
+        left.autowrap_mode = TextServer.AUTOWRAP_OFF
+        left.custom_minimum_size.x = 160.0
+        left.name = "PPAForgeSummaryLabel"
+        summary.add_child(left)
         var right := _label(str(row["right"]), 10, GOLD)
+        right.name = "PPAForgeSummaryValue"
+        right.autowrap_mode = TextServer.AUTOWRAP_OFF
+        right.clip_text = true
+        right.custom_minimum_size.x = 160.0
         right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         summary.add_child(right)
@@ -1992,15 +2020,22 @@ func _show_authoritative_enhancement() -> void:
     var table := GridContainer.new()
     table.name = "PPAForgeStoneChanceTable"
     table.columns = 2
+    table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     table.add_theme_constant_override("v_separation", 0)
     lower_content.add_child(table)
     for n in range(7):
-        table.add_child(_label("+" + str(n + 1), 10, SUB))
+        var row_level := _label("+" + str(n + 1), 10, SUB)
+        row_level.autowrap_mode = TextServer.AUTOWRAP_OFF
+        row_level.custom_minimum_size.x = 56.0
+        table.add_child(row_level)
         var ordinary := str(normal[n]) + "%" if n < normal.size() else "—"
         var enhanced := str(rune_rules[n]) + "%" if n < rune_rules.size() else "—"
         var text_value := ordinary + " · с руной " + enhanced if n < 5 else \
             ordinary + " · Премиум + руна " + enhanced
         var line := _label(text_value, 10, GOLD if n == level else SUB)
+        line.autowrap_mode = TextServer.AUTOWRAP_OFF
+        line.clip_text = true
+        line.custom_minimum_size.x = 170.0
         line.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         table.add_child(line)
