@@ -121,9 +121,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_CODE=$((500100 + GITHUB_RUN_NUMBER))
+          VERSION_CODE=$((900000 + GITHUB_RUN_NUMBER))
           VERSION_NAME="0.4.${GITHUB_RUN_NUMBER}-smith-ui"
-          test "$VERSION_CODE" -gt 500042
+          # Must outrank prior original-HUD APK: versionCode=600295.
+          test "$VERSION_CODE" -gt 600295
           grep -q '^package/unique_name="com.phoenixgames.ppa"$' games/ppa-native/export_presets.cfg
           grep -q '^package/name="Phoenix Pix Arena"$' games/ppa-native/export_presets.cfg
           # Preserve the same PPA app identity. Android updates require
