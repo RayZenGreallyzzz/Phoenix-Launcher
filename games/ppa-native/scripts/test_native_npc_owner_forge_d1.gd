@@ -99,6 +99,10 @@ func _run() -> void:
     var bag_grid := npc._forge_inventory_host.find_child("PPAForgeInventoryGrid", true, false) as GridContainer
     check(bag_grid != null and bag_grid.columns == 10 and bag_grid.get_child_count() == 100,
         "Blacksmith lost the original 100-slot, ten-column inventory")
+    var bag_count := npc._forge_inventory_host.find_child("PPAForgeBagCount", true, false) as Label
+    check(bag_count != null and bag_count.autowrap_mode == TextServer.AUTOWRAP_OFF
+        and bag_count.custom_minimum_size.x >= 70.0,
+        "Forge bag count must remain on one line on Android, not one character per row")
     var bag_first := bag_grid.get_child(0) as Button
     check(bag_first != null and bag_first.disabled,
         "Blacksmith must never turn the D1 bag preview into a local spending action")
@@ -133,6 +137,11 @@ func _run() -> void:
     var forge_cards := npc._body.find_child("NpcProductGrid", true, false) as GridContainer
     check(forge_cards != null and forge_cards.columns == 2 and forge_cards.get_child_count() > 0,
         "Blacksmith recipes must be compact two-column clickable cards")
+    check(forge_cards.custom_minimum_size.x >= 250.0,
+        "Mobile forge cards collapsed to single-character width during category changes")
+    var first_offer := forge_cards.get_child(0) as Control
+    check(first_offer != null and first_offer.custom_minimum_size.x >= 116.0,
+        "Telegram forge offer tiles need stable minimum widths")
     npc._select_item("gear:epic:weapon")
     check(npc._forge_recipe_target != null,
         "Selected blacksmith recipe must appear below the product list")
