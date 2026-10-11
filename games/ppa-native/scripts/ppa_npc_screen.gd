@@ -68,6 +68,8 @@ var _asking_currency := "PPA"
 var _forge_filter := "equipment"
 var _craft_rarity := "all"
 var _forge_resources_expanded := false
+var _forge_inventory_host: VBoxContainer
+var _forge_recipe_target: Control
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _enhance_uid := ""
 var _enhance_mode := "normal"
@@ -241,8 +243,8 @@ func _create_shell() -> void:
     _tabs = GridContainer.new()
     _tabs.name = "NpcOnlyCategoryTabs"
     _tabs.columns = 3
-    _tabs.add_theme_constant_override("h_separation", 5)
-    _tabs.add_theme_constant_override("v_separation", 5)
+    _tabs.add_theme_constant_override("h_separation", 3)
+    _tabs.add_theme_constant_override("v_separation", 3)
     _tab_scroller.add_child(_tabs)
 
     var rule := ColorRect.new()
@@ -250,6 +252,13 @@ func _create_shell() -> void:
     rule.color = Color("#714E28")
     rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
     layout.add_child(rule)
+
+    # Original Telegram smith keeps a short, separately scrollable 100-slot
+    # inventory beneath the 4+2 category tabs, before the recipe pane.
+    _forge_inventory_host = VBoxContainer.new()
+    _forge_inventory_host.name = "PPAForgePinnedInventory"
+    _forge_inventory_host.visible = false
+    layout.add_child(_forge_inventory_host)
 
     _scroll = ScrollContainer.new()
     _scroll.name = "NpcOnlyScroll"
@@ -301,11 +310,11 @@ func _layout_tabs() -> void:
     # Three rows in portrait, two in landscape. Other NPCs keep one
     # horizontally scrollable category strip like the live Telegram UI.
     var clan_grid := service == "clan"
-    # Forge has six primary Telegram sections. Keep all of them visible in a
-    # compact two-row, three-column navigation instead of hiding the last
-    # categories behind a sideways swipe. Leave every other NPC unchanged.
+    # The actual Telegram blacksmith has FOUR buttons on its first row and
+    # TWO buttons on the second row (verified against the original 2026-10-11
+    # gameplay recording), not a 3x2 grid.
     var forge_grid := service == "forge"
-    var columns := (5 if size.x > size.y else 3) if clan_grid else (3 if forge_grid else maxi(1, _tab_specs().size()))
+    var columns := (5 if size.x > size.y else 3) if clan_grid else (4 if forge_grid else maxi(1, _tab_specs().size()))
     _tabs.columns = columns
     _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if (clan_grid or forge_grid) else ScrollContainer.SCROLL_MODE_AUTO
     # Each row has a >=43px touch target and 5px spacing, plus safety space.
@@ -795,6 +804,7 @@ func _render() -> void:
         return
     _clear(_tabs)
     _clear(_body)
+    _forge_recipe_target = null
     _layout_tabs()
     _heading.text = str(npc.get("name", "NPC"))
     _subheading.text = "МИРНЫЙ ГОРОД · " + _service_name()
@@ -810,9 +820,9 @@ func _render() -> void:
         if service == "clan" or service == "forge":
             var available := _frame.offset_right - _frame.offset_left - 43.0
             var slot_width := floorf(available / float(_tabs.columns)) - 5.0
-            b.custom_minimum_size.x = maxf(68.0, slot_width)
+            b.custom_minimum_size.x = maxf(50.0 if service == "forge" else 68.0, slot_width)
             b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            b.add_theme_font_size_override("font_size", 9 if _tabs.columns == 3 else 10)
+            b.add_theme_font_size_override("font_size", 8 if service == "forge" else (9 if _tabs.columns == 3 else 10))
             # Keep the original category labels; avoid making a 3-column
             # button wider than the panel and accidentally enabling swipe.
             if service == "clan" and _tabs.columns == 3 and id == "clans":
@@ -824,6 +834,11 @@ func _render() -> void:
             GOLD if id == tab else Color("#66513B"), 6))
         b.pressed.connect(_select_tab.bind(id))
         _tabs.add_child(b)
+    if _forge_inventory_host != null:
+        _clear(_forge_inventory_host)
+        _forge_inventory_host.visible = service == "forge"
+        if service == "forge":
+            _show_forge_pinned_inventory()
     match service:
         "merchant": _show_merchant()
         "blackmarket": _show_blackmarket()
@@ -853,7 +868,10 @@ func _render() -> void:
             _status.text = "PPA · запрос к серверу торговца…"
     if service == "arena":
         _status.text += " · " + native_online_status
-    _scroll.set_deferred("scroll_vertical", 0)
+    if service == "forge" and _forge_recipe_target != null:
+        _scroll.call_deferred("ensure_control_visible", _forge_recipe_target)
+    else:
+        _scroll.set_deferred("scroll_vertical", 0)
 
 
 func _auction_filter(key: String) -> void:
@@ -1020,7 +1038,8 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
     var grid := GridContainer.new()
     grid.name = "NpcProductGrid"
     # Three columns squeeze Russian item names on portrait tablets.
-    grid.columns = 2 if _frame.size.x >= 780.0 else 1
+    var compact_forge := service == "forge" and tab in ["equipment", "legendary", "accessories", "pets"]
+    grid.columns = 2 if (compact_forge and _frame.size.x >= 430.0) or _frame.size.x >= 780.0 else 1
     grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     grid.add_theme_constant_override("h_separation", 8)
     grid.add_theme_constant_override("v_separation", 8)
@@ -1033,6 +1052,36 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
     for entry in products:
         var item: Dictionary = entry
         var id := str(item.get("id", ""))
+        if compact_forge:
+            # Telegram original uses short two-column clickable item rows,
+            # with icon left, text/price right and the selected row outlined.
+            var forge_choice := _button("", true)
+            forge_choice.name = "NpcProduct_" + id.to_utf8_buffer().hex_encode()
+            forge_choice.set_meta("ppa_original_offer_id", id)
+            forge_choice.custom_minimum_size.y = 76.0
+            forge_choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            forge_choice.add_theme_stylebox_override("normal",
+                _style(Color("#13191C"), GOLD if id == selected_id else Color("#5E4B35"), 5))
+            forge_choice.add_theme_stylebox_override("hover",
+                _style(Color("#29251D"), GOLD, 5))
+            forge_choice.pressed.connect(_select_item.bind(id))
+            grid.add_child(forge_choice)
+            var product_line := HBoxContainer.new()
+            product_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            product_line.add_theme_constant_override("separation", 5)
+            forge_choice.add_child(product_line)
+            var product_icon := _readonly_icon_item(item, 48)
+            product_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            product_line.add_child(product_icon)
+            var captions := VBoxContainer.new()
+            captions.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            captions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            product_line.add_child(captions)
+            var text_name := _label(str(item.get("name", "")), 11, GOLD)
+            captions.add_child(text_name)
+            var forge_price := _label(str(item.get("price", "?")) + " PPA", 10, SUB)
+            captions.add_child(forge_price)
+            continue
         var tile := PanelContainer.new()
         # Live recipe IDs contain ':' (e.g. acc:ring:legendary), which Godot
         # forbids in Node.name. Preserve the exact ID as metadata while giving
@@ -1409,6 +1458,59 @@ func _show_verified_d1_forge_stock() -> void:
             _readonly_owned_grid("ВАША ЭКИПИРОВКА В СУМКЕ · ТОЛЬКО ПРОСМОТР", owned_gear, 32)
 
 
+func _show_forge_pinned_inventory() -> void:
+    # Same hierarchy as the Telegram original: 4+2 tabs, short 100-slot bag
+    # preview, then the independently scrollable forge/recipe panel. All items
+    # are taken from the signed player projection; no simulated inventory.
+    if _forge_inventory_host == null:
+        return
+    var inventory: Array = _player_view_readonly.get("inventory", [])
+    var header := HBoxContainer.new()
+    _forge_inventory_host.add_child(header)
+    var title := _label("ИНВЕНТАРЬ", 12, GOLD)
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    header.add_child(title)
+    var shown := 0
+    for raw in inventory:
+        if raw is Dictionary and not (raw as Dictionary).is_empty():
+            shown += 1
+    header.add_child(_label(str(shown) + " / 100" if not _player_view_readonly.is_empty() else "— / 100", 10, SUB))
+
+    var clip := ScrollContainer.new()
+    clip.name = "PPAForgeBagScroller"
+    clip.custom_minimum_size.y = 114.0 if size.x > size.y else 170.0
+    clip.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    clip.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _forge_inventory_host.add_child(clip)
+    var grid := GridContainer.new()
+    grid.name = "PPAForgeInventoryGrid"
+    grid.columns = 10
+    grid.add_theme_constant_override("h_separation", 2)
+    grid.add_theme_constant_override("v_separation", 2)
+    clip.add_child(grid)
+    var panel_width := _frame.offset_right - _frame.offset_left
+    var cell := maxf(22.0, floorf((panel_width - 67.0) / 10.0) - 2.0)
+    for i in range(100):
+        var item: Dictionary = {}
+        if i < inventory.size() and inventory[i] is Dictionary:
+            item = inventory[i]
+        var square: Control
+        if item.is_empty():
+            var blank := PanelContainer.new()
+            blank.add_theme_stylebox_override("panel",
+                _style(Color("#0B1114"), Color("#5B472D"), 1))
+            square = blank
+        else:
+            var real_icon := _readonly_icon_item(item, cell)
+            real_icon.add_theme_stylebox_override("disabled",
+                _style(Color("#151A20"), SHOP.rarity_tint(str(item.get("rarity", "common"))), 1))
+            square = real_icon
+        square.name = "PPAForgeBagSlot_" + str(i)
+        square.custom_minimum_size = Vector2(cell, cell)
+        grid.add_child(square)
+
+
 func _toggle_forge_resources() -> void:
     _forge_resources_expanded = not _forge_resources_expanded
     _render()
@@ -1720,13 +1822,16 @@ func _show_original_forge_recipes() -> void:
         if str(entry.get("id","")) == selected_id:
             chosen = entry
             break
+    _product_grid(offers, false)
     if chosen.is_empty():
         _message("ВЫБЕРИ РЕЦЕПТ",
-            "Нажми «Подробнее»: увидишь цену, бонус, каждый материал и остаток в сумке.")
-        _product_grid(offers, false)
+            "Коснись карточки, чтобы увидеть цену, бонус, материалы и остатки.")
         return
+    var recipe_index := _body.get_child_count()
     _section("РЕЦЕПТ · " + str(chosen.get("name","")),
+
         str(chosen.get("desc","")) + " · " + str(chosen.get("rarity","")).to_upper())
+    _forge_recipe_target = _body.get_child(recipe_index) as Control
     var art := str(chosen.get("img", ""))
     if not art.is_empty() and ResourceLoader.exists(art):
         _body.add_child(_item_picture(art, 88))
@@ -1795,12 +1900,6 @@ func _show_original_forge_recipes() -> void:
             _body.add_child(_label(
                 "Рецепт не подтверждён общим сервером или каталог PPA обновился.", 11, SUB))
     _body.add_child(_label("Создание выполняет сервер PPA, не Godot.", 11, SUB))
-    # A recipe selection re-renders at scroll position 0. Keep its price,
-    # ingredients and CREATE button directly above the catalog instead of
-    # hiding the selected recipe below dozens of cards.
-    _section("ДРУГИЕ РЕЦЕПТЫ")
-    _product_grid(offers, false)
-
 func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # No pagination or arrows. The user swipes a continuous square-cell
     # grid; 100/200/500/50 total slots share a single drawing canvas.
