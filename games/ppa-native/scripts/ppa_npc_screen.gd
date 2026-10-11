@@ -1011,7 +1011,9 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
     grid.add_theme_constant_override("v_separation", 8)
     _body.add_child(grid)
     if products.is_empty():
-        _message("ПОКА НЕТ ПРЕДЛОЖЕНИЙ", "Ассортимент этого раздела поступит с сервера PPA.")
+        _message("ПОКА НЕТ ПРЕДЛОЖЕНИЙ", \
+            "В оригинальном каталоге торговца в этой вкладке нет товаров." \
+            if service == "merchant" else "Персональные предложения этого раздела проверяются по сохранению PPA.")
         return
     for entry in products:
         var item: Dictionary = entry
@@ -1056,7 +1058,9 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         inner.add_child(product_name)
         var currency_code := str(item.get("currency", "gold")).to_lower()
         var currency := " Gram" if currency_code == "gram" else (" PPA" if currency_code == "ppa" else " Gold")
-        inner.add_child(_label(str(item.get("price", 0)) + currency, 12, GOLD))
+        var price_text := str(item["price"]) + currency if item.get("price", null) != null \
+            else "Цена не подтверждена"
+        inner.add_child(_label(price_text, 12, GOLD))
         if bool(item.get("ppa_reference_only", false)):
             inner.add_child(_label("Справочная цена · не подтверждена", 10, SUB))
         var choice := _button("ПОДРОБНЕЕ")
@@ -1083,7 +1087,10 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
     if item.has("limit"):
         var left := maxi(0, int(item.get("limit",1)) - int(item.get("bought",0)))
         _mini_row("Дневной лимит", "осталось " + str(left))
-    _body.add_child(_label("Цена: " + str(item.get("price", 0)) + suffix, 15, GOLD))
+    _body.add_child(_label("Цена: " + str(item["price"]) + suffix, 15, GOLD) \
+        if item.get("price", null) != null else _label("Цена ещё не подтверждена", 15, SUB))
+    if bool(item.get("ppa_reference_only", false)):
+        _body.add_child(_label("Это справочный каталог Telegram PPA, не живое предложение для покупки.", 11, SUB))
     if with_quantity:
         var row := HBoxContainer.new()
         _body.add_child(row)
@@ -1216,8 +1223,18 @@ func _show_blackmarket() -> void:
     for entry in listed:
         if not (entry is Dictionary):
             continue
-        if tab == "all" or str(entry.get("category", "")) == tab:
-            filtered.append(entry)
+        var offer: Dictionary = (entry as Dictionary).duplicate(true)
+        var nested: Variant = offer.get("item", null)
+        if nested is Dictionary:
+            var underlying: Dictionary = nested
+            # Items from the original randomized Telegram PPA market can
+            # have artwork/name only in the actual offer's nested item.
+            # Do not copy prices, stock, categories or availability from it.
+            for key in ["name", "img", "image", "iconArt", "art", "icon"]:
+                if str(offer.get(key, "")).is_empty():
+                    offer[key] = underlying.get(key, "")
+        if tab == "all" or str(offer.get("category", "")) == tab:
+            filtered.append(offer)
     if not filtered.is_empty():
         _product_grid(filtered, false)
         _selected_details(filtered, false)
