@@ -73,6 +73,7 @@ var _enhance_mode := "normal"
 var _last_clan_layout := false
 var authoritative: Dictionary = {}
 var has_verified_state := false
+var _npc_read_error := ""
 var clan_state: Dictionary = {}
 var clan_actions: Array = []
 var clan_busy := false
@@ -375,6 +376,7 @@ func open_npc(source: Dictionary) -> void:
     _enhance_mode = "normal"
     authoritative.clear()
     has_verified_state = false
+    _npc_read_error = ""
     clan_state.clear()
     clan_actions.clear()
     clan_notice = ""
@@ -412,6 +414,7 @@ func close_npc() -> void:
     visible = false
     authoritative.clear()
     has_verified_state = false
+    _npc_read_error = ""
     clan_state.clear()
     clan_actions.clear()
     merchant_state.clear()
@@ -717,9 +720,26 @@ func apply_authoritative_snapshot(snapshot: Dictionary) -> void:
     var data: Dictionary = snapshot["data"]
     if data.get("readOnly", false) != true or data.get("actionsEnabled", true) != false:
         return
+    _npc_read_error = ""
     authoritative = data.duplicate(true)
     authoritative["saveVersion"] = int(snapshot.get("version", 0))
     has_verified_state = true
+    _render()
+
+func set_npc_service_failure(requested: String, code: String) -> void:
+    if not visible or requested != service:
+        return
+    match code:
+        "NO_LINKED_OWNER":
+            _npc_read_error = "Не привязан персонаж Telegram PPA. Список товаров пока справочный."
+        "NO_GAME_SESSION", "STALE_SESSION", "HTTP_401", "HTTP_403":
+            _npc_read_error = "Нет действующей игровой сессии. Войди через Phoenix Launcher заново."
+        "HTTP_404":
+            _npc_read_error = "Серверный API этого NPC ещё не опубликован (404). Товары справочные."
+        "HTTP_409", "UNVERIFIED_SAVE":
+            _npc_read_error = "Нет подтверждённого сохранения PPA. Проверь привязку Telegram."
+        _:
+            _npc_read_error = "Ошибка подключения NPC: " + code.left(32) + ". Покупки недоступны."
     _render()
 
 func _default_tab(which: String) -> String:
@@ -818,6 +838,8 @@ func _render() -> void:
             GOLD if id == tab else Color("#66513B"), 6))
         b.pressed.connect(_select_tab.bind(id))
         _tabs.add_child(b)
+    if not _npc_read_error.is_empty():
+        _body.add_child(_label("СЕРВЕР NPC · " + _npc_read_error, 12, GOLD))
     match service:
         "merchant": _show_merchant()
         "blackmarket": _show_blackmarket()
@@ -847,6 +869,8 @@ func _render() -> void:
             _status.text = "PPA · запрос к серверу торговца…"
     if service == "arena":
         _status.text += " · " + native_online_status
+    if not _npc_read_error.is_empty():
+        _status.text = "NPC · " + _npc_read_error
     _scroll.set_deferred("scroll_vertical", 0)
 
 

@@ -89,6 +89,11 @@ func apply_native_npc_service(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_authoritative_snapshot(payload)
 
+func set_npc_service_failure(service: String, code: String) -> void:
+    # Do not silently present a reference catalog as a live merchant.
+    if _npc_screen != null:
+        _npc_screen.set_npc_service_failure(service, code)
+
 func apply_native_clan(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_clan(payload)
