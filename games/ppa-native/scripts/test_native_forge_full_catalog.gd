@@ -43,6 +43,31 @@ func _run() -> void:
     host.size = Vector2(1280,720)
     var npc := NPC.new()
     host.add_child(npc)
+    # Regression: the original six Telegram blacksmith destinations must all
+    # be visible in Godot without swiping a horizontal tab strip.
+    npc.size = Vector2(1280, 720)
+    npc.open_npc({"service":"forge", "name":"Кузнец"})
+    var expected_tabs := ["enhance", "equipment", "legendary",
+        "accessories", "pets", "rune_fusion"]
+    check(npc._tabs.get_child_count() == expected_tabs.size(),
+        "The native forge is missing an original Telegram tab")
+    for i in range(expected_tabs.size()):
+        check(npc._tabs.get_child(i).name == "NpcTab_" + expected_tabs[i],
+            "Forge tabs are out of Telegram order")
+    check(npc._tabs.columns == 6 and
+        npc._tab_scroller.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+        "Landscape forge tabs must fit without a sideways swipe")
+    npc.size = Vector2(720, 1280)
+    npc._fit()
+    check(npc._tabs.columns == 3 and npc._tab_scroller.custom_minimum_size.y >= 99.0,
+        "Portrait tablet forge must show two full rows")
+    npc.size = Vector2(360, 740)
+    npc._fit()
+    check(npc._tabs.columns == 2 and npc._tab_scroller.custom_minimum_size.y >= 147.0,
+        "Narrow phone forge must show three full rows")
+    npc.size = Vector2(1280, 720)
+    npc._fit()
+    npc.close_npc()
     var issued: Array = []
     npc.forge_action_requested.connect(func(fields: Dictionary):
         issued.append(fields.duplicate(true)))
