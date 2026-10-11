@@ -1616,8 +1616,8 @@ func _show_forge() -> void:
     var source_note := ("Оригинальные рецепты PPA · стоимость и материалы из каталога."
         if tab in ["equipment", "legendary", "accessories", "pets"]
         else "Вещи из сохранения PPA · операции проверяет игровой сервер.")
-    if tab == "enhance" or tab == "rune_fusion":
-        _section("ЗАТОЧКА" if tab == "enhance" else "СЛИЯНИЕ РУН", source_note)
+    if tab == "rune_fusion":
+        _section("СЛИЯНИЕ РУН", source_note)
     if not forge_notice.is_empty():
         _body.add_child(_label(forge_notice, 12, GOLD))
     if forge_pending:
@@ -1772,147 +1772,262 @@ func _show_shared_equipment_tools() -> void:
             bag_grid.add_child(b)
 
 func _show_authoritative_enhancement() -> void:
-    _section("ЗАТОЧКА СНАРЯЖЕНИЯ / АКСЕССУАРОВ / ПЕТОВ",
-        "Выбери предмет и камень. Система показывает только подтверждённые сервером шансы и остатки.")
-    if not _owns_verified_state(forge_state) or not (forge_state.get("enhanceItems") is Array):
-        _message("ЖДЁМ ОБЩУЮ КУЗНИЦУ", "Заточка недоступна без подтверждённого сохранения сервера PPA.")
-        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
-        return
-    var items: Array = forge_state.get("enhanceItems", [])
+    # Original Telegram PPA layout: rarity + stone dropdowns, +N -> +N+1,
+    # compact outcome summary; below that, a distinct stone/chances panel.
+    # Without server-owned state the full UI remains visible but inert.
+    var verified := _owns_verified_state(forge_state)
+    var raw_items: Variant = forge_state.get("enhanceItems", []) if verified else []
+    var items: Array = raw_items if raw_items is Array else []
     var selected: Dictionary = {}
-    for raw in items:
-        if raw is Dictionary and str(raw.get("uid", "")) == _enhance_uid:
-            selected = raw
+    for item in items:
+        if item is Dictionary and str(item.get("uid", "")) == _enhance_uid:
+            selected = item
             break
-    if selected.is_empty() and not items.is_empty() and items[0] is Dictionary:
-        selected = items[0]
-        _enhance_uid = str(selected.get("uid", ""))
-    var picker_row := HBoxContainer.new()
-    picker_row.name = "PPAForgeOriginalDropdowns"
-    picker_row.add_theme_constant_override("separation", 8)
-    _body.add_child(picker_row)
-    var gear_picker := OptionButton.new()
-    gear_picker.name = "PPAForgeGearDropdown"
-    gear_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    gear_picker.custom_minimum_size.y = 43
-    gear_picker.add_theme_font_size_override("font_size", 11)
-    gear_picker.tooltip_text = "Выбор предмета из подтверждённого инвентаря PPA"
-    picker_row.add_child(gear_picker)
-    var pick_index := 0
-    for entry in items:
-        if not (entry is Dictionary):
-            continue
-        var uid := str((entry as Dictionary).get("uid", ""))
-        if uid.is_empty():
-            continue
-        var label_text := str((entry as Dictionary).get("name", "Вещь")).left(22) + "  +" + str((entry as Dictionary).get("enh", 0))
-        gear_picker.add_item(label_text)
-        var idx := gear_picker.item_count - 1
-        gear_picker.set_item_metadata(idx, uid)
-        if uid == _enhance_uid:
-            pick_index = idx
-    if gear_picker.item_count > 0:
-        gear_picker.select(pick_index)
-        gear_picker.item_selected.connect(func(index: int):
-            _choose_enhancement_item(str(gear_picker.get_item_metadata(index))))
-    else:
-        gear_picker.add_item("НЕТ ВЕЩЕЙ")
-        gear_picker.disabled = true
-
-    var mode_picker := OptionButton.new()
-    mode_picker.name = "PPAForgeStoneDropdown"
-    mode_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    mode_picker.custom_minimum_size.y = 43
-    mode_picker.add_theme_font_size_override("font_size", 11)
-    mode_picker.tooltip_text = "Тип камня и руны заточки"
-    picker_row.add_child(mode_picker)
-    for option in [
-        {"key":"normal","label":"ОБЫЧНЫЙ КАМЕНЬ"},
-        {"key":"normal_rune","label":"ОБЫЧНЫЙ + РУНА"},
-        {"key":"premium","label":"ПРЕМИУМ КАМЕНЬ"},
-        {"key":"premium_rune","label":"ПРЕМИУМ + РУНА"}
-    ]:
-        mode_picker.add_item(str(option["label"]))
-        var i := mode_picker.item_count - 1
-        mode_picker.set_item_metadata(i, option["key"])
-        if str(option["key"]) == _enhance_mode:
-            mode_picker.select(i)
-    mode_picker.item_selected.connect(func(index: int):
-        _set_enhancement_mode(str(mode_picker.get_item_metadata(index))))
-    if selected.is_empty():
-        _message("НЕТ ВЕЩЕЙ", "В подтверждённой сервером сумке нет предметов для заточки.")
-        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
-        return
-
-    var level := int(selected.get("enh", 0))
-    var transition := HBoxContainer.new()
-    transition.name = "PPAForgeEnhancementBeforeAfter"
-    transition.alignment = BoxContainer.ALIGNMENT_CENTER
-    transition.add_theme_constant_override("separation", 12)
-    _body.add_child(transition)
-    for shown_level in [level, level + 1]:
-        var panel := PanelContainer.new()
-        panel.custom_minimum_size = Vector2(100, 100)
-        panel.add_theme_stylebox_override("panel", _style(Color("#11191D"), EDGE, 6))
-        transition.add_child(panel)
-        var icon_col := VBoxContainer.new()
-        icon_col.alignment = BoxContainer.ALIGNMENT_CENTER
-        panel.add_child(icon_col)
-        var icon := _readonly_icon_item(selected, 57)
-        icon_col.add_child(icon)
-        var caption := _label("+" + str(shown_level), 12, GOLD)
-        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        icon_col.add_child(caption)
-        if shown_level == level:
-            transition.add_child(_label("➜", 23, GOLD))
-
-    var supplied_stones: Variant = forge_state.get("stones", null)
-    var supplies: Dictionary = supplied_stones as Dictionary if supplied_stones is Dictionary else {}
-    _mini_row("Обычные / Премиум / Руны",
-        str(supplies.get("normal", "—")) + " / " + str(supplies.get("premium", "—")) + " / " + str(supplies.get("rune", "—")))
+    if selected.is_empty() and _enhance_rarity.is_empty():
+        for item in items:
+            if item is Dictionary and not str(item.get("uid", "")).is_empty():
+                selected = item
+                _enhance_uid = str(item.get("uid", ""))
+                break
+    var rarity := _enhance_rarity if not _enhance_rarity.is_empty() else str(selected.get("rarity", "common")).to_lower()
+    if rarity not in ["common", "uncommon", "rare", "epic", "legendary"]:
+        rarity = "common"
+    var level := int(selected.get("enh", 0)) if not selected.is_empty() else -1
     var premium := _enhance_mode.begins_with("premium")
     var rune := _enhance_mode.ends_with("_rune")
-    var rule_data: Variant = forge_state.get("enhanceRules", null)
-    var table_values: Variant = (rule_data as Dictionary).get("rune" if rune else "normal", []) if rule_data is Dictionary else []
-    var chance := -1
-    if table_values is Array and level >= 0 and level < (table_values as Array).size():
-        chance = int(table_values[level])
-    _mini_row("Следующая заточка", "+" + str(level + 1))
-    _mini_row("Вероятность успеха", str(chance) + "%" if chance >= 0 else "не подтверждена")
-    _mini_row("Неудача", "Вещь и + сохраняются" if premium else
-        ("Эпик: откат −1" if str(selected.get("rarity", "")) == "epic" else "ВЕЩЬ МОЖЕТ СГОРЕТЬ"))
+    var source_rules: Variant = forge_state.get("enhanceRules", {}) if verified else {}
+    var rules: Dictionary = source_rules if source_rules is Dictionary else {}
+    var normal: Array = rules.get("normal", []) if rules.get("normal", []) is Array else []
+    var rune_rules: Array = rules.get("rune", []) if rules.get("rune", []) is Array else []
+    var table_values: Array = rune_rules if rune else normal
+    var chance := int(table_values[level]) if level >= 0 and level < table_values.size() else -1
+    var raw_stones: Variant = forge_state.get("stones", {}) if verified else {}
+    var supplies: Dictionary = raw_stones if raw_stones is Dictionary else {}
     var requires := "premium" if premium else "normal"
     var stock: Variant = supplies.get(requires, null)
     var rune_stock: Variant = supplies.get("rune", null)
-    var enough: bool = stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
-    var blocked: bool = bool(selected.get("special", false)) or level >= 7 \
+    var enough := stock is int and stock > 0 and (not rune or (rune_stock is int and rune_stock > 0))
+    var blocked := selected.is_empty() or bool(selected.get("special", false)) or level >= 7 \
         or (not premium and level >= 5) or chance < 0 or not enough \
         or not forge_actions.has("enhance") or forge_busy or forge_pending
-    if blocked:
-        _locked_action("ЗАТОЧИТЬ ВЕЩЬ")
-        if bool(selected.get("special", false)):
-            _body.add_child(_label("Особый питомец пока требует дополнительной серверной проверки.", 11, SUB))
-        return
-    var uid := str(selected.get("uid", ""))
-    var mode := _enhance_mode
-    var version := int(forge_state.get("version", 0))
-    var action := _button("ЗАТОЧИТЬ · " + str(chance) + "%", true)
-    action.name = "PPARealForgeEnhance"
-    action.pressed.connect(func():
-        if premium:
-            _request_real_enhancement(uid, mode, version)
+
+    var top := PanelContainer.new()
+    top.name = "PPAForgeOriginalSharpenPanel"
+    top.add_theme_stylebox_override("panel", _style(Color("#091314"), Color("#6B492D"), 4))
+    _body.add_child(top)
+    var main := VBoxContainer.new()
+    main.add_theme_constant_override("separation", 7)
+    top.add_child(main)
+    main.add_child(_label("Заточка снаряжения / аксессуаров / петов", 15, GOLD))
+
+    var banner := PanelContainer.new()
+    banner.name = "PPAForgeUpgradeableCategories"
+    banner.add_theme_stylebox_override("panel", _style(Color("#16180F"), Color("#69502E"), 3))
+    main.add_child(banner)
+    var banner_label := _label("✓ ОЖЕРЕЛЬЯ · АРТЕФАКТЫ · ПЛАЩИ · КРЫЛЬЯ · ПЕТЫ ДО +7", 10, GOLD)
+    banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    banner.add_child(banner_label)
+    main.add_child(_label("Премиум руна: +12–16 п.п. к шансу · Феникса 0,01%", 10, SUB))
+
+    var dropdowns := HBoxContainer.new()
+    dropdowns.name = "PPAForgeOriginalDropdowns"
+    dropdowns.add_theme_constant_override("separation", 5)
+    main.add_child(dropdowns)
+    var rarity_picker := OptionButton.new()
+    rarity_picker.name = "PPAForgeRarityDropdown"
+    rarity_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    rarity_picker.custom_minimum_size.y = 38
+    rarity_picker.add_theme_font_size_override("font_size", 10)
+    dropdowns.add_child(rarity_picker)
+    for opt in [
+        {"key":"common","label":"Обычный"},
+        {"key":"uncommon","label":"Необычный"},
+        {"key":"rare","label":"Редкий"},
+        {"key":"epic","label":"Эпический"},
+        {"key":"legendary","label":"Легендарный"}
+    ]:
+        rarity_picker.add_item(str(opt["label"]))
+        var n := rarity_picker.item_count - 1
+        rarity_picker.set_item_metadata(n, opt["key"])
+        if rarity == opt["key"]:
+            rarity_picker.select(n)
+    rarity_picker.item_selected.connect(func(index: int):
+        _set_enhancement_rarity(str(rarity_picker.get_item_metadata(index))))
+    var stone_picker := OptionButton.new()
+    stone_picker.name = "PPAForgeStoneDropdown"
+    stone_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    stone_picker.custom_minimum_size.y = 38
+    stone_picker.add_theme_font_size_override("font_size", 10)
+    dropdowns.add_child(stone_picker)
+    for opt in [
+        {"key":"normal","label":"Обычный камень"},
+        {"key":"normal_rune","label":"Обычный + Премиум руна"},
+        {"key":"premium","label":"Премиум · безопасный"},
+        {"key":"premium_rune","label":"Премиум камень + руна"}
+    ]:
+        stone_picker.add_item(str(opt["label"]))
+        var n := stone_picker.item_count - 1
+        stone_picker.set_item_metadata(n, opt["key"])
+        if _enhance_mode == opt["key"]:
+            stone_picker.select(n)
+    stone_picker.item_selected.connect(func(index: int):
+        _set_enhancement_mode(str(stone_picker.get_item_metadata(index))))
+
+    # Server UIDs still need a distinct chooser if several items share rarity.
+    # This is not an alternative inventory or a local item mutation.
+    var gear_picker := OptionButton.new()
+    gear_picker.name = "PPAForgeGearDropdown"
+    gear_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    gear_picker.custom_minimum_size.y = 35
+    gear_picker.add_theme_font_size_override("font_size", 11)
+    main.add_child(gear_picker)
+    var chosen_index := 0
+    for entry in items:
+        if not (entry is Dictionary):
+            continue
+        var uid := str(entry.get("uid", ""))
+        if uid.is_empty():
+            continue
+        gear_picker.add_item(str(entry.get("name","Вещь")).left(23) + "  +" + str(entry.get("enh",0)))
+        var index := gear_picker.item_count - 1
+        gear_picker.set_item_metadata(index, uid)
+        if uid == _enhance_uid:
+            chosen_index = index
+    if gear_picker.item_count > 0:
+        gear_picker.select(chosen_index)
+        gear_picker.item_selected.connect(func(index: int):
+            _choose_enhancement_item(str(gear_picker.get_item_metadata(index))))
+    else:
+        gear_picker.add_item("Нет подтверждённых предметов")
+        gear_picker.disabled = true
+    gear_picker.visible = items.size() > 1
+
+    var preview := HBoxContainer.new()
+    preview.name = "PPAForgeEnhancementBeforeAfter"
+    preview.alignment = BoxContainer.ALIGNMENT_CENTER
+    preview.add_theme_constant_override("separation", 10)
+    main.add_child(preview)
+    for step in range(2):
+        var square := PanelContainer.new()
+        square.custom_minimum_size = Vector2(82, 82)
+        square.add_theme_stylebox_override("panel", _style(Color("#0C1317"), Color("#78512B"), 4))
+        preview.add_child(square)
+        var column := VBoxContainer.new()
+        column.alignment = BoxContainer.ALIGNMENT_CENTER
+        square.add_child(column)
+        if selected.is_empty():
+            var glyph := _label("◇", 22, SUB)
+            glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+            column.add_child(glyph)
         else:
-            var confirm := ConfirmationDialog.new()
-            confirm.dialog_text = ("При неудаче эпик потеряет уровень заточки. Продолжить?"
-                if str(selected.get("rarity", "")) == "epic" else
-                "При неудаче вещь может сгореть без восстановления. Продолжить?")
-            add_child(confirm)
-            confirm.confirmed.connect(func():
+            column.add_child(_readonly_icon_item(selected, 50))
+        var plus := _label("+" + str(level + step) if level >= 0 else "—", 11, GOLD)
+        plus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        column.add_child(plus)
+        if step == 0:
+            preview.add_child(_label("➜", 24, GOLD))
+
+    var summary := GridContainer.new()
+    summary.name = "PPAForgeSharpenSummary"
+    summary.columns = 2
+    summary.add_theme_constant_override("v_separation", 1)
+    main.add_child(summary)
+    var on_failure := "ВЕЩЬ И ЗАТОЧКА СОХРАНЯЮТСЯ" if premium else (
+        "ЭПИК: ОТКАТ −1" if str(selected.get("rarity","")) == "epic" else "ВЕЩЬ МОЖЕТ СГОРЕТЬ")
+    for row in [
+        {"left":"Текущая заточка","right":"+" + str(level) if level >= 0 else "—"},
+        {"left":"Шанс успеха","right":str(chance) + "%" if chance >= 0 else "—"},
+        {"left":"При неудаче","right":on_failure if not selected.is_empty() else "—"},
+        {"left":"Максимальная заточка","right":"+7" if premium else "+5"}
+    ]:
+        summary.add_child(_label(str(row["left"]), 10, SUB))
+        var right := _label(str(row["right"]), 10, GOLD)
+        right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        summary.add_child(right)
+    var levels := HBoxContainer.new()
+    levels.name = "PPAForgeLevelControls"
+    main.add_child(levels)
+    for name in ["− УРОВЕНЬ", "+ УРОВЕНЬ"]:
+        var step_button := _button(name, false)
+        step_button.custom_minimum_size.y = 27
+        step_button.add_theme_font_size_override("font_size", 9)
+        levels.add_child(step_button)
+    main.add_child(_label("Обычный камень действует до +5; премиум до +7 и защищает вещь. "
+        + "Уровень, шанс и попытку подтверждает игровой сервер PPA.", 10, SUB))
+
+    var lower := PanelContainer.new()
+    lower.name = "PPAForgeOriginalStonePanel"
+    lower.add_theme_stylebox_override("panel", _style(Color("#091314"), Color("#6B492D"), 4))
+    _body.add_child(lower)
+    var lower_content := VBoxContainer.new()
+    lower_content.add_theme_constant_override("separation", 6)
+    lower.add_child(lower_content)
+    lower_content.add_child(_label("Камень заточки", 15, GOLD))
+    var stone_row := HBoxContainer.new()
+    stone_row.add_theme_constant_override("separation", 8)
+    lower_content.add_child(stone_row)
+    var stone_art: Dictionary = OFFICIAL_ITEMS.ITEMS.get("stone_art", {})
+    var stone_name := "Премиум камень заточки" if premium else "Обычный камень заточки"
+    var stone_icon := _readonly_icon_item({
+        "name":stone_name,
+        "kind":"stone",
+        "img":str(stone_art.get("premiumStone" if premium else "normalStone", ""))
+    }, 68)
+    stone_icon.name = "PPAForgeOfficialStoneIcon"
+    stone_row.add_child(stone_icon)
+    var stone_text := VBoxContainer.new()
+    stone_text.alignment = BoxContainer.ALIGNMENT_CENTER
+    stone_row.add_child(stone_text)
+    stone_text.add_child(_label(stone_name, 13, GOLD))
+    stone_text.add_child(_label(("ПРЕМИУМ · ДО +7" if premium else "ОБЫЧНЫЙ · ДО +5")
+        + " · есть " + (str(stock) if stock is int else "—"), 10, SUB))
+    if rune:
+        stone_text.add_child(_label("Премиум руна · есть " +
+            (str(rune_stock) if rune_stock is int else "—"), 10, GOLD))
+    var table := GridContainer.new()
+    table.name = "PPAForgeStoneChanceTable"
+    table.columns = 2
+    table.add_theme_constant_override("v_separation", 0)
+    lower_content.add_child(table)
+    for n in range(7):
+        table.add_child(_label("+" + str(n + 1), 10, SUB))
+        var ordinary := str(normal[n]) + "%" if n < normal.size() else "—"
+        var enhanced := str(rune_rules[n]) + "%" if n < rune_rules.size() else "—"
+        var text_value := ordinary + " · с руной " + enhanced if n < 5 else \
+            ordinary + " · Премиум + руна " + enhanced
+        var line := _label(text_value, 10, GOLD if n == level else SUB)
+        line.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        table.add_child(line)
+    var action := _button("ЗАТОЧИТЬ · " + (str(chance) + "%" if chance >= 0 else "—"), not blocked)
+    action.name = "PPARealForgeEnhance" if not blocked else "PPAForgeEnhanceUnavailable"
+    action.custom_minimum_size.y = 43
+    action.add_theme_stylebox_override("normal", _style(Color("#342419"), Color("#A97831"), 5))
+    lower_content.add_child(action)
+    if not blocked:
+        var uid := str(selected.get("uid", ""))
+        var mode := _enhance_mode
+        var version := int(forge_state.get("version", 0))
+        action.pressed.connect(func():
+            if premium:
                 _request_real_enhancement(uid, mode, version)
-                confirm.queue_free())
-            confirm.canceled.connect(func(): confirm.queue_free())
-            confirm.popup_centered(Vector2i(430, 180)))
-    _body.add_child(action)
+            else:
+                var confirm := ConfirmationDialog.new()
+                confirm.dialog_text = ("При неудаче эпик потеряет уровень заточки. Продолжить?"
+                    if str(selected.get("rarity", "")) == "epic" else
+                    "При неудаче вещь может сгореть без восстановления. Продолжить?")
+                add_child(confirm)
+                confirm.confirmed.connect(func():
+                    _request_real_enhancement(uid, mode, version)
+                    confirm.queue_free())
+                confirm.canceled.connect(func(): confirm.queue_free())
+                confirm.popup_centered(Vector2i(430, 180)))
+    elif bool(selected.get("special", false)):
+        lower_content.add_child(_label("Особый питомец пока требует дополнительной серверной проверки.", 10, SUB))
+    elif not verified:
+        lower_content.add_child(_label("Ожидаем подтверждённые предметы и правила сервера PPA.", 10, SUB))
+
 
 # Original live PPA blacksmithFrame catalog (generated at build from its public
 # srcdoc). Inventory/balances are ONLY from the authenticated game-state save.
