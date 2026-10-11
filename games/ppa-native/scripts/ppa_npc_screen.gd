@@ -240,7 +240,8 @@ func _create_shell() -> void:
     _tab_scroller = ScrollContainer.new()
     _tab_scroller.name = "NpcScrollableTabs"
     _tab_scroller.custom_minimum_size.y = 45
-    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    # NPC navigation never scrolls sideways. All categories wrap into rows.
+    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     _tab_scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     _tab_scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     layout.add_child(_tab_scroller)
@@ -268,6 +269,9 @@ func _create_shell() -> void:
     _scroll.name = "NpcOnlyScroll"
     _scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     _scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    # Godot 4.6 SHOW_NEVER keeps touch/wheel scrolling but removes the
+    # right-hand draggable bar. Apply to every NPC, not just the smith.
+    _scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     layout.add_child(_scroll)
     var scroller_margin := MarginContainer.new()
     scroller_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -318,19 +322,21 @@ func _fit() -> void:
 func _layout_tabs() -> void:
     if _tabs == null or _tab_scroller == null:
         return
-    # The nine clan destinations are never hidden behind side swipes.
-    # Three rows in portrait, two in landscape. Other NPCs keep one
-    # horizontally scrollable category strip like the live Telegram UI.
+    # No sideways scrolling in ANY NPC: buttons wrap into visible rows.
+    # Forge remains 4+2, clan 3x3 portrait / 5x2 landscape; other NPCs
+    # adapt to available width instead of clipping the rightmost tabs.
     var clan_grid := service == "clan"
-    # The actual Telegram blacksmith has FOUR buttons on its first row and
-    # TWO buttons on the second row (verified against the original 2026-10-11
-    # gameplay recording), not a 3x2 grid.
     var forge_grid := service == "forge"
-    var columns := (5 if size.x > size.y else 3) if clan_grid else (4 if forge_grid else maxi(1, _tab_specs().size()))
+    var tab_count := maxi(1, _tab_specs().size())
+    var frame_width := _frame.offset_right - _frame.offset_left
+    var columns := (5 if size.x > size.y else 3) if clan_grid else (
+        4 if forge_grid else mini(tab_count,
+            4 if size.x > size.y else (3 if frame_width >= 500.0 else 2)))
     _tabs.columns = columns
-    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if (clan_grid or forge_grid) else ScrollContainer.SCROLL_MODE_AUTO
-    # Each row has a >=43px touch target and 5px spacing, plus safety space.
-    _tab_scroller.custom_minimum_size.y = 169.0 if (clan_grid and columns == 3) else (112.0 if clan_grid else (101.0 if forge_grid else 54.0))
+    _tab_scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    # Reserve enough height for the full tab grid without scroll controls.
+    var rows := ceili(float(tab_count) / float(columns))
+    _tab_scroller.custom_minimum_size.y = float(rows * 43 + maxi(0, rows - 1) * 3 + 12)
     _last_clan_layout = clan_grid
 
 func _outside(event: InputEvent) -> void:
@@ -723,6 +729,7 @@ func show_canonical_clan_storage(items: Array) -> void:
     var scroller := ScrollContainer.new()
     scroller.custom_minimum_size = Vector2(0, 260)
     scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     _body.add_child(scroller)
     var grid = VIRTUAL_GRID.new()
     grid.custom_minimum_size.x = 300
@@ -846,7 +853,10 @@ func _render() -> void:
             if service == "clan" and _tabs.columns == 3 and id == "clans":
                 b.text = "КЛАНЫ"
         else:
-            b.custom_minimum_size.x = maxf(105.0, float(str(entry.get("label", "")).length()) * 9.0)
+            var usable := _frame.offset_right - _frame.offset_left - 45.0
+            b.custom_minimum_size.x = maxf(70.0, floorf(usable / float(_tabs.columns)) - 6.0)
+            b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            b.add_theme_font_size_override("font_size", 9 if _tabs.columns >= 3 else 10)
         b.add_theme_color_override("font_color", GOLD if id == tab else SUB)
         b.add_theme_stylebox_override("normal", _style(Color("#44301D") if id == tab else Color("#191B1E"),
             GOLD if id == tab else Color("#66513B"), 6))
@@ -1592,7 +1602,7 @@ func _show_forge_pinned_inventory() -> void:
     clip.name = "PPAForgeBagScroller"
     clip.custom_minimum_size.y = 114.0 if size.x > size.y else 170.0
     clip.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    clip.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    clip.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _forge_inventory_host.add_child(clip)
     var grid := GridContainer.new()
@@ -2225,7 +2235,12 @@ func _show_original_forge_recipes() -> void:
     var all_known := balance != null
     var materials_grid := GridContainer.new()
     materials_grid.name = "PPAForgeOriginalMaterialCards"
-    materials_grid.columns = 2
+    # A two-column grid squeezed material descriptions into single letters
+    # on the real phone. Use one full-width row on narrow devices.
+    materials_grid.columns = 1 if _frame.size.x < 540.0 else 2
+    materials_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    materials_grid.custom_minimum_size.x = maxf(230.0,
+        _frame.offset_right - _frame.offset_left - 85.0)
     materials_grid.add_theme_constant_override("h_separation", 5)
     materials_grid.add_theme_constant_override("v_separation", 5)
     _body.add_child(materials_grid)
@@ -2250,6 +2265,10 @@ func _show_original_forge_recipes() -> void:
         elif material_name == "Перо Феникса":
             art_item["img"] = str(stone_art.get("feather", ""))
         var material_panel := PanelContainer.new()
+        material_panel.custom_minimum_size.x = maxf(125.0,
+            (materials_grid.custom_minimum_size.x - float(materials_grid.columns - 1) * 5.0)
+            / float(materials_grid.columns))
+        material_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         material_panel.add_theme_stylebox_override("panel",
             _style(Color("#10171B"), Color("#5E4B35"), 5))
         materials_grid.add_child(material_panel)
@@ -2260,8 +2279,14 @@ func _show_original_forge_recipes() -> void:
         var labels := VBoxContainer.new()
         labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         material_line.add_child(labels)
-        labels.add_child(_label(material_name + " ×" + str(required), 10, GOLD))
-        labels.add_child(_label("Есть " + str(owned) if owned != null else "Нет данных", 10, SUB))
+        var material_title := _label(material_name + " ×" + str(required), 10, GOLD)
+        material_title.name = "PPAForgeMaterialName"
+        material_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+        material_title.clip_text = true
+        labels.add_child(material_title)
+        var material_owned := _label("Есть " + str(owned) if owned != null else "Нет данных", 10, SUB)
+        material_owned.autowrap_mode = TextServer.AUTOWRAP_OFF
+        labels.add_child(material_owned)
     if not all_known:
         _body.add_child(_label("Не все остатки удалось прочитать из подтверждённого сохранения PPA.", 11, SUB))
     elif not enough:
@@ -2361,7 +2386,7 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     scrolling.custom_minimum_size.y = 296.0 if size.x >= 570.0 else 240.0
     scrolling.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scrolling.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    scrolling.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    scrolling.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     # Godot ScrollContainer owns touchscreen drag + kinetic scrolling.
     # Child canvas is IGNORE to keep touch input exclusively with scroll.
     shell.add_child(scrolling)
