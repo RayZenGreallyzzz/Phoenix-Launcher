@@ -6,7 +6,7 @@ extends RefCounted
 const ALLOWED_BASES := ["dungeon-1-20", "dungeon-21-40", "dungeon-41-60"]
 const MOB_EVENT_TYPES := [
     "mob-authority-snapshot", "mob-authority", "mob-position",
-    "mob-hp", "mob-dead", "mob-state"
+    "mob-hp", "mob-dead"
 ]
 
 static func allowed_base(base: String) -> bool:
