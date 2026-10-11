@@ -1094,8 +1094,15 @@ func _selected_details(products: Array, with_quantity: bool) -> void:
     var currency_code := str(item.get("currency", "gold")).to_lower()
     var suffix := " Gram" if currency_code == "gram" else (" PPA" if currency_code == "ppa" else " Gold")
     if item.has("limit"):
-        var left := maxi(0, int(item.get("limit",1)) - int(item.get("bought",0)))
-        _mini_row("Дневной лимит", "осталось " + str(left))
+        # Telegram keeps Black Market purchases in the character-specific
+        # blackMarket.bought dictionary. An absent counter is UNKNOWN, not 0.
+        var bought: Variant = item.get("bought", null)
+        if (bought is int or bought is float) and float(bought) >= 0.0 \
+                and floorf(float(bought)) == float(bought):
+            var left := maxi(0, int(item.get("limit", 1)) - int(bought))
+            _mini_row("Дневной лимит", "осталось " + str(left))
+        else:
+            _mini_row("Дневной лимит", "остаток не подтверждён сервером")
     _body.add_child(_label("Цена: " + str(item["price"]) + suffix, 15, GOLD) \
         if item.get("price", null) != null else _label("Цена ещё не подтверждена", 15, SUB))
     if bool(item.get("ppa_reference_only", false)):
@@ -1219,7 +1226,13 @@ func _show_blackmarket() -> void:
                     if not (stored is Dictionary):
                         continue
                     var offer: Dictionary = (stored as Dictionary).duplicate(true)
-                    offer["bought"] = bought.get(str(offer.get("id","")), 0)
+                    offer.erase("bought")
+                    var original_id := str(offer.get("id", ""))
+                    if bought.has(original_id):
+                        var confirmed: Variant = bought[original_id]
+                        if (confirmed is int or confirmed is float) and float(confirmed) >= 0.0 \
+                                and floorf(float(confirmed)) == float(confirmed):
+                            offer["bought"] = int(confirmed)
                     listed.append(offer)
                 personal = true
                 _mini_row("ОБНОВЛЕНИЕ АССОРТИМЕНТА", Time.get_datetime_string_from_unix_time(int(refresh_at / 1000.0)).replace("T"," "))
