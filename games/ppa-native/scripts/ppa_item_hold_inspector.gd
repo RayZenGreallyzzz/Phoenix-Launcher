@@ -82,6 +82,45 @@ func _text(text_value: String, tint: Color = GOLD, size: int = 12) -> Label:
     label.add_theme_color_override("font_color", tint)
     return label
 
+# Shared original PPA rarity palette. These are ONLY UI colors, not stats.
+const RARITY_COLORS := {
+    "common": Color("#C5CDD7"),
+    "uncommon": Color("#5FEC99"),
+    "rare": Color("#73B2FF"),
+    "epic": Color("#D18FFF"),
+    "legendary": Color("#FFD170")
+}
+const RARITY_CAPTIONS := {
+    "common":"Обычный", "uncommon":"Необычный",
+    "rare":"Редкий", "epic":"Эпический",
+    "legendary":"Легендарный"
+}
+
+static func rarity_key(item: Dictionary) -> String:
+    var raw := str(item.get("rarity", "common")).to_lower().strip_edges()
+    var synonyms := {
+        "обычный":"common", "необычный":"uncommon",
+        "редкий":"rare", "эпический":"epic", "легендарный":"legendary"
+    }
+    raw = str(synonyms.get(raw, raw))
+    return raw if RARITY_COLORS.has(raw) else "common"
+
+static func rarity_tint(item: Dictionary) -> Color:
+    return RARITY_COLORS[rarity_key(item)]
+
+static func _type_name(item: Dictionary) -> String:
+    var official := str(item.get("typeName", "")).strip_edges()
+    if not official.is_empty():
+        return official
+    var category := str(item.get("kind", ""))
+    return str({
+        "gear":"Снаряжение", "material":"Материал",
+        "stone":"Камень заточки", "rune":"Руна",
+        "pet":"Питомец", "accessory":"Аксессуар",
+        "grimoire":"Гримуар", "consumable":"Расходуемый предмет"
+    }.get(category, "Предмет"))
+
+
 func bind_button(button: Button, item: Dictionary, origin: String = "catalog",
         tap_action: Callable = Callable()) -> void:
     if item.is_empty():
@@ -173,35 +212,65 @@ func _finish_press() -> void:
 func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
     _open_item = item.duplicate(true)
     _open_origin = origin
+    var tier := rarity_key(item)
+    var tint := rarity_tint(item)
+    var surface := Color("#172026").lerp(tint, 0.065)
+    _panel.add_theme_stylebox_override("panel", _style(surface, tint))
     _panel.visible = true
     for child in _content.get_children():
         _content.remove_child(child)
         child.queue_free()
-    var title := _text(str(item.get("name", "Предмет PPA")).left(70), GOLD, 16)
+    var title := _text(str(item.get("name", "Предмет PPA")).left(70), tint, 16)
     title.name = "PPAInspectorName"
     _content.add_child(title)
-    var rarity := str(item.get("rarity", "—"))
-    var kind := str(item.get("typeName", item.get("kind", "Предмет")))
-    _content.add_child(_text("Редкость: " + rarity + " · " + kind, SUB))
+    var rarity_line := _text(
+        str(RARITY_CAPTIONS.get(tier, "Обычный")) + " · " + _type_name(item),
+        tint, 11)
+    rarity_line.name = "PPAInspectorRarity"
+    _content.add_child(rarity_line)
+
+    var separator := ColorRect.new()
+    separator.name = "PPAInspectorRarityDivider"
+    separator.color = tint.darkened(0.24)
+    separator.custom_minimum_size.y = 2
+    separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _content.add_child(separator)
+
     var qty: Variant = item.get("count", item.get("qty", null))
     if qty != null:
-        _content.add_child(_text("Количество: " + str(qty), GOLD))
-    var details: Array = ITEM_ATTRIBUTES.lines_for_item(item)
-    if details.is_empty():
-        _content.add_child(_text("Дополнительных характеристик в сохранении нет.", SUB))
+        _content.add_child(_text("Количество: " + str(qty), Color("#E6EBED")))
+
+    var descriptions := ITEM_ATTRIBUTES.description_lines_for_item(item)
+    var description_heading := _text("ОПИСАНИЕ", tint, 11)
+    description_heading.name = "PPAInspectorDescriptionHeading"
+    _content.add_child(description_heading)
+    if descriptions.is_empty():
+        var missing := _text("Описание не указано в данных PPA.", SUB, 11)
+        missing.name = "PPAInspectorMissingDescription"
+        _content.add_child(missing)
     else:
+        for source_line in descriptions:
+            var description := _text(str(source_line), Color("#EEF0ED"), 12)
+            description.name = "PPAInspectorDescription"
+            _content.add_child(description)
+
+    var details: Array = ITEM_ATTRIBUTES.stat_lines_for_item(item)
+    if not details.is_empty():
+        _content.add_child(_text("ХАРАКТЕРИСТИКИ", tint, 11))
         var scroll := ScrollContainer.new()
         scroll.name = "PPAInspectorAttributeScroll"
         scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
         scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-        scroll.custom_minimum_size.y = minf(190.0, float(details.size()) * 25.0 + 12.0)
+        scroll.custom_minimum_size.y = minf(168.0, float(details.size()) * 22.0 + 6.0)
         _content.add_child(scroll)
         var rows := VBoxContainer.new()
+        rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         scroll.add_child(rows)
         for line in details:
-            rows.add_child(_text(str(line), SUB))
+            rows.add_child(_text(str(line), Color("#E6EBED"), 11))
+
     if preview_only:
-        # Hold inspection never performs an action; releasing hides the card.
+        # This panel may only be read while holding, never used to spend.
         _content.add_child(_text("Отпусти палец, чтобы закрыть", SUB, 10))
         return
     var action: Dictionary = {}
