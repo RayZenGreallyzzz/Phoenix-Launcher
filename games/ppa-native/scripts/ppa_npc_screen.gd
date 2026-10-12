@@ -1040,6 +1040,10 @@ func _readonly_icon_item(item: Dictionary, side: float = 62.0,
     var glyph := str(item.get("icon", "◆"))
     var button := _button(glyph if not glyph.is_empty() and glyph.length() <= 4 else "◆")
     button.custom_minimum_size = Vector2(side, side)
+    # The original blacksmith overlays its own readable count badge.
+    # Suppress the shared icon loader's second quantity badge only here.
+    button.set_meta("ppa_suppress_icon_qty", origin == "resource")
+    button.clip_contents = true
     button.disabled = true
     button.tooltip_text = str(item.get("name", "Предмет PPA"))
     button.add_theme_stylebox_override("disabled", _style(Color("#14191F"), GOLD, 5))
@@ -1130,6 +1134,7 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             forge_choice.name = "NpcProduct_" + id.to_utf8_buffer().hex_encode()
             forge_choice.set_meta("ppa_original_offer_id", id)
             forge_choice.custom_minimum_size.y = 76.0
+            forge_choice.clip_contents = true
             forge_choice.custom_minimum_size.x = maxf(116.0,
                 (grid.custom_minimum_size.x - 16.0) / 2.0)
             forge_choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
