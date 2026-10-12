@@ -425,6 +425,9 @@ static func render(ui: Control) -> void:
     var state: Dictionary = ui.get("auction_state")
     if not bool(ui.call("_owns_verified_state",state)):
         _section(body,"ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ","Аукцион показывает только подтверждённые данные персонажа PPA. Без серверного доступа торговля закрыта.")
+        var locked := _button("КУПИТЬ / ПРОДАТЬ · НУЖЕН СЕРВЕР",false)
+        locked.name = "ServerActionLocked"
+        body.add_child(locked)
         return
     var wide := ui.size.x >= 680
     var content: BoxContainer = HBoxContainer.new() if wide else VBoxContainer.new()
