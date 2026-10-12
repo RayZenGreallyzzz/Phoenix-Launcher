@@ -24,6 +24,8 @@ var _temporary := false
 var _open_item: Dictionary = {}
 var _open_origin := ""
 var _canvas_proxy: Button
+var _last_pointer_down := Vector2.ZERO
+var _touch_pointer_index := -1
 
 func _ready() -> void:
     name = "PPAItemHoldInspector"
@@ -107,12 +109,19 @@ func _begin_press(button: Button, item: Dictionary, origin: String,
     _held_item = item.duplicate(true)
     _held_origin = origin
     _tap_action = tap_action
-    _press_start = get_viewport().get_mouse_position()
+    _press_start = _last_pointer_down
     _moved = false
     _temporary = false
     _timer.start()
 
 func _input(event: InputEvent) -> void:
+    # Input is delivered before Button GUI signals on real Android, so record
+    # the true screen-touch origin rather than stale emulated mouse position.
+    if event is InputEventScreenTouch and event.pressed:
+        _last_pointer_down = event.position
+        _touch_pointer_index = event.index
+    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed             and _touch_pointer_index < 0:
+        _last_pointer_down = event.position
     if _held_source == null:
         return
     if event is InputEventScreenDrag:
@@ -121,9 +130,11 @@ func _input(event: InputEvent) -> void:
     elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
         if (event.position - _press_start).length() > DRAG_THRESHOLD:
             _cancel_press()
-    elif event is InputEventScreenTouch and not event.pressed:
+    elif event is InputEventScreenTouch and not event.pressed and (
+            _touch_pointer_index < 0 or event.index == _touch_pointer_index):
+        _touch_pointer_index = -1
         _finish_press()
-    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT             and not event.pressed and _touch_pointer_index < 0:
         _finish_press()
 
 func _hold_timeout() -> void:
