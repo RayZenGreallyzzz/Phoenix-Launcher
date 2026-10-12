@@ -4,6 +4,7 @@ signal item_chosen(key: String)
 const SLOT_COUNT := 100
 const PPA_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 var _icon_loader: Node
+var item_inspector: Control
 const GEAR := ["weapon", "helmet", "armor", "gloves", "legs", "boots", "ring", "necklace", "pants", "shield", "amulet"]
 const MATERIAL := ["stone", "sharpening", "upgrade_stone", "enhancement", "sharpening_stone"]
 var entries: Dictionary = {}
@@ -73,7 +74,13 @@ func _slot(item: Dictionary, key: String, index_label: String) -> Button:
     b.add_theme_stylebox_override("normal", box)
     b.add_theme_stylebox_override("disabled", box)
     b.add_theme_color_override("font_disabled_color", Color("#777C7C"))
-    if valid:
+    if item_inspector != null and not item.is_empty():
+        # Even a stone that cannot be sold or equipped can be inspected.
+        b.disabled = false
+        item_inspector.bind_button(b, item,
+            "equipped" if key.begins_with("equip:") else "bag",
+            Callable(self, "_emit_item_chosen").bind(key) if valid else Callable())
+    elif valid:
         b.pressed.connect(func(): item_chosen.emit(key))
     # Reuse the exact same approved asset resolver as the hero's bag.
     # No screenshots, demo inventory or extra per-slot network service.
@@ -81,8 +88,13 @@ func _slot(item: Dictionary, key: String, index_label: String) -> Button:
         _icon_loader.bind_button(item, str(item.get("classKey", "")), b)
     return b
 
+func _emit_item_chosen(key: String) -> void:
+    item_chosen.emit(key)
+
 func _draw_content() -> void:
     for old in get_children():
+        if old == _icon_loader:
+            continue
         remove_child(old)
         old.queue_free()
     name = "NpcInventoryPicker"
@@ -91,7 +103,7 @@ func _draw_content() -> void:
     scroller.name = "NpcItemChoiceScroll"
     scroller.custom_minimum_size.y = 255
     scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     add_child(scroller)
     grid = GridContainer.new()
     grid.name = "NpcItemChoiceGrid"
