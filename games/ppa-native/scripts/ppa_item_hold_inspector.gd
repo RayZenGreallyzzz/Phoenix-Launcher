@@ -158,6 +158,22 @@ func _begin_press(button: Button, item: Dictionary, origin: String,
     _timer.start()
 
 func _input(event: InputEvent) -> void:
+    # A pinned details card is dismissed by the next touch ANYWHERE, without
+    # adding a large close button. The equip/unequip button is the one
+    # exception: allow it to receive a real tap and perform the verified action.
+    if is_open() and not _temporary:
+        var tapped := false
+        var position := Vector2.ZERO
+        if event is InputEventScreenTouch and event.pressed:
+            tapped = true
+            position = event.position
+        elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+            tapped = true
+            position = event.position
+        if tapped and not _is_equipment_button_at(position):
+            dismiss()
+            get_viewport().set_input_as_handled()
+            return
     # Input is delivered before Button GUI signals on real Android, so record
     # the true screen-touch origin rather than stale emulated mouse position.
     if event is InputEventScreenTouch and event.pressed:
@@ -179,6 +195,14 @@ func _input(event: InputEvent) -> void:
         _finish_press()
     elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT             and not event.pressed and _touch_pointer_index < 0:
         _finish_press()
+
+func _is_equipment_button_at(point: Vector2) -> bool:
+    if _content == null:
+        return false
+    var gear_button := _content.find_child("PPAInspectorEquipmentAction", true, false) as Button
+    return gear_button != null and gear_button.is_visible_in_tree() \
+        and not gear_button.disabled and gear_button.get_global_rect().has_point(point)
+
 
 func _hold_timeout() -> void:
     if _held_source == null or not is_instance_valid(_held_source) or _moved:
@@ -294,11 +318,9 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
                 dismiss())
         if button.disabled:
             _content.add_child(_text("Действие доступно после подтверждения сервера.", SUB, 10))
-    var close := Button.new()
-    close.name = "PPAInspectorClose"
-    close.text = "✕ ЗАКРЫТЬ"
-    close.pressed.connect(dismiss)
-    _content.add_child(close)
+    var hint := _text("Коснись экрана, чтобы закрыть", SUB, 10)
+    hint.name = "PPAInspectorTapToDismiss"
+    _content.add_child(hint)
 
 func dismiss() -> void:
     if _timer != null:
