@@ -582,17 +582,18 @@ func _run() -> void:
         quit(1)
         return
     menu._npc_screen.apply_native_auction(auction_packet)
-    var picker = menu._npc_screen.find_child("PPARealAuctionGearPicker", true, false) as OptionButton
-    if picker == null or picker.item_count != 100:
-        push_error("PPA_AUCTION_PICKER: signed 100-item UID selector missing")
+    var picker = menu._npc_screen.find_child("PPARealAuctionGearGrid", true, false) as GridContainer
+    if picker == null or picker.get_child_count() != 100:
+        push_error("PPA_AUCTION_PICKER: signed 100-item inventory grid missing")
         quit(1)
         return
-    if str(picker.get_item_metadata(0)) != "qa_original_0" or str(picker.get_item_metadata(99)) != "qa_original_99":
+    var first_item = menu._npc_screen.find_child("PPARealAuctionSellUID_qa_original_0", true, false) as Button
+    var last_item = menu._npc_screen.find_child("PPARealAuctionSellUID_qa_original_99", true, false) as Button
+    if first_item == null or last_item == null or last_item.disabled:
         push_error("PPA_AUCTION_PICKER: real gear UID or last item lost")
         quit(1)
         return
-    picker.select(99)
-    menu._npc_screen._auction_sell_uid_changed(99, picker)
+    last_item.pressed.emit()
     if menu._npc_screen._auction_sell_uid != "qa_original_99":
         push_error("PPA_AUCTION_PICKER: actual UID selection not retained")
         quit(1)
