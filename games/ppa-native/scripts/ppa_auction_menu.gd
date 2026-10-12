@@ -298,10 +298,13 @@ static func _sale_currency_changed(index: int, ui: Control, preview: Label) -> v
     ui.call("_set_currency",index)
     preview.text = "После комиссии 10%: " + str(snappedf(float(ui.get("_asking_price"))*0.9,0.01)) + " " + str(ui.get("_asking_currency"))
 
-static func _sell(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
-    _section(main,"ПРОДАТЬ","Выбери настоящий предмет из сохранённой сумки PPA.")
-    var items: Array = state.get("bag",[])
-    main.add_child(_label("Торговые места: " + str(state.get("mine",[]).size()) + " / " + str(state.get("maxSellSlots",0)),11,MUTED))
+static func _sell(ui: Control, main: VBoxContainer, state: Dictionary, verified: bool) -> void:
+    _section(main,"ПРОДАТЬ","Выбери вещь из сумки. Сделка доступна только после подтверждения общим сервером.")
+    var items: Array = state.get("bag",[]) if verified else []
+    if verified:
+        main.add_child(_label("Торговые места: " + str(state.get("mine",[]).size()) + " / " + str(state.get("maxSellSlots",0)),11,MUTED))
+    else:
+        main.add_child(_label("Торговые места: — / — · ждём сервер PPA",11,MUTED))
     var grid := GridContainer.new()
     grid.columns = 4 if ui.size.x < 520 else 6
     grid.name = "PPARealAuctionGearGrid"
@@ -334,8 +337,17 @@ static func _sell(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
     if not found:
         chosen = first
         ui.set("_auction_sell_uid",chosen)
-    if chosen.is_empty():
-        main.add_child(_label("Нет подходящей экипировки для серверной продажи. Стопки ресурсов требуют отдельного защищённого контракта.",11,MUTED))
+    if not verified:
+        # An empty inventory grid is a layout placeholder, NOT player items.
+        # Never invent owned gear or enable operations without a signed state.
+        for cell in range(20):
+            var empty := _button("·",false)
+            empty.name = "PPAAuctionOfflineEmptySlot_" + str(cell)
+            empty.custom_minimum_size = Vector2(48,48)
+            grid.add_child(empty)
+        main.add_child(_label("Сетка выбора готова. Предметы появятся после подключения аукциона к сохранению персонажа.",11,MUTED))
+    elif chosen.is_empty():
+        main.add_child(_label("Нет доступной для продажи экипировки. Продажа стопок ресурсов требует отдельной защищённой операции сервера.",11,MUTED))
     else:
         for item in items:
             if item is Dictionary and str(item.get("uid","")) == chosen:
@@ -363,7 +375,7 @@ static func _sell(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
     price.value_changed.connect(_sale_price_changed.bind(ui,preview))
     currencies.item_selected.connect(_sale_currency_changed.bind(ui,preview))
     var actions: Array = ui.get("auction_actions")
-    var enabled: bool = actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not chosen.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
+    var enabled: bool = verified and actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not chosen.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
     var place := _button("ВЫСТАВИТЬ ЛОТ",enabled)
     place.name = "PPARealAuctionPlace"
     place.pressed.connect(Callable(ui,"_auction_place_selected"))
@@ -423,12 +435,13 @@ static func render(ui: Control) -> void:
     refresh.pressed.connect(func(): ui.emit_signal("authoritative_state_requested","auction"))
     body.add_child(refresh)
     var state: Dictionary = ui.get("auction_state")
-    if not bool(ui.call("_owns_verified_state",state)):
-        _section(body,"ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ","Аукцион показывает только подтверждённые данные персонажа PPA. Без серверного доступа торговля закрыта.")
-        var locked := _button("КУПИТЬ / ПРОДАТЬ · НУЖЕН СЕРВЕР",false)
+    var verified: bool = bool(ui.call("_owns_verified_state",state))
+    if not verified:
+        _section(body,"СЕРВЕР АУКЦИОНА ПОКА НЕДОСТУПЕН",
+            "Вкладки, категории, поиск и окно продажи работают для просмотра. Настоящие лоты и предметы загрузятся после подключения PPA.")
+        var locked := _button("ПОКУПКИ И ПРОДАЖИ · ОЖИДАЕМ СЕРВЕР",false)
         locked.name = "ServerActionLocked"
         body.add_child(locked)
-        return
     var wide := ui.size.x >= 680
     var content: BoxContainer = HBoxContainer.new() if wide else VBoxContainer.new()
     content.name = "PPAAuctionLayout"
@@ -440,7 +453,7 @@ static func render(ui: Control) -> void:
         sidebar.custom_minimum_size.x = 160
     content.add_child(sidebar)
     _make_categories(ui,sidebar,not wide)
-    var wallet: Dictionary = state.get("wallet",{})
+    var wallet: Dictionary = state.get("wallet",{}) if verified else {}
     _coin_line(sidebar,"PPA",wallet.get("ppa",null),"ppa")
     _coin_line(sidebar,"Gram",wallet.get("gram",null),"gram")
     var main := VBoxContainer.new()
@@ -450,12 +463,21 @@ static func render(ui: Control) -> void:
     content.add_child(main)
     var tab := str(ui.get("tab"))
     if tab == "all":
-        _section(main,"ПОКУПКА","Только серверные лоты · цена за штуку")
+        _section(main,"ПОКУПКА","Общий рынок PPA · цены за штуку")
         _filters(ui,main)
-        _lots(ui,main,state.get("lots",[]),false)
+        if verified:
+            _lots(ui,main,state.get("lots",[]),false)
+        else:
+            _section(main,"ОБЪЯВЛЕНИЯ ВРЕМЕННО НЕДОСТУПНЫ",
+                "Поиск и фильтры готовы. Не показываем выдуманные лоты, пока сервер не подтвердил объявления.")
     elif tab == "sell":
-        _sell(ui,main,state)
+        _sell(ui,main,state,verified)
     elif tab == "mine":
-        _mine(ui,main,state)
+        if verified:
+            _mine(ui,main,state)
+        else:
+            _section(main,"МОИ ЛОТЫ","Здесь появятся активные продажи, возврат непроданных вещей и выручка.")
+            _section(main,"ИСТЁКШИЕ ЛОТЫ","Сведения появятся после подключения сервера.")
+            _section(main,"ВЫРУЧКА ОТ ПРОДАЖ","Неизвестный баланс не заменяем нулём.")
     else:
         _section(main,"ВЫБЕРИ РАЗДЕЛ","Купить · Продать · Мои лоты")

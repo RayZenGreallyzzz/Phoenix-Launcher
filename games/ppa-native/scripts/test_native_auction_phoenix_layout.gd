@@ -27,7 +27,23 @@ func _run() -> void:
     npc.auction_action_requested.connect(func(fields: Dictionary): sent.append(fields.duplicate(true)))
     npc.open_npc({"service":"auction","name":"Аукционист"})
     check(npc._body.find_child("PPAAuctionPhoenixBanner",true,false)!=null,"Phoenix banner missing")
-    check(npc._body.find_child("PPARealAuctionPlace",true,false)==null,"Unsigned sell action unexpectedly shown")
+    check(npc._body.find_child("PPAAuctionCategoryGrid",true,false)!=null,
+        "Offline auction must still show item categories")
+    check(npc._body.find_child("PPAAuctionSearch",true,false)!=null,
+        "Offline auction must still show search and filters")
+    npc._select_tab("sell")
+    var offline_grid := npc._body.find_child("PPARealAuctionGearGrid",true,false) as GridContainer
+    var offline_place := npc._body.find_child("PPARealAuctionPlace",true,false) as Button
+    check(offline_grid!=null and offline_grid.get_child_count()>=20,
+        "Offline auction hides its sale inventory layout")
+    check(offline_place!=null and offline_place.disabled,
+        "Offline auction must never enable item listing")
+    npc._select_tab("mine")
+    check(npc._body.find_child("PPAAuctionMainPanel",true,false)!=null,
+        "Offline auction hides the my-lots tab")
+    check(npc._body.find_child("ServerActionLocked",true,false)!=null,
+        "Unsigned auction must explicitly lock server actions")
+    npc._select_tab("all")
     var state := {
         "connected":true,"self":{"id":OWNER},"version":17,"settlementEnabled":true,
         "wallet":{"ppa":551,"gram":3},"commissionPct":10,"maxSellSlots":3,
