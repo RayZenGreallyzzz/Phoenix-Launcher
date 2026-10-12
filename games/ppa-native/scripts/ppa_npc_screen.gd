@@ -30,6 +30,7 @@ const LIVE_FORGE = preload("res://scripts/ppa_forge_catalog_generated.gd")
 const STORAGE = preload("res://scripts/ppa_storage_contract.gd")
 const VIRTUAL_GRID = preload("res://scripts/ppa_virtual_storage_grid.gd")
 const ITEM_PICKER = preload("res://scripts/ppa_inventory_picker.gd")
+const ITEM_HOLD = preload("res://scripts/ppa_item_hold_inspector.gd")
 const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 const OFFICIAL_ITEMS = preload("res://scripts/ppa_item_catalog_generated.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
@@ -124,6 +125,7 @@ var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
 var _preview_icons: Node
+var _item_hold: Control
 var _shade: ColorRect
 var _frame: PanelContainer
 var _heading: Label
@@ -143,6 +145,11 @@ func _ready() -> void:
     _preview_icons = ORIGINAL_ITEM_ICONS.new()
     _preview_icons.name = "PPAOriginalNpcProductIconLoader"
     add_child(_preview_icons)
+    # Shared overlay stays outside scrolled NPC content: long-held items
+    # remain readable without causing their grid to expand or reflow.
+    _item_hold = ITEM_HOLD.new()
+    add_child(_item_hold)
+    _item_hold.resolve_action = Callable(self, "_inspector_equipment_action")
     visible = false
     resized.connect(_fit)
 
@@ -393,6 +400,8 @@ func open_npc(source: Dictionary) -> void:
     if not SERVICES.has(requested):
         push_warning("Unknown PPA NPC service: " + requested)
         return
+    if _item_hold != null:
+        _item_hold.dismiss()
     npc = source.duplicate(true)
     service = requested
     tab = _default_tab(service)
@@ -448,6 +457,8 @@ func open_npc(source: Dictionary) -> void:
     authoritative_state_requested.emit(service)
 
 func close_npc() -> void:
+    if _item_hold != null:
+        _item_hold.dismiss()
     visible = false
     authoritative.clear()
     has_verified_state = false
@@ -1019,7 +1030,8 @@ func _item_picture(path: String, side: float = 64.0) -> TextureRect:
         p.texture = load(path) as Texture2D
     return p
 
-func _readonly_icon_item(item: Dictionary, side: float = 62.0) -> Button:
+func _readonly_icon_item(item: Dictionary, side: float = 62.0,
+        origin: String = "catalog") -> Button:
     # One icon resolver for inventory, warehouse, forge and arena. This is
     # not a purchase button and never transmits anything to PPA.
     # Use the source item's own glyph if a verified Telegram image is absent.
@@ -1037,6 +1049,8 @@ func _readonly_icon_item(item: Dictionary, side: float = 62.0) -> Button:
         button.text = ""
     elif _preview_icons != null:
         _preview_icons.bind_button(item, _forge_player_class() if service == "forge" else "", button)
+    if _item_hold != null and origin != "decorative" and not item.is_empty():
+        _item_hold.bind_button(button, item, origin)
     return button
 
 func _readonly_owned_grid(title: String, items: Array, limit: int = 24) -> void:
@@ -1122,7 +1136,13 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
                 _style(Color("#13191C"), GOLD if id == selected_id else Color("#5E4B35"), 5))
             forge_choice.add_theme_stylebox_override("hover",
                 _style(Color("#29251D"), GOLD, 5))
-            forge_choice.pressed.connect(_select_item.bind(id))
+            # The outer card is the touch target: short tap still selects a
+            # recipe, 1-second hold only previews its real attributes.
+            if _item_hold != null:
+                _item_hold.bind_button(forge_choice, item, "catalog",
+                    Callable(self, "_select_item").bind(id))
+            else:
+                forge_choice.pressed.connect(_select_item.bind(id))
             grid.add_child(forge_choice)
             var product_line := HBoxContainer.new()
             product_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1133,7 +1153,7 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             product_line.offset_bottom = -3.0
             product_line.add_theme_constant_override("separation", 5)
             forge_choice.add_child(product_line)
-            var product_icon := _readonly_icon_item(item, 48)
+            var product_icon := _readonly_icon_item(item, 48, "decorative")
             product_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
             product_line.add_child(product_icon)
             var captions := VBoxContainer.new()
@@ -1629,7 +1649,8 @@ func _show_forge_pinned_inventory() -> void:
                 _style(Color("#0B1114"), Color("#5B472D"), 1))
             square = blank
         else:
-            var real_icon := _readonly_icon_item(item, cell)
+            var source_kind := "resource" if bool(item.get("ppa_native_virtual", false)) else "bag"
+            var real_icon := _readonly_icon_item(item, cell, source_kind)
             real_icon.add_theme_stylebox_override("disabled",
                 _style(Color("#151A20"), SHOP.rarity_tint(str(item.get("rarity", "common"))), 1))
             square = real_icon
@@ -1754,6 +1775,43 @@ func _request_real_enhancement(uid: String, mode: String, version: int) -> void:
         return
     forge_action_requested.emit({"action":"enhance", "uid":uid, "stone":mode, "version":version})
 
+func _inspector_equipment_action(item: Dictionary, origin: String) -> Dictionary:
+    # Present equip/unequip ONLY for real gear in the signed PPA bag or
+    # currently worn slot. A virtual stone/material never gets these actions.
+    if bool(item.get("ppa_native_virtual", false)) or origin not in ["bag", "equipped"]:
+        return {}
+    var uid := str(item.get("uid", ""))
+    var slot := str(item.get("slot", ""))
+    if uid.is_empty() or slot not in [
+        "weapon", "helmet", "armor", "gloves", "ring", "legs", "boots",
+        "necklace", "artifact", "cloak", "wings", "pet", "shield", "amulet", "pants"
+    ]:
+        return {}
+    var signed := _owns_verified_state(inventory_state)
+    var allowed := signed and not inventory_busy and not inventory_pending
+    var version := int(inventory_state.get("version", 0))
+    if origin == "bag":
+        var found := false
+        if signed:
+            for saved in inventory_state.get("bag", []):
+                if saved is Dictionary and str(saved.get("uid", "")) == uid:
+                    found = true
+                    break
+        return {
+            "label":"НАДЕТЬ",
+            "allowed":allowed and found and inventory_actions.has("equip"),
+            "callback":Callable(self, "_request_original_equipment_move").bind("equip", uid, version)
+        }
+    var equipped: Variant = inventory_state.get("equipped", {})
+    var current: Variant = (equipped as Dictionary).get(slot, null) if equipped is Dictionary else null
+    var matches := current is Dictionary and str(current.get("uid", "")) == uid
+    return {
+        "label":"СНЯТЬ",
+        "allowed":allowed and matches and inventory_actions.has("unequip"),
+        "callback":Callable(self, "_request_original_equipment_move").bind("unequip", slot, version)
+    }
+
+
 func _request_original_equipment_move(action: String, target: String, version: int) -> void:
     if not visible or service != "forge" or inventory_busy or inventory_pending \
         or not inventory_actions.has(action) or not _owns_verified_state(inventory_state) \
@@ -1796,6 +1854,9 @@ func _show_shared_equipment_tools() -> void:
         if not (gear is Dictionary):
             continue
         var name_text := str((gear as Dictionary).get("name","Вещь")).left(24)
+        var worn_item: Dictionary = (gear as Dictionary).duplicate(true)
+        worn_item["slot"] = str(slot)
+        grid.add_child(_readonly_icon_item(worn_item, 50, "equipped"))
         var b := _button("СНЯТЬ · " + name_text, inventory_actions.has("unequip") and action_allowed)
         b.name = "PPARealUnequip_" + str(slot)
         b.pressed.connect(_request_original_equipment_move.bind("unequip", str(slot), server_version))
@@ -2043,11 +2104,21 @@ func _show_authoritative_enhancement() -> void:
     stone_icon.name = "PPAForgeOfficialStoneIcon"
     stone_row.add_child(stone_icon)
     var stone_text := VBoxContainer.new()
+    stone_text.name = "PPAForgeStoneDetails"
     stone_text.alignment = BoxContainer.ALIGNMENT_CENTER
+    stone_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    stone_text.custom_minimum_size.x = maxf(155.0,
+        _frame.offset_right - _frame.offset_left - 175.0)
     stone_row.add_child(stone_text)
-    stone_text.add_child(_label(stone_name, 13, GOLD))
-    stone_text.add_child(_label(("ПРЕМИУМ · ДО +7" if premium else "ОБЫЧНЫЙ · ДО +5")
-        + " · есть " + (str(stock) if stock is int else "—"), 10, SUB))
+    var stone_title := _label(stone_name, 13, GOLD)
+    stone_title.name = "PPAForgeStoneName"
+    stone_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+    stone_title.clip_text = true
+    stone_text.add_child(stone_title)
+    var stone_description := _label(("ПРЕМИУМ · ДО +7" if premium else "ОБЫЧНЫЙ · ДО +5")
+        + " · есть " + (str(stock) if stock is int else "—"), 10, SUB)
+    stone_description.autowrap_mode = TextServer.AUTOWRAP_OFF
+    stone_text.add_child(stone_description)
     if rune:
         stone_text.add_child(_label("Премиум руна · есть " +
             (str(rune_stock) if rune_stock is int else "—"), 10, GOLD))
