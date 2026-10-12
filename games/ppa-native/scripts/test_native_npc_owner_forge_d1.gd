@@ -158,6 +158,59 @@ func _run() -> void:
     var first_offer := forge_cards.get_child(0) as Control
     check(first_offer != null and first_offer.custom_minimum_size.x >= 116.0,
         "Telegram forge offer tiles need stable minimum widths")
+    # Android UX: grab an actual item card or empty recipe space and drag
+    # UP; content moves UP without dragging any hidden side scrollbar.
+    await process_frame
+    check(npc._scroll.scroll_deadzone >= 4000,
+        "Blacksmith must own a direct finger scroll instead of double-scrolling")
+    var scroll_max := npc._scroll.get_v_scroll_bar().max_value - npc._scroll.get_v_scroll_bar().page
+    check(scroll_max > 100.0, "Forge must have a scrollable original recipe list")
+    npc._scroll.scroll_vertical = 0
+    var list_point := npc._scroll.get_global_rect().get_center()
+    check(npc._forge_target_at(list_point) == npc._scroll,
+        "Dragging inside the forge recipe view did not target its long list")
+    var pointer_down := InputEventScreenTouch.new()
+    pointer_down.index = 0
+    pointer_down.pressed = true
+    pointer_down.position = list_point
+    npc._input(pointer_down)
+    var pointer_drag := InputEventScreenDrag.new()
+    pointer_drag.index = 0
+    pointer_drag.position = list_point - Vector2(0, 125)
+    pointer_drag.velocity = Vector2(0, -700)
+    npc._input(pointer_drag)
+    check(npc._scroll.scroll_vertical > 50,
+        "Swiping upwards in forge list must move content without side slider")
+    var pointer_up := InputEventScreenTouch.new()
+    pointer_up.index = 0
+    pointer_up.pressed = false
+    pointer_up.position = pointer_drag.position
+    npc._input(pointer_up)
+    check(npc._forge_swipe == null and npc._forge_finger < 0,
+        "Forge finger drag was not released")
+    npc._forge_fling = null
+    npc._scroll.scroll_vertical = 0
+    var bag_target := npc._forge_inventory_host.find_child(
+        "PPAForgeBagScroller", true, false) as ScrollContainer
+    check(bag_target != null and bag_target.scroll_deadzone >= 4000,
+        "Bag and recipe need separate direct vertical swipe areas")
+    var bag_point := bag_target.get_global_rect().get_center()
+    check(npc._forge_target_at(bag_point) == bag_target,
+        "Dragging the forge inventory must target the bag, not side scrolling")
+    npc._input(pointer_down)
+    # Reissue with the actual bag coordinate: preserve the already selected
+    # target only for this deliberate drag.
+    npc._forge_finish_swipe()
+    pointer_down.position = bag_point
+    npc._input(pointer_down)
+    pointer_drag.position = bag_point - Vector2(0, 120)
+    npc._input(pointer_drag)
+    check(bag_target.scroll_vertical > 0 and npc._scroll.scroll_vertical == 0,
+        "Bag swipe must not move the selected recipe list under it")
+    pointer_up.position = pointer_drag.position
+    npc._input(pointer_up)
+    npc._forge_fling = null
+    bag_target.scroll_vertical = 0
     # Rarity must be visible on the actual 48x48 item square AND title,
     # not just in the product details popup: the old catalog used a
     # brown rectangle regardless of item tier.
