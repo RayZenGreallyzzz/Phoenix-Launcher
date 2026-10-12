@@ -111,6 +111,16 @@ func _run() -> void:
     check(inspector.find_child("PPAInspectorEquipmentAction", true, false) == null
         and has_label(inspector, "Количество: 7"),
         "Resource mini menu must show count without an Equip/Remove command")
+    await process_frame
+    await process_frame
+    var mini_popup := inspector.find_child("PPAItemInspectorPopup", true, false) as PanelContainer
+    var popup_center := inspector.find_child("PPAItemInspectorCenter", true, false) as CenterContainer
+    check(mini_popup != null and popup_center != null and
+        mini_popup.size.y > 70.0 and mini_popup.size.y < 300.0,
+        "Android recording: short item tooltip must use content height, not a fixed 400px empty panel")
+    check(absf(mini_popup.get_global_rect().get_center().y -
+        popup_center.get_global_rect().get_center().y) < 6.0,
+        "Compact inspector popup must remain centered on the game viewport")
 
     # The virtual storage canvas must support the same hold interaction
     # WITHOUT allocating 500 Button nodes or blocking finger-scroll.
