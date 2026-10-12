@@ -65,6 +65,43 @@ static func lines_for_item(item: Dictionary) -> Array:
             seen[entry] = true
     return lines
 
+# For the compact tooltip, description has a dedicated section.
+# Original PPA uses desc for forge recipes, useText for resources, and
+# description/effectText for some equipped pieces. Never derive bonuses
+# from rarity/name: show only the item's real source text.
+static func description_lines_for_item(item: Dictionary) -> Array:
+    var output: Array = []
+    var seen := {}
+    for field in ["description", "desc", "useText", "skillDescription", "effectText"]:
+        var raw: Variant = item.get(field, null)
+        if not (raw is String):
+            continue
+        var entry := (raw as String).strip_edges().left(480)
+        if not entry.is_empty() and not seen.has(entry):
+            output.append(entry)
+            seen[entry] = true
+    if output.is_empty():
+        for field in ["bonusText", "valueText"]:
+            var value: Variant = item.get(field, null)
+            if not (value is String):
+                continue
+            var effect := (value as String).strip_edges().left(400)
+            if not effect.is_empty() and not seen.has(effect):
+                output.append(effect)
+                seen[effect] = true
+    return output
+
+static func stat_lines_for_item(item: Dictionary) -> Array:
+    var output: Array = []
+    var seen := {}
+    _append_values(item, output, seen)
+    for field in NESTED:
+        var raw: Variant = item.get(field, null)
+        if raw is Dictionary:
+            _append_values(raw as Dictionary, output, seen)
+    return output
+
+
 static func resolved_money_value(save: Dictionary, aliases: Array) -> Variant:
     # Original PPA save formats sometimes wrap player state in inventory
     # while the newer registered D1 save keeps values on its root.

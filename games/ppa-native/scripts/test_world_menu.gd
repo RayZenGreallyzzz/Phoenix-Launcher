@@ -21,6 +21,7 @@ signal merchant_retry_requested
 signal forge_action_requested(fields: Dictionary)
 signal forge_retry_requested
 signal inventory_action_requested(fields: Dictionary)
+signal character_inventory_requested
 signal inventory_retry_requested
 signal personal_storage_action_requested(fields: Dictionary)
 signal personal_storage_retry_requested
@@ -112,6 +113,8 @@ func apply_native_forge(payload: Dictionary) -> void:
 func apply_native_inventory(payload: Dictionary) -> void:
     if _npc_screen != null:
         _npc_screen.apply_native_inventory(payload)
+    if _character_screen != null:
+        _character_screen.apply_native_inventory(payload)
 
 func apply_native_personal_storage(payload: Dictionary) -> void:
     if _npc_screen != null:
@@ -156,6 +159,8 @@ func set_personal_storage_notice(message: String, pending: bool) -> void:
 func set_inventory_loading(busy: bool, pending: bool) -> void:
     if _npc_screen != null:
         _npc_screen.set_inventory_loading(busy, pending)
+    if _character_screen != null:
+        _character_screen.set_inventory_loading(busy, pending)
 
 func set_inventory_notice(message: String, pending: bool) -> void:
     if _npc_screen != null:
@@ -222,6 +227,8 @@ func _ready() -> void:
         _character_screen.close_requested.connect(close_menu)
         _character_screen.select_item_requested.connect(_open_item)
         _character_screen.unequip_requested.connect(_on_character_unequip)
+        _character_screen.inventory_action_requested.connect(
+            func(fields: Dictionary): inventory_action_requested.emit(fields))
         _character_screen.refresh_readonly_save_requested.connect(
             func(): force_refresh_readonly_save_requested.emit()
         )
@@ -540,6 +547,7 @@ func open_page(page: String) -> void:
         # Native Godot owns touch, page navigation and scroll on all devices.
         _background.visible = true
         _character_screen.open_index(source_page)
+        character_inventory_requested.emit()
         # Use the authenticated save already prefetched on city entry.
         # The world adapter checks freshness/identity before any new GET.
         # The explicit refresh button and successful writes bypass this cache.

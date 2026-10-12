@@ -19,6 +19,7 @@ var _stride := 53.0
 var _host: ScrollContainer
 var _last_visible := Vector2i.ZERO
 var _verified_items: Array = []
+var item_inspector: Control
 var _icon_cache: Dictionary = {}
 var _missing_icon_cache: Dictionary = {}
 
@@ -28,7 +29,11 @@ func configure(kind: String, host: ScrollContainer, desired_columns: int = 4) ->
     columns = maxi(1, desired_columns)
     _host = host
     name = "NpcStorageGrid_" + kind
-    mouse_filter = Control.MOUSE_FILTER_IGNORE
+    # PASS lets native ScrollContainer keep vertical kinetic swipes, while
+    # this single canvas detects a 1-second hold on a populated slot.
+    mouse_filter = Control.MOUSE_FILTER_PASS
+    if not gui_input.is_connected(_inspect_canvas_input):
+        gui_input.connect(_inspect_canvas_input)
     size_flags_horizontal = Control.SIZE_EXPAND_FILL
     if not resized.is_connected(_fit_cells):
         resized.connect(_fit_cells)
@@ -45,6 +50,50 @@ func apply_items_readonly(items: Array) -> void:
     _icon_cache.clear()
     _missing_icon_cache.clear()
     queue_redraw()
+
+func item_at_position(local_pos: Vector2) -> Dictionary:
+    if _verified_items.is_empty() or capacity <= 0 or columns <= 0:
+        return {}
+    var x := local_pos.x - PAD
+    var y := local_pos.y - PAD
+    if x < 0.0 or y < 0.0:
+        return {}
+    var col := int(floorf(x / _stride))
+    var row := int(floorf(y / _stride))
+    if col < 0 or col >= columns or fposmod(x, _stride) >= _cell_size \
+        or fposmod(y, _stride) >= _cell_size:
+        return {}
+    var index := row * columns + col
+    if index < 0 or index >= capacity or index >= _verified_items.size():
+        return {}
+    var item: Variant = _verified_items[index]
+    return item if item is Dictionary else {}
+
+
+func _inspect_canvas_input(event: InputEvent) -> void:
+    if item_inspector == null:
+        return
+    var point := Vector2.ZERO
+    if event is InputEventScreenTouch:
+        if not event.pressed:
+            return
+        point = event.position
+    elif event is InputEventMouseButton:
+        if event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
+            return
+        point = event.position
+    else:
+        return
+    var item := item_at_position(point)
+    if item.is_empty():
+        return
+    # Conversion to viewport coordinates also works after scrolling because
+    # the canvas lives INSIDE the real ScrollContainer clip.
+    var global_point := get_global_transform_with_canvas() * point
+    item_inspector.begin_canvas_hold(item,
+        "bag" if storage_kind == "inventory" else "storage", global_point)
+    # No accept_event(): vertical dragging must still reach ScrollContainer.
+
 
 func _approved_texture(item: Dictionary) -> Texture2D:
     # Same original PPA source as the inventory picker. Original art is

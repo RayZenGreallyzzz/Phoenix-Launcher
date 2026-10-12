@@ -9,6 +9,7 @@ extends Control
 signal close_requested
 signal select_item_requested(source_name: String, index: int)
 signal unequip_requested(slot: String)
+signal inventory_action_requested(fields: Dictionary)
 signal refresh_readonly_save_requested
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
@@ -17,6 +18,7 @@ const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 const ATTRIBUTE_VIEW = preload("res://scripts/ppa_item_attribute_view.gd")
 const SHARED_SAVE = preload("res://scripts/ppa_shared_save_views.gd")
 const ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
+const ITEM_HOLD = preload("res://scripts/ppa_item_hold_inspector.gd")
 
 const CAPTIONS := [
     "1. ИНВЕНТАРЬ",
@@ -62,6 +64,11 @@ var _book_container: VBoxContainer
 var _book_scroll: ScrollContainer
 var _item_overlay: ColorRect
 var _item_contents: VBoxContainer
+var _item_hold_view: Control
+var _authorized_inventory: Dictionary = {}
+var _authorized_inventory_actions: Array = []
+var _authorized_inventory_busy := false
+var _authorized_inventory_pending := false
 var _hold_slot: Button
 var _hold_item: Dictionary = {}
 var _hold_since_ms := 0
@@ -101,6 +108,10 @@ func apply_readonly_save(save: Dictionary, save_version: Variant = null, saved_a
         _draw_page()
 
 func clear_readonly_save() -> void:
+    _authorized_inventory.clear()
+    _authorized_inventory_actions.clear()
+    if _item_hold_view != null:
+        _item_hold_view.dismiss()
     _page_dirty = true
     _server_inventory.clear()
     _server_diagnostics.clear()
@@ -110,6 +121,88 @@ func clear_readonly_save() -> void:
     clear_authoritative_skill_snapshot()
     if is_node_ready() and visible:
         _draw_page()
+
+
+func apply_native_inventory(payload: Dictionary) -> void:
+    # This is a server-authenticated typed contract, not a local test stash.
+    if payload.get("gameId") != "phoenix-pix-arena" or \
+        payload.get("contract") != "ppa-inventory-v1" or \
+        not (payload.get("state") is Dictionary) or not (payload.get("actions") is Array):
+        return
+    var owner_data: Variant = get_tree().get_meta("phoenix_account", {})
+    var owner := str(owner_data.get("telegramId", "")) if owner_data is Dictionary else ""
+    var state: Dictionary = payload["state"]
+    if owner.is_empty() or str(payload.get("ownerId", "")) != owner or \
+        not (state.get("self") is Dictionary) or str(state["self"].get("id", "")) != owner or \
+        not (state.get("bag") is Array) or not (state.get("equipped") is Dictionary) or \
+        int(state.get("version", 0)) < 1:
+        return
+    _authorized_inventory = state.duplicate(true)
+    _authorized_inventory_actions = payload["actions"].duplicate()
+    if _item_hold_view != null:
+        _item_hold_view.dismiss()
+
+func set_inventory_loading(busy: bool, pending: bool) -> void:
+    _authorized_inventory_busy = busy
+    _authorized_inventory_pending = pending
+    if busy or pending:
+        if _item_hold_view != null:
+            _item_hold_view.dismiss()
+
+func _has_owned_inventory_action() -> bool:
+    var account: Variant = get_tree().get_meta("phoenix_account", {})
+    var self_data: Variant = _authorized_inventory.get("self", null)
+    return account is Dictionary and self_data is Dictionary and \
+        not str(account.get("telegramId", "")).is_empty() and \
+        str(self_data.get("id", "")) == str(account.get("telegramId", "")) and \
+        not _authorized_inventory_busy and not _authorized_inventory_pending
+
+func _item_equipment_action(item: Dictionary, origin: String) -> Dictionary:
+    if bool(item.get("ppa_native_virtual", false)) or origin not in ["bag", "equipped"]:
+        return {}
+    var uid := str(item.get("uid", ""))
+    var slot := str(item.get("slot", ""))
+    if uid.is_empty() or slot not in [
+        "weapon","helmet","armor","gloves","ring","legs","boots",
+        "necklace","artifact","cloak","wings","pet","shield","amulet","pants"
+    ]:
+        return {}
+    var version := int(_authorized_inventory.get("version", 0))
+    var enabled := _has_owned_inventory_action()
+    if origin == "bag":
+        var present := false
+        if enabled:
+            for saved in _authorized_inventory.get("bag", []):
+                if saved is Dictionary and str(saved.get("uid", "")) == uid:
+                    present = true
+                    break
+        return {"label":"НАДЕТЬ",
+            "allowed":enabled and present and _authorized_inventory_actions.has("equip"),
+            "callback":Callable(self, "_do_signed_item_action").bind("equip", uid, version)}
+    var raw_worn: Variant = _authorized_inventory.get("equipped", {})
+    var worn: Variant = (raw_worn as Dictionary).get(slot, null) if raw_worn is Dictionary else null
+    return {"label":"СНЯТЬ",
+        "allowed":enabled and worn is Dictionary and \
+            str(worn.get("uid", "")) == uid and _authorized_inventory_actions.has("unequip"),
+        "callback":Callable(self, "_do_signed_item_action").bind("unequip", slot, version)}
+
+func _do_signed_item_action(action: String, target: String, version: int) -> void:
+    if not _has_owned_inventory_action() or \
+        not _authorized_inventory_actions.has(action) or \
+        int(_authorized_inventory.get("version", -1)) != version:
+        return
+    if action == "equip":
+        var found := false
+        for raw in _authorized_inventory.get("bag", []):
+            if raw is Dictionary and str(raw.get("uid", "")) == target:
+                found = true
+                break
+        if found:
+            inventory_action_requested.emit({"action":"equip", "uid":target, "version":version})
+    elif action == "unequip":
+        var equipped: Variant = _authorized_inventory.get("equipped", null)
+        if equipped is Dictionary and (equipped as Dictionary).get(target) is Dictionary:
+            inventory_action_requested.emit({"action":"unequip", "slot":target, "version":version})
 
 func _real_bag() -> Array:
     return _server_inventory.get("bag", []) if _server_inventory_verified else []
@@ -201,6 +294,10 @@ func _ready() -> void:
     _create_frame()
     _create_book_overlay()
     _create_item_overlay()
+    _item_hold_view = ITEM_HOLD.new()
+    _item_hold_view.z_index = 130
+    add_child(_item_hold_view)
+    _item_hold_view.resolve_action = Callable(self, "_item_equipment_action")
     set_process(false)
     _fit_to_viewport()
     visible = false
@@ -423,6 +520,8 @@ func _fit_to_viewport() -> void:
     _frame.offset_bottom = height * 0.5
 
 func open_index(index: int) -> void:
+    if _item_hold_view != null:
+        _item_hold_view.dismiss()
     var requested_page := posmod(index, 5)
     var reuse_widgets := not _page_dirty and _drawn_page == requested_page \
         and _drawn_viewport == size and _page_container != null \
@@ -452,7 +551,8 @@ func _input(event: InputEvent) -> void:
         return
     # The inspected server item owns the touch surface. A swipe must not
     # unexpectedly switch underlying character pages or trigger the joystick.
-    if _item_overlay != null and _item_overlay.visible:
+    if (_item_overlay != null and _item_overlay.visible) or (
+        _item_hold_view != null and _item_hold_view.is_open()):
         return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
@@ -579,12 +679,11 @@ func _slot(name: String, kind: String, w: float = 54.0, h: float = 54.0) -> Butt
     b.add_theme_stylebox_override("normal", _style_box(
         Color("#0C0F12"), RARITIES.get(str(equipped.get("rarity", "common")), Color("#A26620")) if filled else Color("#A26620"), 6, 1
     ))
-    # These server-owned items are inspect-only until authoritative
-    # equipment operations are connected to the original PPA backend.
     _bind_item_icon(equipped, b)
-    if filled and _server_inventory_verified:
-        b.pressed.connect(show_server_item_details.bind(equipped))
-        b.gui_input.connect(_watch_item_hold.bind(b, equipped))
+    if filled and _server_inventory_verified and _item_hold_view != null:
+        var worn_item: Dictionary = equipped.duplicate(true)
+        worn_item["slot"] = kind
+        _item_hold_view.bind_button(b, worn_item, "equipped")
     return b
 
 func _draw_inventory() -> void:
@@ -747,12 +846,8 @@ func _draw_inventory() -> void:
         # looks like an empty broken scroll page in the user's 0.1.60 video.
         slot.add_theme_stylebox_override("disabled", slot_style)
         slot.disabled = locked or not _server_inventory_verified
-        if not item.is_empty() and _server_inventory_verified:
-            slot.gui_input.connect(_watch_item_hold.bind(slot, item))
-            if is_virtual:
-                slot.pressed.connect(select_item_requested.emit.bind("resource", virtual_index))
-            else:
-                slot.pressed.connect(select_item_requested.emit.bind("bag", i))
+        if not item.is_empty() and _server_inventory_verified and _item_hold_view != null:
+            _item_hold_view.bind_button(slot, item, "resource" if is_virtual else "bag")
         grid.add_child(slot)
         _bind_item_icon(item, slot)
     var info := PanelContainer.new()
@@ -1123,8 +1218,13 @@ func _create_item_overlay() -> void:
     _item_overlay.visible = false
 
 func show_server_item_details(item: Dictionary) -> void:
-    # This view is invoked only from the same authenticated, verified save.
-    if item.is_empty() or _item_contents == null or not _server_inventory_verified:
+    # Existing callers also use the same small shared panel.
+    if item.is_empty() or not _server_inventory_verified:
+        return
+    if _item_hold_view != null:
+        _item_hold_view._show_item(item, "bag", false)
+        return
+    if _item_contents == null:
         return
     _cancel_item_hold()
     for child in _item_contents.get_children():
@@ -1173,7 +1273,7 @@ func show_server_item_details(item: Dictionary) -> void:
     var message := _text("PPA · сохранение сервера · только просмотр", 8, MUTED)
     message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _item_contents.add_child(message)
-    var close_btn := _button("НАЗАД К ПЕРСОНАЖУ", 10)
+    var close_btn := _button("✕ ЗАКРЫТЬ", 10)
     close_btn.custom_minimum_size.y = 32.0
     close_btn.pressed.connect(func(): _item_overlay.visible = false)
     _item_contents.add_child(close_btn)
@@ -1302,7 +1402,8 @@ func _draw_runes() -> void:
         slot.disabled = locked or item.is_empty()
         if not item.is_empty() and not locked:
             slot.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
-            slot.pressed.connect(show_server_item_details.bind(item))
+            if _item_hold_view != null:
+                _item_hold_view.bind_button(slot, item, "resource")
             _bind_item_icon(item, slot)
         sockets.add_child(slot)
     _section("ДОСТУПНЫЕ РУНЫ · " + str(available.size()) + " ВИДОВ")
@@ -1320,7 +1421,8 @@ func _draw_runes() -> void:
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         button.tooltip_text = str(item.get("name", "Руна")) + " · " + str(item.get("valueText", ""))
         button.add_theme_stylebox_override("normal", _style_box(Color("#111418"), RARITIES.get(SERVER_VIEW.rarity(item), EDGE), 7, 2))
-        button.pressed.connect(show_server_item_details.bind(item))
+        if _item_hold_view != null:
+            _item_hold_view.bind_button(button, item, "resource")
         inv.add_child(button)
         _bind_item_icon(item, button)
     if available.is_empty():

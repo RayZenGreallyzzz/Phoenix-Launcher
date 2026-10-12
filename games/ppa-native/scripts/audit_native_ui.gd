@@ -513,8 +513,8 @@ func _run() -> void:
             push_error("PPA_STORAGE_UI: renderer draws too many offscreen cells " + scope)
             quit(1)
             return
-        if scroller.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_AUTO:
-            push_error("PPA_STORAGE_UI: continuous scroll disabled " + scope)
+        if scroller.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER:
+            push_error("PPA_STORAGE_UI: vertical swipe disabled or visible side slider returned " + scope)
             quit(1)
             return
     var local_items: Array = []

@@ -545,6 +545,7 @@ func _build_server_readonly_bridge() -> void:
         test_menu.forge_action_requested.connect(_request_forge_action)
         test_menu.forge_retry_requested.connect(_forge_service.retry_pending)
         test_menu.inventory_action_requested.connect(_request_inventory_action)
+        test_menu.character_inventory_requested.connect(_inventory_service.request_state)
         test_menu.inventory_retry_requested.connect(_inventory_service.retry_pending)
         test_menu.personal_storage_action_requested.connect(_request_personal_storage_action)
         test_menu.personal_storage_retry_requested.connect(_personal_storage_service.retry_pending)
