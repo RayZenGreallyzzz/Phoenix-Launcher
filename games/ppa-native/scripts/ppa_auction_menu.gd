@@ -81,6 +81,59 @@ static func _coin_line(parent: Node, name: String, value: Variant, symbol: Strin
         row.add_child(_label("◆",15,Color("#42C6FF")))
     row.add_child(_label(name + "  " + str(value) if value != null else name + "  —", 12, GOLD))
 
+# A full-width pinned footer, outside the scrolling auction content.
+# Never put currency labels inside the narrow category sidebar.
+static func render_wallet(ui: Control, host: HBoxContainer) -> void:
+    var state: Dictionary = ui.get("auction_state")
+    var verified: bool = bool(ui.call("_owns_verified_state",state))
+    var wallet: Dictionary = {}
+    # The general game-state snapshot is view-only and may arrive before
+    # the auction contract. Do not infer permissions to trade from it.
+    var view: Dictionary = ui.get("_player_view_readonly")
+    var money: Variant = view.get("money",{})
+    if money is Dictionary:
+        wallet = (money as Dictionary).duplicate()
+    if verified and state.get("wallet") is Dictionary:
+        for code in ["ppa","gram"]:
+            if state["wallet"].get(code,null) != null:
+                wallet[code] = state["wallet"][code]
+    host.add_theme_constant_override("separation",6)
+    for spec in [
+        {"code":"ppa","name":"PPA","icon":"coin"},
+        {"code":"gram","name":"Gram","icon":"diamond"}
+    ]:
+        var code := str(spec["code"])
+        var panel := PanelContainer.new()
+        panel.name = "PPAAuctionWallet_" + code
+        panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        panel.size_flags_stretch_ratio = 1.0
+        panel.add_theme_stylebox_override("panel",
+            _skin(Color("#10191F"),EDGE,7))
+        host.add_child(panel)
+        var line := HBoxContainer.new()
+        line.alignment = BoxContainer.ALIGNMENT_CENTER
+        line.add_theme_constant_override("separation",5)
+        panel.add_child(line)
+        if code == "ppa":
+            var icon := TextureRect.new()
+            icon.name = "PPAAuctionWalletCoin"
+            icon.texture = COIN
+            icon.custom_minimum_size = Vector2(24,24)
+            icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+            icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+            icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            line.add_child(icon)
+        else:
+            line.add_child(_label("◆",18,Color("#42C6FF")))
+        var value: Variant = wallet.get(code,null)
+        var amount := str(value) if value is int or value is float else "—"
+        var label := _label(str(spec["name"]) + "  " + amount,13,GOLD)
+        label.name = "PPAAuctionWalletAmount_" + code
+        label.autowrap_mode = TextServer.AUTOWRAP_OFF
+        label.clip_text = true
+        label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+        line.add_child(label)
+
 static func _banner(parent: VBoxContainer) -> void:
     var banner := PanelContainer.new()
     banner.name = "PPAAuctionPhoenixBanner"
@@ -453,9 +506,6 @@ static func render(ui: Control) -> void:
         sidebar.custom_minimum_size.x = 160
     content.add_child(sidebar)
     _make_categories(ui,sidebar,not wide)
-    var wallet: Dictionary = state.get("wallet",{}) if verified else {}
-    _coin_line(sidebar,"PPA",wallet.get("ppa",null),"ppa")
-    _coin_line(sidebar,"Gram",wallet.get("gram",null),"gram")
     var main := VBoxContainer.new()
     main.name = "PPAAuctionMainPanel"
     main.add_theme_constant_override("separation",6)
