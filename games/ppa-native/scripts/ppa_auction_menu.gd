@@ -363,7 +363,7 @@ static func _sell(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
     price.value_changed.connect(_sale_price_changed.bind(ui,preview))
     currencies.item_selected.connect(_sale_currency_changed.bind(ui,preview))
     var actions: Array = ui.get("auction_actions")
-    var enabled := actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not chosen.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
+    var enabled: bool = actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not chosen.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
     var place := _button("ВЫСТАВИТЬ ЛОТ",enabled)
     place.name = "PPARealAuctionPlace"
     place.pressed.connect(Callable(ui,"_auction_place_selected"))
@@ -384,7 +384,7 @@ static func _mine(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
         var lot: Dictionary = entry
         var item: Dictionary = lot.get("item",{})
         main.add_child(_label(str(item.get("name","Предмет PPA")),12,TEXT))
-        var enabled := actions.has("recover") and bool(lot.get("canRecover",false)) and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and state.get("bag",[]).size() < 100
+        var enabled: bool = actions.has("recover") and bool(lot.get("canRecover",false)) and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and state.get("bag",[]).size() < 100
         var reclaim := _button("ВЕРНУТЬ В СУМКУ",enabled)
         reclaim.name = "PPARealAuctionRecover_" + str(lot.get("id",""))
         reclaim.pressed.connect(Callable(ui,"_auction_recover_lot").bind(str(lot.get("id",""))))
@@ -427,7 +427,7 @@ static func render(ui: Control) -> void:
         _section(body,"ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ","Аукцион показывает только подтверждённые данные персонажа PPA. Без серверного доступа торговля закрыта.")
         return
     var wide := ui.size.x >= 680
-    var content := HBoxContainer.new() if wide else VBoxContainer.new()
+    var content: BoxContainer = HBoxContainer.new() if wide else VBoxContainer.new()
     content.name = "PPAAuctionLayout"
     content.add_theme_constant_override("separation",6)
     body.add_child(content)
