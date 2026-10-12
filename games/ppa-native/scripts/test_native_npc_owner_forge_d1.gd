@@ -158,6 +158,40 @@ func _run() -> void:
     var first_offer := forge_cards.get_child(0) as Control
     check(first_offer != null and first_offer.custom_minimum_size.x >= 116.0,
         "Telegram forge offer tiles need stable minimum widths")
+    # Rarity must be visible on the actual 48x48 item square AND title,
+    # not just in the product details popup: the old catalog used a
+    # brown rectangle regardless of item tier.
+    var epic_tint := Color("#D18FFF")
+    var epic_style := (first_offer as Button).get_theme_stylebox("normal") as StyleBoxFlat
+    var epic_icon := first_offer.find_child("PPAForgeSquareRarityIcon", true, false) as Button
+    var epic_title := first_offer.find_child("PPAForgeOfferName", true, false) as Label
+    var epic_tag := first_offer.find_child("PPAForgeOfferRarity", true, false) as Label
+    check(epic_style != null and epic_style.border_color.is_equal_approx(
+        epic_tint.darkened(0.3)),
+        "Epic offer still has brown rather than purple card borders")
+    check(epic_icon != null and epic_icon.custom_minimum_size == Vector2(48, 48)
+        and epic_icon.get_theme_stylebox("disabled") is StyleBoxFlat
+        and (epic_icon.get_theme_stylebox("disabled") as StyleBoxFlat).border_color.is_equal_approx(epic_tint),
+        "Epic equipment icon must be square with purple rarity border")
+    check(epic_title != null and epic_title.get_theme_color("font_color").is_equal_approx(epic_tint)
+        and epic_tag != null and epic_tag.text == "ЭПИЧЕСКИЙ",
+        "Epic equipment name and explicit rarity label missing")
+    npc._select_tab("legendary")
+    var legendary_cards := npc._body.find_child("NpcProductGrid", true, false) as GridContainer
+    check(legendary_cards != null and legendary_cards.get_child_count() > 0,
+        "Legendary PPA forge offers disappeared")
+    var legendary_offer := legendary_cards.get_child(0) as Button
+    var legendary_icon := legendary_offer.find_child("PPAForgeSquareRarityIcon", true, false) as Button
+    var legendary_name := legendary_offer.find_child("PPAForgeOfferName", true, false) as Label
+    var legendary_tier := legendary_offer.find_child("PPAForgeOfferRarity", true, false) as Label
+    var legendary_tint := Color("#FFD170")
+    check(legendary_icon != null
+        and legendary_icon.get_theme_stylebox("disabled") is StyleBoxFlat
+        and (legendary_icon.get_theme_stylebox("disabled") as StyleBoxFlat).border_color.is_equal_approx(legendary_tint)
+        and legendary_name != null and legendary_name.get_theme_color("font_color").is_equal_approx(legendary_tint)
+        and legendary_tier != null and legendary_tier.text == "ЛЕГЕНДАРНЫЙ",
+        "Legendary equipment must show gold square, name and rarity tag")
+    npc._select_tab("equipment")
     npc._select_item("gear:epic:weapon")
     check(npc._forge_recipe_target != null,
         "Selected blacksmith recipe must appear below the product list")
