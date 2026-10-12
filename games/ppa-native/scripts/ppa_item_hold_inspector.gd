@@ -23,12 +23,17 @@ var _moved := false
 var _temporary := false
 var _open_item: Dictionary = {}
 var _open_origin := ""
+var _canvas_proxy: Button
 
 func _ready() -> void:
     name = "PPAItemHoldInspector"
     set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     process_mode = Node.PROCESS_MODE_ALWAYS
+    _canvas_proxy = Button.new()
+    _canvas_proxy.name = "PPAInspectorVirtualSlotProxy"
+    _canvas_proxy.visible = false
+    add_child(_canvas_proxy)
     _timer = Timer.new()
     _timer.one_shot = true
     _timer.wait_time = HOLD_SECONDS
@@ -85,6 +90,15 @@ func bind_button(button: Button, item: Dictionary, origin: String = "catalog",
     # GLOBAL input release is necessary: the finger may lift outside a slot.
     # It also prevents opening a tap card after scrolling a grid.
     # The controller is shared instead of allocating 100 timers per slot.
+
+func begin_canvas_hold(item: Dictionary, origin: String, global_pos: Vector2) -> void:
+    # Virtual 100/200/500-cell storage grids are drawn by one Control, not
+    # hundreds of Buttons. Reuse this single invisible proxy per inspector.
+    if _canvas_proxy == null or item.is_empty():
+        return
+    _begin_press(_canvas_proxy, item, origin, Callable())
+    _press_start = global_pos
+
 
 func _begin_press(button: Button, item: Dictionary, origin: String,
         tap_action: Callable) -> void:
