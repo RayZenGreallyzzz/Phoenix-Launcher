@@ -77,6 +77,7 @@ var _forge_resources_expanded := false
 var _forge_equipment_tools_expanded := false
 var _forge_inventory_host: VBoxContainer
 var _forge_wallet_host: HBoxContainer
+var _auction_wallet_host: HBoxContainer
 var _forge_recipe_target: Control
 var _forge_keys: Dictionary = {"equipment":"", "stone":"", "rune":""}
 var _enhance_uid := ""
@@ -314,6 +315,14 @@ func _create_shell() -> void:
     _forge_wallet_host.visible = false
     _forge_wallet_host.add_theme_constant_override("separation", 4)
     layout.add_child(_forge_wallet_host)
+
+    # Currency counters remain visible at the bottom of every auction tab.
+    # They never belong to the category sidebar and never scroll away.
+    _auction_wallet_host = HBoxContainer.new()
+    _auction_wallet_host.name = "PPAAuctionFixedWallet"
+    _auction_wallet_host.visible = false
+    _auction_wallet_host.add_theme_constant_override("separation",6)
+    layout.add_child(_auction_wallet_host)
 
     var foot := PanelContainer.new()
     foot.add_theme_stylebox_override("panel", _style(Color("#171B1E"), Color("#494033"), 6))
@@ -1018,6 +1027,11 @@ func _render() -> void:
         _forge_wallet_host.visible = service == "forge"
         if service == "forge":
             _show_forge_wallet()
+    if _auction_wallet_host != null:
+        _clear(_auction_wallet_host)
+        _auction_wallet_host.visible = service == "auction"
+        if service == "auction":
+            PHOENIX_AUCTION.render_wallet(self,_auction_wallet_host)
     if service == "auction":
         _frame.add_theme_stylebox_override("panel", _style(Color("#090F13"), Color("#E1A13D"), 13, 3))
     else:
