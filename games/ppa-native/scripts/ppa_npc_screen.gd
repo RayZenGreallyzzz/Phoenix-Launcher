@@ -136,6 +136,16 @@ var _tab_scroller: ScrollContainer
 var _body: VBoxContainer
 var _scroll: ScrollContainer
 var _status: Label
+# One direct finger-drag owner for the blacksmith: the 100-slot bag and the
+# long recipe list each scroll naturally under the finger, with no side bar.
+var _forge_swipe: ScrollContainer
+var _forge_fling: ScrollContainer
+var _forge_finger := -1
+var _forge_mouse_down := false
+var _forge_swipe_origin := Vector2.ZERO
+var _forge_swipe_last := Vector2.ZERO
+var _forge_swipe_started := false
+var _forge_fling_velocity := 0.0
 
 func _ready() -> void:
     name = "PPANativeNpcMenu"
@@ -351,6 +361,110 @@ func _layout_tabs() -> void:
     _tab_scroller.custom_minimum_size.y = required_height
     _last_clan_layout = clan_grid
 
+# A normal drag on a card must scroll the recipe list, without gripping an
+# invisible scrollbar at the right edge. The forge bag has its own independent
+# scrolling if it contains more rows than fit on screen.
+func _forge_target_at(point: Vector2) -> ScrollContainer:
+    if _forge_inventory_host != null and _forge_inventory_host.visible:
+        var bag := _forge_inventory_host.find_child(
+            "PPAForgeBagScroller", true, false) as ScrollContainer
+        if bag != null and bag.get_global_rect().has_point(point):
+            var scrollbar := bag.get_v_scroll_bar()
+            if scrollbar != null and scrollbar.max_value > scrollbar.page + 1.0:
+                return bag
+            # When the bag fits, swiping over it should reach the recipes.
+            return _scroll
+    if _scroll != null and _scroll.get_global_rect().has_point(point):
+        return _scroll
+    return null
+
+
+func _forge_begin_swipe(point: Vector2, target: ScrollContainer) -> void:
+    _forge_fling = null
+    _forge_fling_velocity = 0.0
+    _forge_swipe = target
+    _forge_swipe_origin = point
+    _forge_swipe_last = point
+    _forge_swipe_started = false
+
+
+func _forge_move_swipe(point: Vector2, finger_speed: float = 0.0) -> void:
+    if _forge_swipe == null:
+        return
+    var displacement := point - _forge_swipe_origin
+    if not _forge_swipe_started:
+        if absf(displacement.y) < 22.0 or absf(displacement.y) < absf(displacement.x) * 1.15:
+            return
+        _forge_swipe_started = true
+    var scroll_bar := _forge_swipe.get_v_scroll_bar()
+    var limit := maxi(0, int(ceilf(scroll_bar.max_value - scroll_bar.page)))
+    var difference := _forge_swipe_last.y - point.y
+    _forge_swipe.scroll_vertical = clampi(
+        _forge_swipe.scroll_vertical + int(roundf(difference)), 0, limit)
+    _forge_swipe_last = point
+    if absf(finger_speed) > 50.0:
+        _forge_fling_velocity = -finger_speed
+    get_viewport().set_input_as_handled()
+
+
+func _forge_finish_swipe() -> void:
+    if _forge_swipe_started and absf(_forge_fling_velocity) > 160.0:
+        _forge_fling = _forge_swipe
+    _forge_swipe = null
+    _forge_swipe_started = false
+    _forge_finger = -1
+    _forge_mouse_down = false
+
+
+func _input(event: InputEvent) -> void:
+    if not visible or service != "forge" or _scroll == null:
+        return
+    if _item_hold != null and _item_hold.is_open():
+        return
+    if event is InputEventScreenTouch:
+        if event.pressed:
+            if _forge_finger >= 0:
+                return
+            var target := _forge_target_at(event.position)
+            if target != null:
+                _forge_finger = event.index
+                _forge_begin_swipe(event.position, target)
+        elif event.index == _forge_finger:
+            _forge_finish_swipe()
+        return
+    if event is InputEventScreenDrag and event.index == _forge_finger:
+        _forge_move_swipe(event.position, event.velocity.y)
+        return
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+        if _forge_finger >= 0:
+            return
+        if event.pressed:
+            var target := _forge_target_at(event.position)
+            _forge_mouse_down = target != null
+            if _forge_mouse_down:
+                _forge_begin_swipe(event.position, target)
+        elif _forge_mouse_down:
+            _forge_finish_swipe()
+        return
+    if event is InputEventMouseMotion and _forge_mouse_down and _forge_finger < 0:
+        _forge_move_swipe(event.position, event.velocity.y)
+
+
+func _process(delta: float) -> void:
+    if _forge_fling == null or not is_instance_valid(_forge_fling) or not visible:
+        return
+    var scroll_bar := _forge_fling.get_v_scroll_bar()
+    var maximum := maxi(0, int(ceilf(scroll_bar.max_value - scroll_bar.page)))
+    var next_position := clampi(
+        _forge_fling.scroll_vertical + int(roundf(_forge_fling_velocity * delta)), 0, maximum)
+    if next_position == _forge_fling.scroll_vertical or absf(_forge_fling_velocity) < 35.0:
+        _forge_fling = null
+        _forge_fling_velocity = 0.0
+        return
+    _forge_fling.scroll_vertical = next_position
+    _forge_fling_velocity *= exp(-6.0 * delta)
+
+
 func _outside(event: InputEvent) -> void:
     if event is InputEventScreenTouch and event.pressed:
         close_requested.emit()
@@ -417,6 +531,14 @@ func open_npc(source: Dictionary) -> void:
     _craft_rarity = "all"
     _forge_resources_expanded = false
     _forge_equipment_tools_expanded = false
+    _forge_swipe = null
+    _forge_fling = null
+    _forge_finger = -1
+    _forge_mouse_down = false
+    _forge_fling_velocity = 0.0
+    # Other NPCs keep Godot's built-in scrolling. Forge supplies its own
+    # direct vertical swipe even when touch starts on an interactive item.
+    _scroll.scroll_deadzone = 4096 if service == "forge" else 0
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     _enhance_uid = ""
     _enhance_rarity = ""
@@ -1669,6 +1791,7 @@ func _show_forge_pinned_inventory() -> void:
     clip.custom_minimum_size.y = 114.0 if size.x > size.y else 170.0
     clip.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     clip.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+    clip.scroll_deadzone = 4096
     clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _forge_inventory_host.add_child(clip)
     var grid := GridContainer.new()
