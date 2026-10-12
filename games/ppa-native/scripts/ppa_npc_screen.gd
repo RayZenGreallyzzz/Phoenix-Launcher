@@ -1040,13 +1040,28 @@ func _readonly_icon_item(item: Dictionary, side: float = 62.0,
     var glyph := str(item.get("icon", "◆"))
     var button := _button(glyph if not glyph.is_empty() and glyph.length() <= 4 else "◆")
     button.custom_minimum_size = Vector2(side, side)
+    button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+    button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    # Every item cell is a square with its own rarity color, even after the
+    # inspector turns a disabled icon into a clickable inspect-only Button.
+    var rarity_color := ITEM_HOLD.rarity_tint(item)
+    button.set_meta("ppa_rarity_tint", rarity_color)
+    button.add_theme_stylebox_override("normal",
+        _style(Color("#13191F"), rarity_color, 5, 2))
+    button.add_theme_stylebox_override("hover",
+        _style(Color("#20232A"), rarity_color.lightened(0.16), 5, 2))
+    button.add_theme_stylebox_override("pressed",
+        _style(Color("#25242A"), rarity_color, 5, 3))
+    button.add_theme_stylebox_override("focus",
+        _style(Color.TRANSPARENT, rarity_color, 5, 1))
     # The original blacksmith overlays its own readable count badge.
     # Suppress the shared icon loader's second quantity badge only here.
     button.set_meta("ppa_suppress_icon_qty", origin == "resource")
     button.clip_contents = true
     button.disabled = true
     button.tooltip_text = str(item.get("name", "Предмет PPA"))
-    button.add_theme_stylebox_override("disabled", _style(Color("#14191F"), GOLD, 5))
+    button.add_theme_stylebox_override("disabled",
+        _style(Color("#13191F"), rarity_color, 5, 2))
     var img: String = str(item.get("img", ""))
     if img.begins_with("res://") and ResourceLoader.exists(img):
         button.icon = load(img) as Texture2D
@@ -1138,10 +1153,19 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             forge_choice.custom_minimum_size.x = maxf(116.0,
                 (grid.custom_minimum_size.x - 16.0) / 2.0)
             forge_choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var offer_rarity := ITEM_HOLD.rarity_key(item)
+            var offer_tint := ITEM_HOLD.rarity_tint(item)
+            var selected_offer := id == selected_id
+            forge_choice.set_meta("ppa_rarity", offer_rarity)
+            forge_choice.set_meta("ppa_rarity_tint", offer_tint)
             forge_choice.add_theme_stylebox_override("normal",
-                _style(Color("#13191C"), GOLD if id == selected_id else Color("#5E4B35"), 5))
+                _style(Color("#13191C").lerp(offer_tint, 0.055),
+                    offer_tint if selected_offer else offer_tint.darkened(0.3),
+                    5, 3 if selected_offer else 2))
             forge_choice.add_theme_stylebox_override("hover",
-                _style(Color("#29251D"), GOLD, 5))
+                _style(Color("#25232B"), offer_tint, 5, 2))
+            forge_choice.add_theme_stylebox_override("pressed",
+                _style(Color("#28222B"), offer_tint, 5, 3))
             # The outer card is the touch target: short tap still selects a
             # recipe, 1-second hold only previews its real attributes.
             if _item_hold != null:
@@ -1160,16 +1184,25 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             product_line.add_theme_constant_override("separation", 5)
             forge_choice.add_child(product_line)
             var product_icon := _readonly_icon_item(item, 48, "decorative")
+            product_icon.name = "PPAForgeSquareRarityIcon"
+            product_icon.custom_minimum_size = Vector2(48, 48)
             product_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
             product_line.add_child(product_icon)
             var captions := VBoxContainer.new()
             captions.mouse_filter = Control.MOUSE_FILTER_IGNORE
             captions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             product_line.add_child(captions)
-            var text_name := _label(str(item.get("name", "")), 11, GOLD)
+            var text_name := _label(str(item.get("name", "")), 11, offer_tint)
             text_name.autowrap_mode = TextServer.AUTOWRAP_OFF
             text_name.clip_text = true
+            text_name.name = "PPAForgeOfferName"
             captions.add_child(text_name)
+            var rarity_badge := _label(
+                str(ITEM_HOLD.RARITY_CAPTIONS.get(offer_rarity, "Обычный")).to_upper(),
+                9, offer_tint)
+            rarity_badge.name = "PPAForgeOfferRarity"
+            rarity_badge.autowrap_mode = TextServer.AUTOWRAP_OFF
+            captions.add_child(rarity_badge)
             var forge_price := _label(str(item.get("price", "?")) + " PPA", 10, SUB)
             forge_price.autowrap_mode = TextServer.AUTOWRAP_OFF
             captions.add_child(forge_price)
@@ -1182,8 +1215,9 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         tile.set_meta("ppa_original_offer_id", id)
         tile.custom_minimum_size.y = 140
         tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var item_tint := ITEM_HOLD.rarity_tint(item)
         tile.add_theme_stylebox_override("panel", _style(Color("#161B1F"),
-            GOLD if id == selected_id else Color("#5E4B35"), 7))
+            item_tint if id == selected_id else item_tint.darkened(0.3), 7, 2))
         grid.add_child(tile)
         var inner := VBoxContainer.new()
         inner.add_theme_constant_override("separation", 4)
@@ -1208,7 +1242,7 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             inner.add_child(_label(str(display_item.get("icon", "")), 23, GOLD))
         else:
             inner.add_child(_label("◇", 23, GOLD))
-        var product_name := _label(str(item.get("name", "")), 12, TEXT)
+        var product_name := _label(str(item.get("name", "")), 12, ITEM_HOLD.rarity_tint(item))
         product_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         product_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         inner.add_child(product_name)
@@ -1658,8 +1692,11 @@ func _show_forge_pinned_inventory() -> void:
         else:
             var source_kind := "resource" if bool(item.get("ppa_native_virtual", false)) else "bag"
             var real_icon := _readonly_icon_item(item, cell, source_kind)
+            var bag_tint := ITEM_HOLD.rarity_tint(item)
             real_icon.add_theme_stylebox_override("disabled",
-                _style(Color("#151A20"), SHOP.rarity_tint(str(item.get("rarity", "common"))), 1))
+                _style(Color("#151A20"), bag_tint, 1, 2))
+            real_icon.add_theme_stylebox_override("normal",
+                _style(Color("#151A20"), bag_tint, 1, 2))
             square = real_icon
             if bool(item.get("ppa_native_virtual", false)):
                 # Original Telegram shows a quantity badge (e.g. stone ×7).
