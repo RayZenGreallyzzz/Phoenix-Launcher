@@ -115,12 +115,12 @@ func _run() -> void:
         "Forge bag count must remain on one line on Android, not one character per row")
     var has_original_stone := false
     for slot in bag_grid.get_children():
-        if slot is Button and (slot as Button).tooltip_text.contains("Обычный камень заточки"):
+        if slot is Button and str((slot as Button).get_meta("ppa_inspect_name", "")) == "Обычный камень заточки":
             has_original_stone = slot.find_child("PPAForgeVirtualStackCount", true, false) != null
     check(has_original_stone,
         "Original Telegram smith bag must show confirmed stone stacks with quantity badge")
     var bag_first := bag_grid.get_child(0) as Button
-    check(bag_first != null and bag_first.disabled,
+    check(bag_first != null and not bag_first.disabled and bag_first.has_meta("ppa_inspect_origin"),
         "Blacksmith must never turn the D1 bag preview into a local spending action")
     # Wallet footer mirrors Telegram: all three confirmed balances stay
     # visible while switching smith tabs, without opening the resource list.
