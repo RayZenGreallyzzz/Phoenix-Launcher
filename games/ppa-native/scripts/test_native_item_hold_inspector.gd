@@ -112,6 +112,32 @@ func _run() -> void:
         and has_label(inspector, "Количество: 7"),
         "Resource mini menu must show count without an Equip/Remove command")
 
+    # The virtual storage canvas must support the same hold interaction
+    # WITHOUT allocating 500 Button nodes or blocking finger-scroll.
+    var storage_scroller := ScrollContainer.new()
+    storage_scroller.custom_minimum_size = Vector2(360, 200)
+    host.add_child(storage_scroller)
+    var virtual := preload("res://scripts/ppa_virtual_storage_grid.gd").new()
+    virtual.item_inspector = inspector
+    storage_scroller.add_child(virtual)
+    virtual.custom_minimum_size.x = 360
+    virtual.configure("personal", storage_scroller, 4)
+    virtual.apply_items_readonly([weapon])
+    await process_frame
+    check(virtual.mouse_filter == Control.MOUSE_FILTER_PASS
+        and virtual.item_at_position(Vector2(8, 8)).get("uid", "") == "auth-gear",
+        "Virtual storage canvas must resolve real populated slot without blocking vertical swipes")
+    var down := InputEventScreenTouch.new()
+    down.index = 0
+    down.pressed = true
+    down.position = Vector2(8, 8)
+    virtual._inspect_canvas_input(down)
+    inspector._hold_timeout()
+    check(inspector.is_open() and inspector._temporary,
+        "Holding a painted warehouse cell must show the shared mini panel")
+    _release(inspector)
+    check(not inspector.is_open(), "Virtual grid hold preview did not disappear on release")
+
     set_meta("phoenix_account", {"telegramId":"990000002"})
     inspector._show_item(weapon, "bag", false)
     action = inspector.find_child("PPAInspectorEquipmentAction", true, false) as Button
