@@ -2908,6 +2908,213 @@ func _auction_select_sell_uid(uid: String) -> void:
     _auction_sell_uid = uid
     _render()
 
+func _auction_side_categories(parent: HBoxContainer) -> void:
+    var side := VBoxContainer.new()
+    side.name = "PPAAuctionCategorySidebar"
+    side.custom_minimum_size.x = 104.0 if size.x < 700.0 else 158.0
+    side.add_theme_constant_override("separation", 4)
+    parent.add_child(side)
+    for spec in AUCTION_CATEGORIES:
+        var key := str(spec["key"])
+        var active := key == _auction_category
+        var b := _button(str(spec["icon"]) + " " + str(spec["label"]))
+        b.name = "PPAAuctionCategory_" + key
+        b.custom_minimum_size.y = 39
+        b.add_theme_font_size_override("font_size", 9 if size.x < 700.0 else 11)
+        b.add_theme_stylebox_override("normal",
+            _style(Color("#513010") if active else Color("#0A1318"),
+                GOLD if active else Color("#5F4329"), 5))
+        b.pressed.connect(_auction_filter.bind(key))
+        side.add_child(b)
+
+func _auction_listing_filters(parent: VBoxContainer) -> void:
+    var search_line := HBoxContainer.new()
+    parent.add_child(search_line)
+    var search := LineEdit.new()
+    search.name = "PPAAuctionSearch"
+    search.placeholder_text = "Поиск предмета..."
+    search.text = _auction_search
+    search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    search.text_submitted.connect(_auction_set_search)
+    search_line.add_child(search)
+    var find_button := _button("НАЙТИ")
+    find_button.pressed.connect(func(): _auction_set_search(search.text))
+    search_line.add_child(find_button)
+    var filters := HBoxContainer.new()
+    filters.add_theme_constant_override("separation", 4)
+    parent.add_child(filters)
+    var rarity := OptionButton.new()
+    rarity.name = "PPAAuctionQuality"
+    for caption in ["Качество: все","Обыч.","Необыч.","Редкие","Эпик","Легенд."]:
+        rarity.add_item(caption)
+    rarity.select(maxi(0, ["all","common","uncommon","rare","epic","legendary"].find(_auction_rarity)))
+    rarity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    rarity.item_selected.connect(_auction_set_rarity)
+    filters.add_child(rarity)
+    var level := OptionButton.new()
+    level.name = "PPAAuctionLevel"
+    for caption in ["Ур.: все","1–20","21–40","41–60","61+"]:
+        level.add_item(caption)
+    level.select(maxi(0, ["all","1-20","21-40","41-60","61-999"].find(_auction_level)))
+    level.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    level.item_selected.connect(_auction_set_level)
+    filters.add_child(level)
+
+func _auction_currency_name(value: String) -> String:
+    # Gold is not a trade currency; a real token texture is bound separately.
+    return "◆ Gram" if value.to_lower() == "gram" else "✹ PPA"
+
+func _auction_remaining(entry: Dictionary) -> String:
+    var expires: Variant = entry.get("expiresAt", null)
+    if not (expires is int or expires is float):
+        return "—"
+    var seconds := maxi(0, int(float(expires) / 1000.0 - Time.get_unix_time_from_system()))
+    return str(int(seconds / 3600.0)) + " ч " + str(int((seconds % 3600) / 60.0)) + " м"
+
+func _auction_lot_card(host: VBoxContainer, entry: Dictionary, own: bool) -> void:
+    var item: Dictionary = entry.get("item", {}) if entry.get("item", {}) is Dictionary else {}
+    if item.is_empty():
+        return
+    var card := PanelContainer.new()
+    card.name = "PPAAuctionLot_" + str(entry.get("id", ""))
+    card.add_theme_stylebox_override("panel", _style(Color("#081319"), Color("#8D632E"), 5))
+    host.add_child(card)
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 6)
+    card.add_child(row)
+    row.add_child(_readonly_icon_item(item, 46.0))
+    var info := VBoxContainer.new()
+    info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.add_child(info)
+    var label_text := str(item.get("name", "Предмет"))
+    if int(item.get("enh", 0)) > 0:
+        label_text += " +" + str(int(item.get("enh", 0)))
+    info.add_child(_label(label_text.left(40), 12, ITEM_HOLD.rarity_tint(item)))
+    info.add_child(_label(str(entry.get("qty", 1)) + " шт. · " +
+        str(entry.get("price", "—")) + " " + _auction_currency_name(str(entry.get("currency", "ppa"))), 11, GOLD))
+    info.add_child(_label(("Вы" if own else str(entry.get("sellerName", "Игрок")).left(24)) +
+        " · " + _auction_remaining(entry), 10, SUB))
+    var available := not auction_loading and not auction_pending and bool(auction_state.get("settlementEnabled", false))
+    var lot_id := str(entry.get("id", ""))
+    if own and auction_actions.has("cancel") and bool(entry.get("canCancel", false)):
+        var cancel := _button("СНЯТЬ", available)
+        cancel.name = "PPARealAuctionCancel_" + lot_id
+        cancel.pressed.connect(_auction_cancel_lot.bind(lot_id))
+        row.add_child(cancel)
+    elif not own and auction_actions.has("buy") and bool(entry.get("canBuy", false)):
+        var buy := _button("КУПИТЬ", available)
+        buy.name = "PPARealAuctionBuy_" + lot_id
+        buy.pressed.connect(_auction_buy_lot.bind(lot_id, float(entry.get("price", 0)),
+            str(entry.get("currency", ""))))
+        row.add_child(buy)
+    elif not own:
+        info.add_child(_label("Защищённая покупка пока недоступна", 10, SUB))
+
+func _show_auction_lots(rows: Array, own: bool, host: VBoxContainer) -> void:
+    var shown := 0
+    for raw in rows:
+        if not (raw is Dictionary):
+            continue
+        var entry: Dictionary = raw
+        var item: Variant = entry.get("item", null)
+        if not (item is Dictionary) or not _auction_matches(item):
+            continue
+        _auction_lot_card(host, entry, own)
+        shown += 1
+        if shown >= 50:
+            break
+    if shown == 0:
+        host.add_child(_label("Подходящих активных объявлений нет.", 12, SUB))
+    elif shown >= 50:
+        host.add_child(_label("Показаны первые 50 лотов сервера.", 11, SUB))
+
+func _show_auction_sell_grid(host: VBoxContainer) -> void:
+    host.add_child(_label("ВЫБЕРИ ВЕЩЬ ИЗ СУМКИ", 12, GOLD))
+    var area := ScrollContainer.new()
+    area.name = "PPAAuctionBagScroller"
+    area.custom_minimum_size.y = 238.0
+    area.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    area.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+    host.add_child(area)
+    var grid := GridContainer.new()
+    grid.name = "PPAAuctionBagGrid"
+    grid.columns = 3 if size.x < 700.0 else 5
+    grid.add_theme_constant_override("h_separation", 3)
+    grid.add_theme_constant_override("v_separation", 3)
+    area.add_child(grid)
+    var items: Array = auction_state.get("bag", [])
+    var eligible := 0
+    for i in range(100):
+        var item: Dictionary = items[i] if i < items.size() and items[i] is Dictionary else {}
+        var uid := str(item.get("uid", ""))
+        var can_sell := not uid.is_empty() and not str(item.get("slot", "")).is_empty() and not bool(item.get("bound", false))
+        var b := _button(str(i + 1) if item.is_empty() else str(item.get("icon", "◆")).left(3))
+        b.name = "PPAAuctionBagCell_" + str(i)
+        b.custom_minimum_size = Vector2(43, 44)
+        b.add_theme_font_size_override("font_size", 9)
+        b.disabled = not can_sell
+        if not item.is_empty():
+            b.add_theme_stylebox_override("normal", _style(
+                Color("#4A301B") if uid == _auction_sell_uid else Color("#111821"),
+                ITEM_HOLD.rarity_tint(item), 5, 2))
+            b.add_theme_stylebox_override("disabled", _style(Color("#10151B"),
+                ITEM_HOLD.rarity_tint(item), 5, 2))
+            b.tooltip_text = str(item.get("name", "Предмет"))
+            if _preview_icons != null:
+                _preview_icons.bind_button(item, "", b)
+            if can_sell:
+                eligible += 1
+                b.pressed.connect(_auction_select_sell_uid.bind(uid))
+        grid.add_child(b)
+    if eligible == 0:
+        host.add_child(_label("Нет доступной экипировки с серверным UID.", 10, SUB))
+    host.add_child(_label("Продажа стопок зелий и материалов ожидает поддержку общего серверного escrow.", 10, SUB))
+
+func _show_auction_sell_form(host: VBoxContainer) -> void:
+    var selected: Dictionary = {}
+    for raw in auction_state.get("bag", []):
+        if raw is Dictionary and str(raw.get("uid", "")) == _auction_sell_uid:
+            selected = raw
+            break
+    host.add_child(_label("ВЫБРАНО: " + str(selected.get("name", "Коснись вещи в сумке")), 11, GOLD))
+    var grid := GridContainer.new()
+    grid.columns = 2
+    grid.add_theme_constant_override("h_separation", 6)
+    grid.add_theme_constant_override("v_separation", 7)
+    host.add_child(grid)
+    grid.add_child(_label("Количество", 10, SUB))
+    grid.add_child(_label("1 шт. · UID-лот", 10, GOLD))
+    grid.add_child(_label("Цена за штуку", 10, SUB))
+    var price := SpinBox.new()
+    price.name = "PPARealAuctionPrice"
+    price.min_value = 1
+    price.max_value = 999999999
+    price.step = 1
+    price.value = _asking_price
+    price.value_changed.connect(_set_asking_price)
+    grid.add_child(price)
+    grid.add_child(_label("Валюта", 10, SUB))
+    var currency := OptionButton.new()
+    currency.name = "PPARealAuctionCurrency"
+    currency.add_item("PPA")
+    currency.add_item("Gram")
+    currency.select(0 if _asking_currency == "PPA" else 1)
+    currency.item_selected.connect(_set_currency)
+    grid.add_child(currency)
+    grid.add_child(_label("Срок", 10, SUB))
+    grid.add_child(_label("24 часа · сервер", 10, GOLD))
+    host.add_child(_label("Комиссия 10% · получите " +
+        str(snappedf(float(_asking_price) * 0.9, 0.01)) + " " + _asking_currency, 11, GOLD))
+    var enabled: bool = auction_actions.has("place") and bool(auction_state.get("settlementEnabled", false)) \
+        and not auction_loading and not auction_pending and not selected.is_empty() \
+        and int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
+    var place := _button("РАЗМЕСТИТЬ ЛОТ", enabled)
+    place.name = "PPARealAuctionPlace"
+    place.pressed.connect(_auction_place_selected)
+    host.add_child(place)
+    if not enabled:
+        host.add_child(_label("Продажа требует разрешения сервера и свободного слота.", 10, SUB))
+
 func _auction_sell_uid_changed(index: int, chooser: OptionButton) -> void:
     if index >= 0 and index < chooser.item_count:
         _auction_sell_uid = str(chooser.get_item_metadata(index))
