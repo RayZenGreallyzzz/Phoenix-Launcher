@@ -1444,6 +1444,7 @@ func _add_picker(mode: String, selected_key: String, destination: Callable) -> v
     _body.add_child(title)
     var picker = ITEM_PICKER.new()
     picker.name = "NpcPicker_" + mode
+    picker.item_inspector = _item_hold
     _body.add_child(picker)
     picker.item_chosen.connect(destination)
     picker.configure(_inventory_items(), _worn_items(), mode, selected_key)
