@@ -26,6 +26,9 @@ func _run() -> void:
     host.size = Vector2(800, 1280)
     root.add_child(host)
     var screen := HERO.new()
+    # Canonical character page requires its real view's shared stash handle,
+    # even though this test never reads or writes any local stash items.
+    screen.configure({"classKey":"mage"}, "mage", RefCounted.new())
     host.add_child(screen)
     screen.size = host.size
     await process_frame
