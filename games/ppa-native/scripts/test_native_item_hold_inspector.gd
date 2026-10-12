@@ -122,6 +122,37 @@ func _run() -> void:
         popup_center.get_global_rect().get_center().y) < 6.0,
         "Compact inspector popup must remain centered on the game viewport")
 
+    # The real PPA forge catalog includes a desc field which previously
+    # vanished from the item inspector. Show it in a separate readable line
+    # with the canonical rarity palette (never invent item bonuses).
+    for spec in [
+        {"tier":"common","color":Color("#C5CDD7")},
+        {"tier":"uncommon","color":Color("#5FEC99")},
+        {"tier":"rare","color":Color("#73B2FF")},
+        {"tier":"epic","color":Color("#D18FFF")},
+        {"tier":"legendary","color":Color("#FFD170")}
+    ]:
+        var sample := {"name":"Кольцо PPA", "kind":"gear",
+            "rarity":str(spec["tier"]), "desc":"Бонусы из оригинального рецепта PPA"}
+        inspector._show_item(sample, "catalog", true)
+        var border := inspector._panel.get_theme_stylebox("panel") as StyleBoxFlat
+        var heading := inspector.find_child("PPAInspectorName", true, false) as Label
+        var rarity_caption := inspector.find_child("PPAInspectorRarity", true, false) as Label
+        check(border != null and border.border_color.is_equal_approx(spec["color"]),
+            "Item inspector frame did not use the item's real rarity color")
+        check(heading != null and heading.get_theme_color("font_color").is_equal_approx(spec["color"])
+            and rarity_caption != null and rarity_caption.get_theme_color("font_color").is_equal_approx(spec["color"]),
+            "Item name/rarity text must use its rarity tint, not universal gold")
+        check(has_label(inspector, "Бонусы из оригинального рецепта PPA"),
+            "The original forge description field was missing from tooltip")
+    inspector._show_item({"name":"Малоизвестный предмет","rarity":"rare"}, "catalog", true)
+    check(has_label(inspector, "Описание не указано в данных PPA."),
+        "Missing original item description must be labelled honestly, never invented")
+    inspector._show_item({"name":"Камень","rarity":"common",
+        "useText":"Безопасная заточка PPA"}, "resource", true)
+    check(has_label(inspector, "Безопасная заточка PPA"),
+        "The saved resource useText must appear in the dedicated description")
+
     # The virtual storage canvas must support the same hold interaction
     # WITHOUT allocating 500 Button nodes or blocking finger-scroll.
     var storage_scroller := ScrollContainer.new()
