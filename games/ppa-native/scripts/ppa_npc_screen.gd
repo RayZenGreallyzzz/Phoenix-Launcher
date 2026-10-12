@@ -974,7 +974,7 @@ func _render() -> void:
     _clear(_body)
     _forge_recipe_target = null
     _layout_tabs()
-    _heading.text = "АУКЦИОН" if service == "auction" else str(npc.get("name", "NPC"))
+    _heading.text = str(npc.get("name", "NPC"))
     _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service in ["forge","auction"] else HORIZONTAL_ALIGNMENT_LEFT
     _subheading.text = ("ПОКУПАЙ · ПРОДАВАЙ · РАЗВИВАЙСЯ" if service == "auction" else ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name()))
     _subheading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
