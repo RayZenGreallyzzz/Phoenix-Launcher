@@ -34,6 +34,7 @@ const ITEM_HOLD = preload("res://scripts/ppa_item_hold_inspector.gd")
 const ORIGINAL_ITEM_ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 const OFFICIAL_ITEMS = preload("res://scripts/ppa_item_catalog_generated.gd")
 const ORIGINAL_ITEM_VIEWS = preload("res://scripts/ppa_server_inventory_view.gd")
+const PHOENIX_AUCTION = preload("res://scripts/ppa_auction_menu.gd")
 const SAVE_VIEWS = preload("res://scripts/ppa_shared_save_views.gd")
 const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
 const CLAN_CONTENT = preload("res://scripts/ppa_clan_menu_content.gd")
@@ -61,6 +62,9 @@ var tab := ""
 var selected_id := ""
 var quantity := 1
 var _auction_category := "all"
+var _auction_search := ""
+var _auction_level := "all"
+var _auction_rarity := "all"
 var _quest_tier := "21-30"
 var preview_stash: RefCounted
 var _auction_item_key := ""
@@ -522,6 +526,9 @@ func open_npc(source: Dictionary) -> void:
     selected_id = ""
     quantity = 1
     _auction_category = "all"
+    _auction_search = ""
+    _auction_level = "all"
+    _auction_rarity = "all"
     _quest_tier = "21-30"
     _auction_item_key = ""
     _asking_price = 1
@@ -967,11 +974,11 @@ func _render() -> void:
     _clear(_body)
     _forge_recipe_target = null
     _layout_tabs()
-    _heading.text = str(npc.get("name", "NPC"))
-    _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
-    _subheading.text = ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name())
+    _heading.text = "АУКЦИОН" if service == "auction" else str(npc.get("name", "NPC"))
+    _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service in ["forge","auction"] else HORIZONTAL_ALIGNMENT_LEFT
+    _subheading.text = ("ПОКУПАЙ · ПРОДАВАЙ · РАЗВИВАЙСЯ" if service == "auction" else ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name()))
     _subheading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service == "forge" else HORIZONTAL_ALIGNMENT_LEFT
-    _portrait.visible = service != "forge"
+    _portrait.visible = service not in ["forge","auction"]
     _portrait.texture = null
     var portrait_path := str(npc.get("image", ""))
     if ResourceLoader.exists(portrait_path):
@@ -1011,6 +1018,10 @@ func _render() -> void:
         _forge_wallet_host.visible = service == "forge"
         if service == "forge":
             _show_forge_wallet()
+    if service == "auction":
+        _frame.add_theme_stylebox_override("panel", _style(Color("#090F13"), Color("#E1A13D"), 13, 3))
+    else:
+        _frame.add_theme_stylebox_override("panel", _style(BG, EDGE, 13, 2))
     match service:
         "merchant": _show_merchant()
         "blackmarket": _show_blackmarket()
@@ -1038,6 +1049,8 @@ func _render() -> void:
             _status.text = "PPA · общий торговец · покупки ещё не включены"
         if merchant_busy:
             _status.text = "PPA · запрос к серверу торговца…"
+    if service == "auction":
+        _status.text = "PPA · серверная торговля разрешена" if auction_actions.size() > 0 and bool(auction_state.get("settlementEnabled", false)) else "PPA · торговля ещё не включена сервером · доступен просмотр"
     if service == "arena":
         _status.text += " · " + native_online_status
     if service == "forge" and _forge_recipe_target != null:
@@ -2872,6 +2885,11 @@ func _send_real_auction_action(action: String, fields: Dictionary) -> void:
         or auction_loading or auction_pending or not auction_actions.has(action) \
         or not bool(auction_state.get("settlementEnabled", false)):
         return
+    # No Gold bids, including calls bypassing the UI.
+    if action in ["place", "buy"] and str(fields.get("currency", "")).to_lower() not in ["ppa", "gram"]:
+        return
+    if action == "place" and float(fields.get("price", 0)) <= 0.0:
+        return
     var version := int(auction_state.get("version", 0))
     if version <= 0:
         return
@@ -2971,136 +2989,7 @@ func _show_auction_lots(rows: Array, own: bool) -> void:
         _body.add_child(_label("Показаны первые 50 лотов из серверной выборки.", 11, SUB))
 
 func _show_auction() -> void:
-    var verified := _owns_verified_state(auction_state)
-    _section("АУКЦИОН · PPA", "Реальные лоты и начисления из общего сервера Telegram PPA.")
-    if not auction_notice.is_empty():
-        _body.add_child(_label(auction_notice, 11, GOLD))
-    if auction_pending:
-        var retry := _button("ПРОВЕРИТЬ ТУ ЖЕ СДЕЛКУ", not auction_loading)
-        retry.pressed.connect(func(): auction_retry_requested.emit())
-        _body.add_child(retry)
-    var refresh := _button("ОБНОВИТЬ АУКЦИОН", not auction_loading)
-    refresh.pressed.connect(func(): authoritative_state_requested.emit("auction"))
-    _body.add_child(refresh)
-    if not verified:
-        _message("ОЖИДАЕМ СЕРВЕРНЫЕ ЛОТЫ", "Без подтверждённого персонажа PPA аукцион недоступен.")
-        _locked_action("КУПИТЬ / ПРОДАТЬ")
-        return
-    var wallet: Dictionary = auction_state.get("wallet", {})
-    _mini_row("PPA", str(wallet.get("ppa", "—")))
-    _mini_row("Gram", str(wallet.get("gram", "—")))
-    _mini_row("Комиссия аукциона", "10% · начисление продавцу 90%")
-    if tab != "mine":
-        _choice_tiles([
-            {"key":"all","label":"ВСЕ"}, {"key":"weapon","label":"ОРУЖИЕ"},
-            {"key":"armor","label":"БРОНЯ"}, {"key":"accessories","label":"АКСЕССУАРЫ"},
-            {"key":"consumables","label":"РАСХОДНИКИ"}, {"key":"materials","label":"МАТЕРИАЛЫ"},
-            {"key":"books","label":"КНИГИ"}, {"key":"quest","label":"КВЕСТОВЫЕ"},
-            {"key":"misc","label":"РАЗНОЕ"}], _auction_category, _auction_filter)
-    if tab == "all":
-        _section("АКТИВНЫЕ ЛОТЫ", "Общий рынок PPA · существующие объявления Telegram.")
-        _show_auction_lots(auction_state.get("lots", []), false)
-        _body.add_child(_label("Купить можно только защищённый лот PPA. Старые лоты пока только для просмотра.", 11, SUB))
-    elif tab == "mine":
-        _section("МОИ ЛОТЫ", "Только объявления этого персонажа на общем сервере.")
-        _show_auction_lots(auction_state.get("mine", []), true)
-        _section("ИСТЁКШИЕ ЛОТЫ · ВОЗВРАТ ВЕЩЕЙ",
-            "Непроданная вещь хранится на сервере до безопасного возврата в сумку.")
-        var recoverable: Array = auction_state.get("recoverable", [])
-        if recoverable.is_empty():
-            _body.add_child(_label("Вещей, ожидающих возврата, нет.", 12, SUB))
-        for entry in recoverable.slice(0, 50):
-            if not (entry is Dictionary):
-                continue
-            var lot: Dictionary = entry
-            var item: Variant = lot.get("item", {})
-            var item_name := str(item.get("name", "Вещь")) if item is Dictionary else "Вещь"
-            _mini_row(item_name, "UID · " + str(lot.get("uid", "")).left(22))
-            var enabled: bool = auction_actions.has("recover") and \
-                bool(lot.get("canRecover", false)) and \
-                not auction_pending and not auction_loading and \
-                bool(auction_state.get("settlementEnabled", false)) and \
-                (auction_state.get("bag", []) as Array).size() < 100
-            var reclaim := _button("ВЕРНУТЬ ИЗ ИСТЁКШЕГО ЛОТА", enabled)
-            reclaim.name = "PPARealAuctionRecover_" + str(lot.get("id", ""))
-            reclaim.pressed.connect(_auction_recover_lot.bind(str(lot.get("id", ""))))
-            _body.add_child(reclaim)
-        _section("НАЧИСЛЕНИЯ ПРОДАВЦУ", "Подтверждённые Telegram PPA credits, пока без автоматического списания.")
-        var credits: Array = auction_state.get("pendingCredits", [])
-        if credits.is_empty():
-            _body.add_child(_label("Ожидающих начислений нет.", 12, SUB))
-        for credit in credits.slice(0, 30):
-            if credit is Dictionary:
-                _mini_row("Продажа · " + str(credit.get("lotId", "")).left(20),
-                    str(credit.get("amount", 0)) + " " + str(credit.get("currency", "ppa")).to_upper())
-                if auction_actions.has("claim") and bool(credit.get("canClaim", false)) \
-                    and bool(auction_state.get("serverCreditClaimsEnabled", false)):
-                    var claim := _button("ПОЛУЧИТЬ · " + str(credit.get("amount", 0)), \
-                        not auction_pending and not auction_loading)
-                    claim.name = "PPARealAuctionClaim_" + str(credit.get("id", ""))
-                    claim.pressed.connect(_auction_claim_credit.bind(str(credit.get("id", ""))))
-                    _body.add_child(claim)
-        if not bool(auction_state.get("serverCreditClaimsEnabled", false)):
-            _body.add_child(_label("Выплаты заблокированы, пока Telegram и Godot не используют единый серверный расчёт.", 11, SUB))
-    elif tab == "sell":
-        _section("ПРОДАЖА РЕАЛЬНОЙ ВЕЩИ", "Вещь будет изъята сервером из сумки и сохранена в лоте.")
-        var items: Array = auction_state.get("bag", [])
-        _mini_row("Открыто слотов", str(auction_state.get("maxSellSlots", 0)))
-        _mini_row("Мои активные лоты", str(auction_state.get("mine", []).size()))
-        var choose := OptionButton.new()
-        choose.name = "PPARealAuctionGearPicker"
-        var first_uid := ""
-        var chosen := 0
-        for item in items:
-            if not (item is Dictionary) or str(item.get("uid", "")).is_empty():
-                continue
-            if str(item.get("slot", "")).is_empty():
-                continue
-            var index := choose.item_count
-            choose.add_item(str(item.get("name", "Вещь")).left(25) + " · +" + str(item.get("enh", 0)))
-            choose.set_item_metadata(index, str(item.get("uid", "")))
-            if first_uid.is_empty():
-                first_uid = str(item.get("uid", ""))
-            if str(item.get("uid", "")) == _auction_sell_uid:
-                chosen = index
-        _body.add_child(choose)
-        if choose.item_count > 0:
-            choose.select(chosen)
-            _auction_sell_uid = str(choose.get_item_metadata(chosen))
-        else:
-            _auction_sell_uid = ""
-        choose.item_selected.connect(_auction_sell_uid_changed.bind(choose))
-        var settings := GridContainer.new()
-        settings.columns = 2
-        settings.add_theme_constant_override("h_separation", 10)
-        settings.add_theme_constant_override("v_separation", 8)
-        _body.add_child(settings)
-        settings.add_child(_label("Цена за вещь", 12, GOLD))
-        var price := SpinBox.new()
-        price.name = "PPARealAuctionPrice"
-        price.min_value = 1
-        price.max_value = 999999999
-        price.step = 1
-        price.value = _asking_price
-        price.value_changed.connect(_set_asking_price)
-        settings.add_child(price)
-        settings.add_child(_label("Валюта", 12, GOLD))
-        var currency := OptionButton.new()
-        currency.name = "PPARealAuctionCurrency"
-        currency.add_item("PPA")
-        currency.add_item("Gram")
-        currency.select(0 if _asking_currency == "PPA" else 1)
-        currency.item_selected.connect(_set_currency)
-        settings.add_child(currency)
-        var enabled: bool = auction_actions.has("place") and \
-            bool(auction_state.get("settlementEnabled", false)) and \
-            not auction_loading and not auction_pending and not _auction_sell_uid.is_empty() \
-            and int(auction_state.get("maxSellSlots", 0)) > auction_state.get("mine", []).size()
-        var place := _button("ВЫСТАВИТЬ ВЕЩЬ НА АУКЦИОН", enabled)
-        place.name = "PPARealAuctionPlace"
-        place.pressed.connect(_auction_place_selected)
-        _body.add_child(place)
-        _body.add_child(_label("Комиссия при продаже: 10% · вещь не копируется.", 11, SUB))
+    PHOENIX_AUCTION.render(self)
 
 func _show_clan() -> void:
     if not clan_state.is_empty():
