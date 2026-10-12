@@ -27,6 +27,16 @@ func _run() -> void:
     npc.auction_action_requested.connect(func(fields: Dictionary): sent.append(fields.duplicate(true)))
     npc.open_npc({"service":"auction","name":"Аукционист"})
     check(npc._body.find_child("PPAAuctionPhoenixBanner",true,false)!=null,"Phoenix banner missing")
+    var footer := npc.find_child("PPAAuctionFixedWallet",true,false) as HBoxContainer
+    check(footer!=null and footer.visible and footer.get_child_count()==2,
+        "Offline auction footer must show PPA and Gram horizontally")
+    var offline_ppa := footer.find_child("PPAAuctionWalletAmount_ppa",true,false) as Label
+    var offline_gram := footer.find_child("PPAAuctionWalletAmount_gram",true,false) as Label
+    check(offline_ppa!=null and offline_gram!=null and offline_ppa.text=="PPA  —"
+        and offline_gram.text=="Gram  —",
+        "Unknown balances should display dashes, never guessed amounts")
+    check(npc._body.find_child("PPAAuctionWallet_ppa",true,false)==null,
+        "PPA wallet must not be inside scrolling category content")
     check(npc._body.find_child("PPAAuctionCategoryGrid",true,false)!=null,
         "Offline auction must still show item categories")
     check(npc._body.find_child("PPAAuctionSearch",true,false)!=null,
@@ -59,6 +69,16 @@ func _run() -> void:
     check(npc._body.find_child("PPAAuctionCategoryGrid",true,false)!=null,"Categories not displayed")
     check(npc._body.find_child("PPAAuctionSearch",true,false)!=null,"Real auction search missing")
     check(npc._body.find_child("PPAAuctionRarityFilter",true,false)!=null,"Rarity filter missing")
+    footer = npc.find_child("PPAAuctionFixedWallet",true,false) as HBoxContainer
+    check(footer != null and footer.visible and footer.get_child_count()==2,
+        "Signed PPA and Gram wallet must stay pinned at the bottom")
+    var ppa := footer.find_child("PPAAuctionWalletAmount_ppa",true,false) as Label
+    var gram := footer.find_child("PPAAuctionWalletAmount_gram",true,false) as Label
+    check(ppa!=null and gram!=null and ppa.text=="PPA  551" and gram.text=="Gram  3",
+        "Pinned wallet did not show real signed balances")
+    check(ppa.autowrap_mode==TextServer.AUTOWRAP_OFF
+        and gram.autowrap_mode==TextServer.AUTOWRAP_OFF,
+        "Wallet counters must not wrap vertically on mobile")
     var buy := npc._body.find_child("PPARealAuctionBuy_" + LOT,true,false) as Button
     check(buy!=null and not buy.disabled,"Signed buy quote missing")
     buy.pressed.emit()
