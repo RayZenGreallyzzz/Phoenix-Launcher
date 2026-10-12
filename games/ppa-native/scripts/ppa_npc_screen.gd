@@ -748,6 +748,7 @@ func show_canonical_clan_storage(items: Array) -> void:
     scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
     _body.add_child(scroller)
     var grid = VIRTUAL_GRID.new()
+    grid.item_inspector = _item_hold
     grid.custom_minimum_size.x = 300
     scroller.add_child(grid)
     grid.configure("clan", scroller, 5)
@@ -2468,6 +2469,7 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     # Child canvas is IGNORE to keep touch input exclusively with scroll.
     shell.add_child(scrolling)
     var grid := VIRTUAL_GRID.new()
+    grid.item_inspector = _item_hold
     grid.custom_minimum_size.x = maxf(150.0,
         (_frame.offset_right - _frame.offset_left) / 2.0 - 56.0) if size.x >= 570.0 else maxf(150.0, _frame.offset_right - _frame.offset_left - 60.0)
     scrolling.add_child(grid)
