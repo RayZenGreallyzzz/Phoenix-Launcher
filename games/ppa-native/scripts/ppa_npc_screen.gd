@@ -61,6 +61,20 @@ var tab := ""
 var selected_id := ""
 var quantity := 1
 var _auction_category := "all"
+var _auction_search := ""
+var _auction_rarity := "all"
+var _auction_level := "all"
+const AUCTION_CATEGORIES := [
+    {"key":"all","label":"Все предметы","icon":"▦"},
+    {"key":"weapon","label":"Оружие","icon":"⚔"},
+    {"key":"armor","label":"Броня","icon":"⬟"},
+    {"key":"accessories","label":"Аксессуары","icon":"◉"},
+    {"key":"consumables","label":"Расходники","icon":"⚗"},
+    {"key":"materials","label":"Материалы","icon":"◆"},
+    {"key":"books","label":"Книги","icon":"▤"},
+    {"key":"quest","label":"Квестовые","icon":"▣"},
+    {"key":"misc","label":"Разное","icon":"✦"}
+]
 var _quest_tier := "21-30"
 var preview_stash: RefCounted
 var _auction_item_key := ""
@@ -522,6 +536,9 @@ func open_npc(source: Dictionary) -> void:
     selected_id = ""
     quantity = 1
     _auction_category = "all"
+    _auction_search = ""
+    _auction_rarity = "all"
+    _auction_level = "all"
     _quest_tier = "21-30"
     _auction_item_key = ""
     _asking_price = 1
@@ -2842,26 +2859,54 @@ func _show_storage() -> void:
         _message("ПРЕМИУМ ДОСТУП", "Содержимое премиум-хранилища читается только с сервера PPA.")
         _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
 
+func _auction_category_matches(item: Dictionary) -> bool:
+    var slot_name := str(item.get("slot", item.get("equipSlot", ""))).to_lower()
+    var kind := str(item.get("kind", "")).to_lower()
+    match _auction_category:
+        "all": return true
+        "weapon": return slot_name == "weapon"
+        "armor": return slot_name in ["helmet","armor","gloves","legs","boots","pants","shield"]
+        "accessories": return slot_name in ["ring","necklace","amulet","artifact","cloak","wings","pet"]
+        "consumables": return kind in ["consumable","stone","feather","potion"]
+        "materials": return kind == "material"
+        "books": return kind in ["grimoire","book"]
+        "quest": return kind == "quest"
+        "misc": return kind in ["misc","other","chest"] or (slot_name.is_empty() and kind.is_empty())
+        _: return false
+
 func _auction_matches(item: Dictionary) -> bool:
-    if _auction_category == "all":
-        return true
-    var slot_name := str(item.get("slot", ""))
-    var kind := str(item.get("kind", ""))
-    if _auction_category == "weapon":
-        return slot_name == "weapon"
-    if _auction_category == "armor":
-        return slot_name in ["helmet","armor","gloves","legs","boots"]
-    if _auction_category == "accessories":
-        return slot_name in ["ring","necklace","artifact","cloak","wings","pet"]
-    if _auction_category == "consumables":
-        return kind in ["consumable","stone","feather"]
-    if _auction_category == "materials":
-        return kind == "material"
-    if _auction_category == "books":
-        return kind == "grimoire"
-    if _auction_category == "quest":
-        return kind == "quest"
+    if not _auction_category_matches(item):
+        return false
+    if not _auction_search.is_empty() and not str(item.get("name", "")).to_lower().contains(_auction_search.to_lower()):
+        return false
+    if _auction_rarity != "all" and ITEM_HOLD.rarity_key(item) != _auction_rarity:
+        return false
+    if _auction_level != "all":
+        var level := maxi(0, int(item.get("level", item.get("lvl", 0))))
+        var limits := _auction_level.split("-")
+        if limits.size() == 2 and (level < int(limits[0]) or level > int(limits[1])):
+            return false
     return true
+
+func _auction_set_search(value: String) -> void:
+    _auction_search = value.strip_edges().left(80)
+    _render()
+
+func _auction_set_rarity(index: int) -> void:
+    var values := ["all","common","uncommon","rare","epic","legendary"]
+    if index >= 0 and index < values.size():
+        _auction_rarity = values[index]
+        _render()
+
+func _auction_set_level(index: int) -> void:
+    var values := ["all","1-20","21-40","41-60","61-999"]
+    if index >= 0 and index < values.size():
+        _auction_level = values[index]
+        _render()
+
+func _auction_select_sell_uid(uid: String) -> void:
+    _auction_sell_uid = uid
+    _render()
 
 func _auction_sell_uid_changed(index: int, chooser: OptionButton) -> void:
     if index >= 0 and index < chooser.item_count:
