@@ -37,6 +37,8 @@ on:
       - 'games/ppa-native/scripts/test_native_inventory_equip.gd'
       - 'games/ppa-native/scripts/ppa_item_hold_inspector.gd'
       - 'games/ppa-native/scripts/test_native_item_hold_inspector.gd'
+      - 'games/ppa-native/scripts/test_native_hero_item_hold.gd'
+      - 'games/ppa-native/scripts/ppa_character_screen.gd'
       - 'games/ppa-native/scripts/ppa_native_personal_storage_service.gd'
       - 'games/ppa-native/scripts/test_native_personal_storage.gd'
       - 'games/ppa-native/scripts/ppa_native_clan_storage_service.gd'
@@ -136,6 +138,9 @@ jobs:
       - name: Verify one-second item hold and signed gear menu
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_item_hold_inspector.gd
+      - name: Verify one-second hero inventory popup and protected gear action
+        run: |
+          timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_hero_item_hold.gd
       - name: Verify canonical personal vault and read-only clan vault UI
         run: |
           timeout 70s /tmp/godot/Godot_v4.6-stable_linux.x86_64 --headless --path /tmp/npc-test --script res://scripts/test_native_personal_storage.gd
