@@ -12,6 +12,7 @@ const DRAG_THRESHOLD := 22.0
 
 var resolve_action: Callable
 var _timer: Timer
+var _popup_center: CenterContainer
 var _panel: PanelContainer
 var _content: VBoxContainer
 var _held_source: Button
@@ -41,20 +42,23 @@ func _ready() -> void:
     _timer.wait_time = HOLD_SECONDS
     _timer.timeout.connect(_hold_timeout)
     add_child(_timer)
+    # Android video QA: a fixed 400px popup created a giant empty black
+    # rectangle for stones and runes with only two or three detail lines.
+    # CenterContainer gives the SAME common panel content-driven height.
+    _popup_center = CenterContainer.new()
+    _popup_center.name = "PPAItemInspectorCenter"
+    _popup_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _popup_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    add_child(_popup_center)
     _panel = PanelContainer.new()
     _panel.name = "PPAItemInspectorPopup"
     _panel.visible = false
-    _panel.anchor_left = 0.5
-    _panel.anchor_right = 0.5
-    _panel.anchor_top = 0.5
-    _panel.anchor_bottom = 0.5
-    _panel.offset_left = -170
-    _panel.offset_right = 170
-    _panel.offset_top = -200
-    _panel.offset_bottom = 200
+    _panel.custom_minimum_size.x = 340.0
+    _panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    _panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     _panel.mouse_filter = Control.MOUSE_FILTER_STOP
     _panel.add_theme_stylebox_override("panel", _style(Color("#101719"), Color("#C18A42")))
-    add_child(_panel)
+    _popup_center.add_child(_panel)
     _content = VBoxContainer.new()
     _content.name = "PPAItemInspectorContent"
     _content.add_theme_constant_override("separation", 6)
