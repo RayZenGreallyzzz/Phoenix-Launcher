@@ -48,6 +48,35 @@ func _run() -> void:
     var inspector: Control = npc._item_hold
     var grid := npc._forge_inventory_host.find_child("PPAForgeInventoryGrid", true, false) as GridContainer
     check(grid != null and grid.get_child_count() == 100, "Forge inventory unavailable")
+    # The previous Android build drew the forge's stack quantity twice:
+    # generic PPARealQty (×7) over PPAForgeVirtualStackCount (7).
+    var stone_cell := grid.get_child(1) as Button
+    check(stone_cell != null and bool(stone_cell.get_meta("ppa_suppress_icon_qty", false))
+        and stone_cell.clip_contents and
+        stone_cell.find_child("PPAForgeVirtualStackCount", true, false) != null,
+        "Forge resource must have ONE own badge and clip image within slot")
+    var item_icon_loader := preload("res://scripts/ppa_item_icon_loader.gd").new()
+    host.add_child(item_icon_loader)
+    var fake_texture := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGBA8))
+    stone_cell.set_meta("ppa_icon_path", "test-stone.png")
+    stone_cell.set_meta("ppa_icon_qty", 7)
+    stone_cell.set_meta("ppa_icon_virtual", true)
+    item_icon_loader._show_icon(stone_cell, "test-stone.png", fake_texture)
+    check(stone_cell.find_child("PPARealQty", true, false) == null,
+        "Generic loader repainted ×7 over the forge's custom stack badge")
+    var rerendered := Button.new()
+    rerendered.custom_minimum_size = Vector2(60, 60)
+    rerendered.set_meta("ppa_icon_path", "test-gear.png")
+    rerendered.set_meta("ppa_icon_qty", 4)
+    rerendered.set_meta("ppa_icon_virtual", true)
+    rerendered.set_meta("ppa_icon_upgrade", 2)
+    host.add_child(rerendered)
+    item_icon_loader._show_icon(rerendered, "test-gear.png", fake_texture)
+    item_icon_loader._show_icon(rerendered, "test-gear.png", fake_texture)
+    check(rerendered.find_children("PPARealQty", "Label", false, false).size() == 1 and
+        rerendered.find_children("PPARealUpgrade", "Label", false, false).size() == 1 and
+        rerendered.clip_contents and rerendered.get_theme_constant("icon_max_width") <= 52,
+        "Rebound icons duplicated their count/upgrade or spilled over adjacent cells")
     var icon := grid.get_child(0) as Button
     check(icon != null and not icon.disabled and
         icon.get_meta("ppa_inspect_origin", "") == "bag",
