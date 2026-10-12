@@ -151,6 +151,32 @@ func _run() -> void:
         popup_center.get_global_rect().get_center().y) < 6.0,
         "Compact inspector popup must remain centered on the game viewport")
 
+    # Pinned tooltips have no Close button: touch ANY blank region, even
+    # inside their own card, dismisses without triggering underlying actions.
+    check(inspector.find_child("PPAInspectorClose", true, false) == null,
+        "Item mini panel must not show a Close button")
+    var tap_dismiss := InputEventScreenTouch.new()
+    tap_dismiss.index = 0
+    tap_dismiss.position = mini_popup.get_global_rect().get_center()
+    tap_dismiss.pressed = true
+    inspector._input(tap_dismiss)
+    check(not inspector.is_open(),
+        "Tapping the description card must dismiss pinned item details")
+    inspector._show_item(stone, "resource", false)
+    tap_dismiss.position = Vector2(2, 2)
+    inspector._input(tap_dismiss)
+    check(not inspector.is_open(), "Tapping outside the item popup must dismiss it")
+    inspector._show_item(weapon, "bag", false)
+    await process_frame
+    var equip_tap_target := inspector.find_child("PPAInspectorEquipmentAction", true, false) as Button
+    check(equip_tap_target != null and not equip_tap_target.disabled,
+        "Signed Equip menu must remain tappable after dismiss-by-touch update")
+    tap_dismiss.position = equip_tap_target.get_global_rect().get_center()
+    inspector._input(tap_dismiss)
+    check(inspector.is_open(),
+        "Tapping Equip should not preempt the real server button with dismiss")
+    inspector.dismiss()
+
     # The real PPA forge catalog includes a desc field which previously
     # vanished from the item inspector. Show it in a separate readable line
     # with the canonical rarity palette (never invent item bonuses).
