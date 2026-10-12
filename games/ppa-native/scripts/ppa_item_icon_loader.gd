@@ -156,9 +156,24 @@ func _show_icon(button: Button, path: String, texture: Texture2D) -> void:
     button.expand_icon = true
     button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
     button.text = ""
-    button.add_theme_constant_override("icon_max_width", 56)
+    # Shared icons can be wider than the 10-column smith bag's square
+    # slots. Keep both the image and its count badges inside that slot.
+    button.clip_contents = true
+    var icon_limit := 56
+    if button.custom_minimum_size.x >= 32.0:
+        icon_limit = maxi(20, mini(56, int(button.custom_minimum_size.x) - 8))
+    button.add_theme_constant_override("icon_max_width", icon_limit)
+    # A late image load or rebind must not stack a second xN/+N label.
+    for old in button.get_children():
+        if old.name in ["PPARealQty", "PPARealUpgrade"]:
+            button.remove_child(old)
+            old.queue_free()
     # Icons must not hide the actual server stack count and upgrade.
     for key in ["qty", "upgrade"]:
+        # The forge bag already provides its own bottom-right stack count.
+        # Drawing PPARealQty here would paint ×7 directly over the bag's 7.
+        if key == "qty" and bool(button.get_meta("ppa_suppress_icon_qty", false)):
+            continue
         var amount: int = int(button.get_meta("ppa_icon_" + key, 0))
         if amount <= 0 or (key == "qty" and amount == 1 and button.get_meta("ppa_icon_virtual", false) != true):
             continue
