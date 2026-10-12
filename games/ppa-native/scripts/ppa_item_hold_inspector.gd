@@ -79,6 +79,8 @@ func bind_button(button: Button, item: Dictionary, origin: String = "catalog",
     # pointer-down even if its surrounding inventory slot is read-only.
     button.disabled = false
     button.tooltip_text = ""
+    button.set_meta("ppa_inspect_name", str(item.get("name", "")))
+    button.set_meta("ppa_inspect_origin", origin)
     button.button_down.connect(_begin_press.bind(button, item.duplicate(true), origin, tap_action))
     # GLOBAL input release is necessary: the finger may lift outside a slot.
     # It also prevents opening a tap card after scrolling a grid.
