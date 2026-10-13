@@ -1,0 +1,16 @@
+name: PPA Original Smith Art Schema Audit
+on:
+  push:
+    branches:
+      - feature/ppa-phoenix-auction-ui-20261012
+    paths:
+      - games/ppa-native/tools/audit_live_forge_art_schema.py
+      - .github/workflows/ppa-smith-art-audit.yml
+jobs:
+  audit-original-public-smith:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect original public PPA smith asset mappings
+        run: python3 games/ppa-native/tools/audit_live_forge_art_schema.py
