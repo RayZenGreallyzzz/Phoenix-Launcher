@@ -1158,9 +1158,23 @@ func _render() -> void:
     elif service == "blackmarket" and _blackmarket_restore_scroll >= 0:
         var saved_market_position := _blackmarket_restore_scroll
         _blackmarket_restore_scroll = -1
-        _scroll.set_deferred("scroll_vertical",saved_market_position)
+        # ScrollContainer may not know the new product-grid height during
+        # this render. Restore only AFTER two layout frames, not immediately.
+        call_deferred("_restore_market_scroll_after_layout",
+            saved_market_position,tab,selected_id)
     else:
         _scroll.set_deferred("scroll_vertical", 0)
+
+func _restore_market_scroll_after_layout(position: int,
+        expected_tab: String, expected_item: String) -> void:
+    await get_tree().process_frame
+    await get_tree().process_frame
+    if not visible or service != "blackmarket" or tab != expected_tab \
+            or selected_id != expected_item or _scroll == null:
+        return
+    var bar := _scroll.get_v_scroll_bar()
+    var limit := maxi(0, int(ceilf(bar.max_value - bar.page)))
+    _scroll.scroll_vertical = clampi(position,0,limit)
 
 func _scroll_to_auction_buy_grid() -> void:
     if not visible or service != "auction" or tab != "all" or _scroll == null:
