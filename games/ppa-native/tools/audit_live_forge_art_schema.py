@@ -50,7 +50,8 @@ print("PPA_MORE_ART",json.dumps({
  "outerNames":[v for v in outer_names if any(w in v for w in ["ART","IMG","LEGEND","CLOAK","WING","JEWEL","ACCESSORY","PIC_"])],
  "accessoryImageLogic":source_snippets(source,["function accessoryImg","function craftImg","function renderAcc","function accImg","PIC_CLOAK_ICON_DATA"],1400),
  "outerAccessoryLogic":source_snippets(all_source,["PIC_CLOAK_ICON_DATA","PIC_WINGS","PIC_ARTIFACT","JEWELRY_VARIANTS"],700),
- "legendStatSource":source_snippets(source,["const LEGENDARY_GEAR_STATS"],1000)
+ "legendStatSource":source_snippets(source,["const LEGENDARY_GEAR_STATS"],1000),
+ "forgeVisualsBridge":source_snippets(all_source,["wingsByRarity:","PPA_UI_CRAFT_IMG","EPIC_CLOAK_ICON_DATA","LEGENDARY_CLOAK_ART","artifactsImg:","accessories:{"],2300)
 },ensure_ascii=False),flush=True)
 print("PPA_SOURCE_ART_SCHEMA",json.dumps({
  "petImages":pet,
