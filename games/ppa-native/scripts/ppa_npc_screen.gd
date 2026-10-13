@@ -1439,7 +1439,7 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
         var display_item := item.duplicate(true)
         var offer_item: Variant = item.get("item", null)
         if offer_item is Dictionary:
-            for field in ["img", "image", "iconArt", "art", "src", "icon"]:
+            for field in ["img", "image", "iconArt", "art", "src", "icon", "rarity"]:
                 if str(display_item.get(field, "")).is_empty():
                     display_item[field] = (offer_item as Dictionary).get(field, "")
         var image_found := false
@@ -1447,7 +1447,22 @@ func _product_grid(products: Array, is_merchant: bool) -> void:
             if not str(display_item.get(field, "")).is_empty():
                 image_found = true
                 break
-        if image_found:
+        if service == "blackmarket":
+            # Even an offer without server-provided art deserves a SQUARE
+            # rarity frame, never the old floating diamond in its place.
+            # The source object's rarity is the ONLY basis for its color.
+            var icon_tile := _readonly_icon_item(display_item, 52, "decorative")
+            icon_tile.name = "PPABlackMarketRarityIcon_" + id.to_utf8_buffer().hex_encode()
+            icon_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            inner.add_child(icon_tile)
+            var quality := str(display_item.get("rarity","")).to_lower()
+            var known := ITEM_HOLD.RARITY_CAPTIONS.has(quality)
+            var caption := str(ITEM_HOLD.RARITY_CAPTIONS[quality]).to_upper() if known else "РЕДКОСТЬ НЕ УКАЗАНА"
+            var rarity_label := _label(caption, 10,
+                ITEM_HOLD.rarity_tint(display_item) if known else SUB)
+            rarity_label.name = "PPABlackMarketRarityText"
+            inner.add_child(rarity_label)
+        elif image_found:
             inner.add_child(_readonly_icon_item(display_item, 50))
         elif not str(display_item.get("icon", "")).is_empty():
             inner.add_child(_label(str(display_item.get("icon", "")), 23, GOLD))
@@ -1632,7 +1647,7 @@ func _show_blackmarket() -> void:
                 _message("АССОРТИМЕНТ УСТАРЕЛ", "Дневные предложения должны быть обновлены в оригинальной PPA. Старые лоты не выдаём за доступные.")
     if not personal:
         _message("СПРАВОЧНЫЙ АССОРТИМЕНТ", "Постоянные позиции оригинальной PPA. Текущие персональные лоты ещё не синхронизированы.")
-        listed = SHOP.BLACK_MARKET_REFERENCE
+        listed = SHOP.black_market_reference_goods()
     var filtered: Array = []
     for entry in listed:
         if not (entry is Dictionary):
@@ -1644,7 +1659,7 @@ func _show_blackmarket() -> void:
             # Items from the original randomized Telegram PPA market can
             # have artwork/name only in the actual offer's nested item.
             # Do not copy prices, stock, categories or availability from it.
-            for key in ["name", "img", "image", "iconArt", "art", "icon"]:
+            for key in ["name", "img", "image", "iconArt", "art", "src", "icon", "rarity"]:
                 if str(offer.get(key, "")).is_empty():
                     offer[key] = underlying.get(key, "")
         if tab == "all" or str(offer.get("category", "")) == tab:
