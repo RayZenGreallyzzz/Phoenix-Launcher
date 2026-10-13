@@ -486,6 +486,14 @@ jobs:
             if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' "/tmp/${file}.log"; then exit 1; fi
           done
 
+      - name: Verify original PPA smith art for all 58 recipes and six legendary stat sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s godot --headless --path games/ppa-native --script res://scripts/test_native_forge_visual_parity.gd --quit-after 600 2>&1 | tee /tmp/ppa-forge-visual-parity.log
+          grep -q 'PPA_FORGE_VISUAL_PARITY_OK' /tmp/ppa-forge-visual-parity.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-forge-visual-parity.log; then exit 1; fi
+
       - name: Build native PPA APK
         shell: bash
         run: |
