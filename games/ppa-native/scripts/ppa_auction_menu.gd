@@ -503,18 +503,38 @@ static func _sell(ui: Control, main: VBoxContainer, state: Dictionary, verified:
         # Never substitute fake owned items, not even in preview mode.
         left.add_child(_label("Предметов в выбранной категории нет." if wallet_seen or verified
             else "Ожидаем подтверждённый инвентарь персонажа PPA.",12,MUTED))
+    # Keep the inventory pager ONE short horizontal strip below the grid.
+    # A bare HBox inherited large vertical sizing from the seller columns,
+    # stretching ◀ and ▶ into two tall narrow bars on Android.
     var pages_row := HBoxContainer.new()
+    pages_row.name = "PPAAuctionCompactPager"
     pages_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    pages_row.add_theme_constant_override("separation",5)
+    pages_row.custom_minimum_size.y = 34.0
+    pages_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    pages_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     left.add_child(pages_row)
     var prev := _button("◀",page>0)
     prev.name = "PPAAuctionInventoryPrevious"
+    prev.custom_minimum_size = Vector2(37.0,32.0)
+    prev.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    prev.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     prev.pressed.connect(_sale_page.bind(ui,page-1))
     pages_row.add_child(prev)
-    var count := _label("  " + str(page+1) + " / " + str(pages) + "  ",12,GOLD)
+    var count := _label(str(page+1) + " / " + str(pages),12,GOLD)
     count.name = "PPAAuctionInventoryPageCount"
+    count.autowrap_mode = TextServer.AUTOWRAP_OFF
+    count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    count.custom_minimum_size = Vector2(52.0,32.0)
+    count.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     pages_row.add_child(count)
     var next := _button("▶",page+1<pages)
     next.name = "PPAAuctionInventoryNext"
+    next.custom_minimum_size = Vector2(37.0,32.0)
+    next.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    next.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     next.pressed.connect(_sale_page.bind(ui,page+1))
     pages_row.add_child(next)
     var right := VBoxContainer.new()
