@@ -48,6 +48,19 @@ def numeric_js_object(source: str, key: str) -> dict[str, int]:
         raise RuntimeError(f"Canonical PPA smith {key} incomplete")
     return result
 
+
+def original_legendary_bonuses(source: str) -> dict[str,list[str]]:
+    """Copy the six exact displayed +0 base stat arrays from live PPA."""
+    m = re.search(r"\bconst\s+LEGENDARY_GEAR_STATS\s*=\s*\{(.*?)\}\s*;", source, re.S)
+    if not m:
+        raise RuntimeError("Original legendary item stat definitions absent")
+    found = {}
+    for key, inner in re.findall(r"(\w+)\s*:\s*\[([^\]]*)\]", m.group(1)):
+        found[key] = re.findall(r"'([^']+)'", inner)
+    if set(found) != {"weapon","armor","helmet","legs","boots","gloves"} or not all(found.values()):
+        raise RuntimeError("Original PPA legendary bonuses changed or incomplete")
+    return found
+
 def quantities(source: str, func: str) -> dict[str, list[int]]:
     m = re.search(r"function\s+" + re.escape(func) + r"\s*\([^)]*\)\s*\{", source)
     if not m:
@@ -63,7 +76,7 @@ def image_ref(src: str) -> str:
         return ""
     m = re.fullmatch(r"(?:\./|/)?assets/([A-Za-z0-9._/-]+\.(?:png|webp|jpe?g))", src)
     if m and ".." not in m.group(1):
-        return "res://assets/ppa_item_icons/" + m.group(1)
+        # Keep the approved original URL format. The Godot art resolver maps\n    # it to bundled assets first, then the same PPA Worker over HTTPS.\n    return "./assets/" + m.group(1)
     return ""
 
 def requirement(names: list, amounts: list[int]) -> list[dict]:
@@ -85,6 +98,7 @@ def main() -> None:
     pets = object_literal(source, "PETS", dict)
     pet_art = object_literal(source, "PET_IMG", dict)
     gear = object_literal(source, "GEAR", list)
+    legendary_bonuses = original_legendary_bonuses(source)
     mult = numeric_js_object(source, "CRAFT_RESOURCE_MULT")
     acc_base = quantities(source, "qtyForRarity")
     pet_base = quantities(source, "petQty")
@@ -106,6 +120,7 @@ def main() -> None:
             "kind":"gear","slot":item["slot"],"name":item["name"],
             "rarity":"epic","price":int(item["price"]), "currency":"ppa",
             "icon":str(item.get("icon","")), "desc":str(item.get("stat","")),
+            "sourceStats":[str(item.get("stat",""))] if str(item.get("stat","")) else [],
             "materials":mats, "img":""
         })
     for kind, item in acc.items():
@@ -134,6 +149,7 @@ def main() -> None:
                 "rarity":rarity, "price":int(price), "currency":"ppa",
                 "icon":str(item.get("icon","")),
                 "desc":" · ".join(item.get("stats",{}).get(rarity,[])),
+                "sourceStats":list(item.get("stats",{}).get(rarity,[])),
                 "materials":mats, "img":""
             })
     for name, item in pets.items():
@@ -147,6 +163,7 @@ def main() -> None:
                 "name":name, "rarity":rarity,
                 "price":price, "currency":"ppa","icon":"🐾",
                 "desc":str(item.get("bonus",{}).get(rarity,"")),
+                "sourceStats":[str(item.get("bonus",{}).get(rarity,""))] if str(item.get("bonus",{}).get(rarity,"")) else [],
                 "materials":requirement(item.get("mats",[]), [q*mult[rarity] for q in sizes]),
                 "img":image_ref(pet_art.get(name,""))
             })
@@ -171,7 +188,9 @@ def main() -> None:
             "id":"legend:"+item["kind"]+":"+item["slot"],
             "tab":"legendary","kind":item["kind"],"slot":item["slot"],
             "name":item["name"],"rarity":"legendary","price":int(item["price"]),
-            "currency":"ppa","icon":item["icon"],"desc":"Легендарный тир",
+            "currency":"ppa","icon":item["icon"],
+            "desc":" · ".join(legendary_bonuses[item["slot"]]),
+            "sourceStats":legendary_bonuses[item["slot"]],
             "materials":[{"name":item["mat"],"count":1000}],"img":""
         })
     # Price/material parity with server. Differences in images, markup and
