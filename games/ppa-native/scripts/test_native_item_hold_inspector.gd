@@ -161,8 +161,15 @@ func _run() -> void:
     tap_dismiss.position = mini_popup.get_global_rect().get_center()
     tap_dismiss.pressed = true
     inspector._input(tap_dismiss)
+    check(inspector.is_open(),
+        "Inside touch-down must allow scrolling before dismissing the popup")
+    var tap_up := InputEventScreenTouch.new()
+    tap_up.index = 0
+    tap_up.pressed = false
+    tap_up.position = tap_dismiss.position
+    inspector._input(tap_up)
     check(not inspector.is_open(),
-        "Tapping the description card must dismiss pinned item details")
+        "Tapping the description card must dismiss on release")
     inspector._show_item(stone, "resource", false)
     tap_dismiss.position = Vector2(2, 2)
     inspector._input(tap_dismiss)
@@ -226,6 +233,45 @@ func _run() -> void:
         "useText":"Безопасная заточка PPA"}, "resource", true)
     check(has_label(inspector, "Безопасная заточка PPA"),
         "The saved resource useText must appear in the dedicated description")
+
+    # Regression: real smith descriptions had wrapped text cropped under
+    # the hold-release hint by a nested 168px hidden-scroll attribute pane.
+    # Verify a long recipe fits the screen, has ONE scrollable body and keeps
+    # every authentic stat line accessible without trimming or truncation.
+    var long_desc := "Максимальное HP +12% · Максимальная мана +12% · Маг. сопротивление +12%"
+    var long_item := {"name":"Эпическое · Ожерелье", "rarity":"epic",
+        "kind":"accessory","materials":[],"price":4000,"desc":long_desc,
+        "effects":{"bonus_1":"Бонус здоровья на сложных уровнях",
+            "bonus_2":"Повышение выживаемости героя",
+            "bonus_3":"Особый магический эффект высокого ранга"}}
+    inspector._show_item(long_item,"catalog",true)
+    await process_frame
+    await process_frame
+    await process_frame
+    var body_scroll := inspector.find_child("PPAInspectorBodyScroll",true,false) as ScrollContainer
+    mini_popup = inspector.find_child("PPAItemInspectorPopup",true,false) as PanelContainer
+    check(body_scroll!=null and inspector.find_child("PPAInspectorAttributeScroll",true,false)==null,
+        "Fixed invisible inner stat scroller must be replaced by one scrolling popup body")
+    check(has_label(inspector,"Бонус по рецепту PPA: " + long_desc),
+        "Wrapped official recipe stats disappeared from the DOM")
+    check(has_label(inspector,"Отпусти палец, чтобы закрыть"),
+        "Popup lost its release hint")
+    check(body_scroll.custom_minimum_size.y > 0.0 and
+        mini_popup.get_global_rect().position.y >= 0.0 and
+        mini_popup.get_global_rect().end.y <= host.size.y,
+        "Long wrapped item characteristics spill beyond Android screen")
+    # Simulate shorter phone: scrolling should remain available rather than
+    # clipping text and no fake stat values may be introduced.
+    inspector.size = Vector2(350,340)
+    await process_frame
+    await process_frame
+    await process_frame
+    check(mini_popup.get_global_rect().end.y <= inspector.size.y + 1.0 and
+        body_scroll.get_v_scroll_bar().max_value >= body_scroll.size.y,
+        "Small Android viewport must retain a bounded scrollable popup")
+    inspector.size = host.size
+    await process_frame
+    inspector.dismiss()
 
     # The virtual storage canvas must support the same hold interaction
     # WITHOUT allocating 500 Button nodes or blocking finger-scroll.
