@@ -45,6 +45,11 @@ static func _slot_key(item: Dictionary) -> String:
     slot = str(aliases.get(slot, slot))
     if LEGENDARY_SLOTS.has(slot):
         return slot
+    # Epic class gear has a canonical CLASS_GEAR_ART[cls].ring fallback.
+    # Do not apply that to craft accessory rings: their original icon comes
+    # from LEGENDARY_RING_ART instead.
+    if slot == "ring" and str(item.get("kind","")).to_lower() == "gear":
+        return "ring"
     if slot in ["ring", "necklace", "amulet"]:
         return ""
     var name := str(item.get("name", "")).to_lower()
