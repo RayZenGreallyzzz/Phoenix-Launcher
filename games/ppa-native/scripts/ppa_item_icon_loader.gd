@@ -36,7 +36,8 @@ static func _class_key(item: Dictionary, actual_class: String) -> String:
     return actual_class if CLASS_KEYS.has(actual_class) else ""
 
 static func _slot_key(item: Dictionary) -> String:
-    var slot := str(item.get("slot", item.get("equipSlot", item.get("type", "")))).to_lower()
+    var slot := str(item.get("ppaEquipmentSlot",
+        item.get("equipSlot",item.get("slot", item.get("type",""))))).to_lower()
     var aliases := {
         "pants":"legs", "leggings":"legs", "helm":"helmet",
         "chest":"armor", "glove":"gloves", "boot":"boots"
