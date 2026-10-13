@@ -486,6 +486,14 @@ jobs:
             if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' "/tmp/${file}.log"; then exit 1; fi
           done
 
+      - name: Verify vertical right-docked Events tab opens the real global hub
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s godot --headless --path games/ppa-native --script res://scripts/test_native_events_edge_tab.gd --quit-after 600 2>&1 | tee /tmp/ppa-events-edge-tab.log
+          grep -q 'PPA_VERTICAL_EVENTS_TAB_OK' /tmp/ppa-events-edge-tab.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-events-edge-tab.log; then exit 1; fi
+
       - name: Verify original PPA smith art for all 58 recipes and six legendary stat sources
         shell: bash
         run: |
