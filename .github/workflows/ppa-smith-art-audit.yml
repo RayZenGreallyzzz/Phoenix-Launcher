@@ -5,6 +5,7 @@ on:
       - feature/ppa-phoenix-auction-ui-20261012
     paths:
       - games/ppa-native/tools/audit_live_forge_art_schema.py
+      - games/ppa-native/tools/generate_ppa_forge_catalog.py
       - .github/workflows/ppa-smith-art-audit.yml
 jobs:
   audit-original-public-smith:
@@ -14,3 +15,24 @@ jobs:
       - uses: actions/checkout@v4
       - name: Inspect original public PPA smith asset mappings
         run: python3 games/ppa-native/tools/audit_live_forge_art_schema.py
+      - name: Validate authentic generated recipe images and legendary stats
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/generate_ppa_forge_catalog.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('games/ppa-native/scripts/ppa_forge_catalog_generated.gd')
+          data=json.loads(p.read_text().split('const CATALOG = ',1)[1])
+          rows=data['rows']
+          assert len(rows)==58,len(rows)
+          needs_img=[x for x in rows if x['tab'] in ('pets','accessories') or (x['tab']=='legendary' and x['kind']=='accessory')]
+          assert len(needs_img)==45,len(needs_img)
+          assert all(x.get('img','').startswith('./assets/') for x in needs_img)
+          legends=[x for x in rows if x['tab']=='legendary' and x['kind']=='gear']
+          assert len(legends)==6,len(legends)
+          assert all(x.get('sourceStats') for x in legends)
+          assert len([x for x in rows if x['tab']=='pets'])==24
+          print('PPA_SMITH_PUBLIC_VISUAL_SOURCE_OK recipes=58 icons=45 pets=24 legend_stats=6')
+          PY
