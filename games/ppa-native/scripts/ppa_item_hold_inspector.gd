@@ -14,7 +14,12 @@ var resolve_action: Callable
 var _timer: Timer
 var _popup_center: CenterContainer
 var _panel: PanelContainer
+var _popup_scroll: ScrollContainer
 var _content: VBoxContainer
+var _fit_revision := 0
+var _dismiss_touch_start := Vector2.ZERO
+var _dismiss_touch_pending := false
+var _dismiss_touch_moved := false
 var _held_source: Button
 var _held_item: Dictionary = {}
 var _held_origin := ""
@@ -59,10 +64,50 @@ func _ready() -> void:
     _panel.mouse_filter = Control.MOUSE_FILTER_STOP
     _panel.add_theme_stylebox_override("panel", _style(Color("#101719"), Color("#C18A42")))
     _popup_center.add_child(_panel)
+    # One shared scrolling body: nested fixed-height stat containers clipped
+    # wrapped lines beneath the close hint on narrow Android screens.
+    _popup_scroll = ScrollContainer.new()
+    _popup_scroll.name = "PPAInspectorBodyScroll"
+    _popup_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    _popup_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    _popup_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _popup_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    _popup_scroll.scroll_deadzone = 8
+    _panel.add_child(_popup_scroll)
     _content = VBoxContainer.new()
     _content.name = "PPAItemInspectorContent"
+    _content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _content.add_theme_constant_override("separation", 6)
-    _panel.add_child(_content)
+    _popup_scroll.add_child(_content)
+
+# After Godot has laid out wrapped labels, cap the WHOLE card to the screen.
+# The ScrollContainer owns vertical overflow and includes the final hint.
+func _schedule_popup_fit() -> void:
+    if _panel == null or _popup_scroll == null:
+        return
+    _fit_revision += 1
+    _fit_popup_after_layout.call_deferred(_fit_revision)
+
+func _fit_popup_after_layout(revision: int) -> void:
+    if not is_open() or revision != _fit_revision:
+        return
+    var width_limit := maxf(180.0, size.x - 32.0)
+    _panel.custom_minimum_size.x = minf(340.0, width_limit)
+    _popup_scroll.custom_minimum_size.y = 0.0
+    # Make room for the panel padding (10 each side) and its borders.
+    _popup_scroll.custom_minimum_size.x = _panel.custom_minimum_size.x - 24.0
+    await get_tree().process_frame
+    await get_tree().process_frame
+    if not is_open() or revision != _fit_revision:
+        return
+    var body_height := maxf(_content.get_combined_minimum_size().y, _content.size.y)
+    var height_limit := maxf(100.0, size.y - 56.0)
+    _popup_scroll.custom_minimum_size.y = minf(body_height, height_limit - 24.0)
+    _popup_scroll.scroll_vertical = 0
+
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_RESIZED and _panel != null and _panel.visible:
+        _schedule_popup_fit()
 
 func _style(bg: Color, stroke: Color) -> StyleBoxFlat:
     var s := StyleBoxFlat.new()
@@ -162,18 +207,40 @@ func _input(event: InputEvent) -> void:
     # adding a large close button. The equip/unequip button is the one
     # exception: allow it to receive a real tap and perform the verified action.
     if is_open() and not _temporary:
-        var tapped := false
-        var position := Vector2.ZERO
-        if event is InputEventScreenTouch and event.pressed:
-            tapped = true
-            position = event.position
-        elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-            tapped = true
-            position = event.position
-        if tapped and not _is_equipment_button_at(position):
-            dismiss()
-            get_viewport().set_input_as_handled()
+        if event is InputEventScreenTouch:
+            var touch := event as InputEventScreenTouch
+            if touch.pressed:
+                if not _is_equipment_button_at(touch.position):
+                    # Wait until release for an INSIDE tap. A swipe must be
+                    # passed to the scroll body, not mistaken for dismissal.
+                    if _panel.get_global_rect().has_point(touch.position):
+                        _dismiss_touch_start = touch.position
+                        _dismiss_touch_pending = true
+                        _dismiss_touch_moved = false
+                    else:
+                        dismiss()
+                        get_viewport().set_input_as_handled()
+                        return
+            elif _dismiss_touch_pending:
+                var close_on_release := not _dismiss_touch_moved
+                _dismiss_touch_pending = false
+                if close_on_release:
+                    dismiss()
+                    get_viewport().set_input_as_handled()
+                return
+        elif event is InputEventScreenDrag and _dismiss_touch_pending:
+            if (event.position - _dismiss_touch_start).length() > DRAG_THRESHOLD:
+                _dismiss_touch_moved = true
+            # Never mark a real swipe handled: let the scroll container scroll.
             return
+        elif event is InputEventMouseButton:
+            var mouse := event as InputEventMouseButton
+            if mouse.button_index == MOUSE_BUTTON_LEFT and mouse.pressed \
+                    and not _is_equipment_button_at(mouse.position):
+                # Mouse-wheel and drag scrolls are not blanket dismiss clicks.
+                dismiss()
+                get_viewport().set_input_as_handled()
+                return
     # Input is delivered before Button GUI signals on real Android, so record
     # the true screen-touch origin rather than stale emulated mouse position.
     if event is InputEventScreenTouch and event.pressed:
@@ -281,15 +348,12 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
     var details: Array = ITEM_ATTRIBUTES.stat_lines_for_item(item)
     if not details.is_empty():
         _content.add_child(_text("ХАРАКТЕРИСТИКИ", tint, 11))
-        var scroll := ScrollContainer.new()
-        scroll.name = "PPAInspectorAttributeScroll"
-        scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-        scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-        scroll.custom_minimum_size.y = minf(168.0, float(details.size()) * 22.0 + 6.0)
-        _content.add_child(scroll)
+        # Do not trap wrapped attributes inside a 168px inner scroller
+        # with scrolling disabled: it hid the bottom lines on real phones.
         var rows := VBoxContainer.new()
+        rows.name = "PPAInspectorAttributeRows"
         rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        scroll.add_child(rows)
+        _content.add_child(rows)
         for line in details:
             rows.add_child(_text(str(line), Color("#E6EBED"), 11))
     elif origin == "catalog" and item.get("materials") is Array:
@@ -303,7 +367,10 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
 
     if preview_only:
         # This panel may only be read while holding, never used to spend.
-        _content.add_child(_text("Отпусти палец, чтобы закрыть", SUB, 10))
+        var hint := _text("Отпусти палец, чтобы закрыть", SUB, 10)
+        hint.name = "PPAInspectorHoldToDismiss"
+        _content.add_child(hint)
+        _schedule_popup_fit()
         return
     var action: Dictionary = {}
     if resolve_action.is_valid():
@@ -329,6 +396,7 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
     var hint := _text("Коснись экрана, чтобы закрыть", SUB, 10)
     hint.name = "PPAInspectorTapToDismiss"
     _content.add_child(hint)
+    _schedule_popup_fit()
 
 func dismiss() -> void:
     if _timer != null:
@@ -339,6 +407,9 @@ func dismiss() -> void:
     _open_origin = ""
     _temporary = false
     _held_source = null
+    _dismiss_touch_pending = false
+    _dismiss_touch_moved = false
+    _fit_revision += 1
 
 func is_open() -> bool:
     return _panel != null and _panel.visible
