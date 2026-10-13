@@ -36,6 +36,29 @@ def png_dimensions(blob):
     if blob[:8]!=b"\x89PNG\r\n\x1a\n": raise RuntimeError("PPA arena original background is not a PNG")
     return struct.unpack(">II",blob[16:24])
 
+def jpeg_dimensions(blob):
+    if not blob.startswith(b"\xff\xd8"):
+        raise RuntimeError("Published XP arena is not the original JPEG")
+    p=2
+    while p<len(blob)-10:
+        if blob[p]!=0xff:
+            p+=1
+            continue
+        while p<len(blob) and blob[p]==0xff:
+            p+=1
+        marker=blob[p]
+        p+=1
+        if marker in (0xd8,0xd9) or 0xd0<=marker<=0xd7:
+            continue
+        if p+2>len(blob):break
+        length=struct.unpack_from(">H",blob,p)[0]
+        if length<2:break
+        if marker in (0xc0,0xc1,0xc2,0xc3):
+            height,width=struct.unpack_from(">HH",blob,p+3)
+            return width,height
+        p+=length
+    raise RuntimeError("No JPEG SOF segment in original XP arena")
+
 def png_chunk(typ,b):
     return struct.pack(">I",len(b))+typ+b+struct.pack(">I",zlib.crc32(typ+b)&0xffffffff)
 
@@ -68,11 +91,14 @@ def main():
         url=urljoin(HOST,source)
         data=fetch(url,22_000_000)
         if kind == "xp":
-            print("PPA_ORIGINAL_XP_ASSET_HEADER", data[:80].hex(), "bytes", len(data),flush=True)
-        dims=png_dimensions(data)
+            # Original public URL ends in .png but serves an actual JPEG.
+            # Preserve its original bytes and load it with the correct .jpg.
+            dims=jpeg_dimensions(data)
+        else:
+            dims=png_dimensions(data)
         if dims!=expected:
             raise RuntimeError(f"Unexpected PPA {kind} art {dims}, expected {expected}")
-        destination=OUT/f"ppa_original_arena_{kind}.png"
+        destination=OUT/f"ppa_original_arena_{kind}.{'jpg' if kind=='xp' else 'png'}"
         destination.write_bytes(data)
         checks[kind]={"sha":hashlib.sha256(data).hexdigest(),"dimensions":dims}
         print(f"PPA_ORIGINAL_ARENA_MAP kind={kind} dimensions={dims} "
