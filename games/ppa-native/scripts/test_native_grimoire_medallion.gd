@@ -68,14 +68,30 @@ func _check() -> void:
         "book1":1,"book2":0,"book3":0
     },false)
     await process_frame
-    var skill_slot := rows.find_child("OriginalPPASkillIcon",true,false) as CenterContainer
-    var skill_image := rows.find_child("PPAApprovedGrimoireCenterMedallion",true,false) as TextureRect
-    require(skill_slot!=null and skill_image!=null and skill_image.texture is Texture2D
-        and skill_image.material is ShaderMaterial,
-        "Character active skill still shows entire cover, not central circle")
-    require(skill_image.size.x==skill_image.size.y,
-        "Skill medallion must remain circular even inside tall skill card")
+    var skill_slot := rows.find_child("OriginalPPASkillIcon",true,false) as PanelContainer
+    require(skill_slot!=null,"Character active skill has no full book slot")
+    var skill_image := skill_slot.get_child(0) as TextureRect
+    require(skill_image!=null and skill_image.texture==original
+        and skill_image.material==null,
+        "Character ACTIVE skill must show original COMPLETE grimoire book")
+    require(skill_image.custom_minimum_size==Vector2(58.0,76.0),
+        "Character book image must remain the full portrait cover")
+    require(skill_slot.find_child("PPAApprovedGrimoireCenterMedallion",true,false)==null,
+        "Circular battle-only skill graphic leaked into character menu")
+    var passive: Array = catalog.get("passive",[])
+    require(not passive.is_empty(),"Canonical passive skill definitions missing")
+    hero._draw_source_skill_card({
+        "id":str(passive[0]["id"]),"rank":1,"n":str(passive[0].get("n","Passive"))
+    },true)
+    await process_frame
+    var covers := rows.find_children("OriginalPPASkillIcon","PanelContainer",true,false)
+    require(covers.size()==2,"Character menu must show both active and passive book cards")
+    var passive_picture := (covers[1] as PanelContainer).get_child(0) as TextureRect
+    var passive_path := str(passive[0].get("cardArt",""))
+    require(passive_picture!=null and passive_picture.texture==load(passive_path)
+        and passive_picture.material==null,
+        "Character PASSIVE skill must also retain complete original book cover")
     host.queue_free()
     await process_frame
-    print("PPA_ORIGINAL_SKILL_MEDALLION_OK center_crop=1 circle_mask=1 combat=1 active=1 click=1 full_book_unchanged=1 writes=0")
+    print("PPA_ORIGINAL_SKILL_MEDALLION_OK center_crop=1 circle_mask=1 combat=1 active_full_book=1 passive_full_book=1 click=1 writes=0")
     quit(0)
