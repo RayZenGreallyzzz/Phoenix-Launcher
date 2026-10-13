@@ -3,6 +3,8 @@ extends SceneTree
 # Read-only shop QA: all original merchant goods in APK, responsive cards,
 # and personalized Black Market data ONLY from the authenticated D1 save.
 const NPC = preload("res://scripts/ppa_npc_screen.gd")
+const SHOP = preload("res://scripts/test_shop_catalog.gd")
+const ICONS = preload("res://scripts/ppa_item_icon_loader.gd")
 
 func _initialize() -> void:
     call_deferred("_run")
@@ -58,9 +60,32 @@ func _run() -> void:
     check(grid.columns == 2 and grid.get_child_count() == 6,
         "Tablet merchant grid did not use two columns")
 
+    npc.open_npc({"service":"blackmarket","name":"Блек Маркет"})
+    await process_frame
+    var references := SHOP.black_market_reference_goods()
+    check(references.size()==3,"Three real PPA Black Market reference items missing")
+    for row in references:
+        var path := ICONS.art_path(row,"")
+        check(path.begins_with("/assets/"),
+            "Black Market reference item missing original image: " + str(row.get("id","")))
+        var tex := "res://assets/ppa_item_icons/" + path.get_slice("?",0).trim_prefix("/assets/")
+        check(ResourceLoader.exists(tex),
+            "Black Market original art not bundled: " + tex)
+        check(not row.has("rarity"),"Reference offer invented item rarity")
+    var bm_icons := npc._body.find_children("PPABlackMarketRarityIcon_*","Button",true,false)
+    check(bm_icons.size()==3,"Black Market did not draw square art boxes for three reference goods")
+    for tile in bm_icons:
+        check(tile.icon!=null and tile.has_meta("ppa_rarity_tint"),
+            "Black Market known item must display original image inside rarity-ready frame")
+    npc._select_tab("materials")
+    await process_frame
+    bm_icons = npc._body.find_children("PPABlackMarketRarityIcon_*","Button",true,false)
+    check(bm_icons.size()==2,"Materials category lost its premium stone and rune")
+    npc.close_npc()
+
     var saved := {"blackMarket":{"refreshAt":int(Time.get_unix_time_from_system()*1000.0)+7200000,
         "offers":[{"id":"real_bm_1","category":"materials","price":770,
-            "currency":"ppa","limit":2,"item":{"name":"Кристалл PPA","icon":"◆"}},
+            "currency":"ppa","limit":2,"item":{"name":"Кристалл PPA","icon":"◆","rarity":"rare"}},
             {"id":"real_bm_2","category":"materials","limit":2,
             "item":{"name":"Редкий камень","icon":"◇"}}],
         "bought":{"real_bm_1":1}}}
@@ -71,6 +96,12 @@ func _run() -> void:
     grid = npc._body.find_child("NpcProductGrid", true, false)
     check(grid != null and grid.get_child_count() == 2,
         "Original per-character Black Market offers were lost")
+    check(has_label(npc._body, "РЕДКИЙ"),"Original signed Black Market rarity not shown")
+    var personal_tile := npc._body.find_child(
+        "PPABlackMarketRarityIcon_" + "real_bm_1".to_utf8_buffer().hex_encode(),
+        true,false) as Button
+    check(personal_tile!=null and personal_tile.has_meta("ppa_rarity_tint"),
+        "Personal Black Market offer lost its rarity-framed square")
     check(has_label(npc._body, "Кристалл PPA") and has_label(npc._body, "770 PPA"),
         "Personal stock lost its nested PPA item name or original price")
     check(has_label(npc._body, "Цена не подтверждена"),
