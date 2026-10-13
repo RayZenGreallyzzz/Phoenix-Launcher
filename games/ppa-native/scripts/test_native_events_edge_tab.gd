@@ -33,6 +33,9 @@ func _run() -> void:
         "Events button must sit vertically against RIGHT edge of phone")
     check(caption.mouse_filter==Control.MOUSE_FILTER_IGNORE,
         "Rotated label must not intercept touch presses")
+    var rotated_center: Vector2 = caption.get_global_transform() * (caption.size * 0.5)
+    check(rotated_center.distance_to(button.get_global_rect().get_center()) <= 3.0,
+        "Rotated Events text must be visually CENTERED inside its side button")
     # Simulate the actual press rather than faking event section state.
     button.pressed.emit()
     check(menu._global_hub.is_open() and menu._global_hub.section=="events",
