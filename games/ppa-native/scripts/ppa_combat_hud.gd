@@ -269,7 +269,7 @@ func _refresh_skills() -> void:
         var medallion := button.get_node_or_null("PPAApprovedGrimoireCenterMedallion") as TextureRect
         button.icon = null
         if medallion != null:
-            medallion.texture = SKILL_MEDALLION.load_medallion(card_art) if rank > 0 else null
+            SKILL_MEDALLION.set_book(medallion,card_art if rank > 0 else "")
             medallion.visible = medallion.texture != null
             # Preserve the original button and server-verified rank controls.
             if medallion.visible:
