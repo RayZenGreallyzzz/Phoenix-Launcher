@@ -340,7 +340,9 @@ func _build_buttons() -> void:
     tab_title.text = "СОБЫТИЯ"
     tab_title.rotation = -PI / 2.0
     tab_title.size = Vector2(110.0,22.0)
-    tab_title.position = Vector2(31.0,128.0)
+    tab_title.position = Vector2(9.5,128.0)
+    # Rotated bounds are x=[9.5,31.5], centered on 41px button (x=20.5).
+    # Previous x=31 put the visible word outside the right border.
     tab_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
     tab_title.add_theme_font_size_override("font_size",13)
     tab_title.add_theme_color_override("font_color",Color("#F2CC89"))
