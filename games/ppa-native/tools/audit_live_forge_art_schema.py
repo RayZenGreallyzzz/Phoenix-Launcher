@@ -43,6 +43,15 @@ def source_snippets(src, tokens, cap=1700):
         if m:
             out[term]=src[max(0,m.start()-150):m.start()+cap]
     return out
+
+def declaration_peeks(src, names):
+    result={}
+    for name in names:
+        m=re.search(r"\\b(?:const|var|let)\\s+"+re.escape(name)+r"\\s*=\\s*",src)
+        if m:
+            result[name]=src[m.start():m.start()+260]
+    return result
+
 const_names = sorted(set(re.findall(r"\b(?:const|var|let)\s+([A-Z][A-Z0-9_]+)\s*=",source)))
 outer_names = sorted(set(re.findall(r"\b(?:const|var|let)\s+([A-Z][A-Z0-9_]+)\s*=",all_source)))
 print("PPA_MORE_ART",json.dumps({
@@ -53,6 +62,7 @@ print("PPA_MORE_ART",json.dumps({
  "legendStatSource":source_snippets(source,["const LEGENDARY_GEAR_STATS"],1000),
  "forgeVisualsBridge":source_snippets(all_source,["wingsByRarity:","PPA_UI_CRAFT_IMG","EPIC_CLOAK_ICON_DATA","LEGENDARY_CLOAK_ART","artifactsImg:","accessories:{"],2300),
  "parentArtArrays":source_snippets(all_source,["const LEGENDARY_CLOAK_ART=","const LEGENDARY_ARTIFACT_ART=","const LEGENDARY_RING_ART=","const LEGENDARY_NECKLACE_ART=","const EPIC_NECKLACE_ART=","const WING_DIR_ART="],450),
+ "artDecl":declaration_peeks(all_source,["CLOAK_ICON_DATA","EPIC_CLOAK_ICON_DATA","ARTIFACT_ICON_DATA","EPIC_ARTIFACT_ICON_DATA","LEGENDARY_CLOAK_ART","LEGENDARY_ARTIFACT_ART","LEGENDARY_RING_ART","LEGENDARY_NECKLACE_ART","EPIC_NECKLACE_ART"]),
  "uiResolver":source_snippets(all_source,["PPA_UI_CRAFT_IMG=function","function PPA_UI_CRAFT_IMG","window.PPA_UI_CRAFT_IMG","wingsByRarity:{"],2800)
 },ensure_ascii=False),flush=True)
 print("PPA_SOURCE_ART_SCHEMA",json.dumps({
