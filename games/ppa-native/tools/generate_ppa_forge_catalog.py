@@ -32,7 +32,7 @@ class Frames(HTMLParser):
             self.smith.append(data.get("srcdoc", ""))
 
 def object_literal(source: str, key: str, expected_type):
-    m = re.search(r"\bconst\s+" + re.escape(key) + r"\s*=\s*", source)
+    m = re.search(r"\b(?:const|var|let)\s+" + re.escape(key) + r"\s*=\s*", source)
     if not m:
         raise RuntimeError(f"Canonical PPA smith {key} was not found")
     value, _ = json.JSONDecoder().raw_decode(source[m.end():])
