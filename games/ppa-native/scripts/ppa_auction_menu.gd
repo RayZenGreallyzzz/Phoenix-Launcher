@@ -398,11 +398,12 @@ static func _sale_currency_changed(index: int, ui: Control, preview: Label) -> v
 static func _inventory_source(ui: Control, market_state: Dictionary, verified: bool) -> Array:
     # One authenticated /api/game/state snapshot feeds all native NPCs.
     # Auction permissions are a SEPARATE signed contract, never inferred.
+    # Signed auction snapshot is newest and authoritative when it exists.
+    # Otherwise display the read-only /api/game/state projection.
+    if verified and market_state.get("bag") is Array:
+        return (market_state["bag"] as Array).duplicate(true)
     var view: Dictionary = ui.get("_player_view_readonly")
-    if view.get("inventory") is Array and not (view.get("inventory") as Array).is_empty():
-        return (view["inventory"] as Array).duplicate(true)
-    # The signed auction bag may arrive before the general save snapshot.
-    return (market_state.get("bag",[]) as Array).duplicate(true) if verified and market_state.get("bag") is Array else []
+    return (view.get("inventory",[]) as Array).duplicate(true) if view.get("inventory") is Array else []
 
 static func _item_key(item: Dictionary, pos: int) -> String:
     var uid := str(item.get("uid",""))
