@@ -22,7 +22,7 @@ f=Frame();f.feed(public)
 assert len(f.smith)==1
 source=f.smith[0]
 def const(src,name):
-    m=re.search(r"\\b(?:const|var)\\s+"+re.escape(name)+r"\\s*=\\s*",src)
+    m=re.search(r"\b(?:const|var)\s+"+re.escape(name)+r"\s*=\s*",src)
     if not m:return None
     try:return json.JSONDecoder().raw_decode(src[m.end():])[0]
     except Exception as e:return {"parse_error":str(e)[:100]}
@@ -34,7 +34,7 @@ jewelry=const(all_source,"JEWELRY_VARIANTS")
 epic=const(all_source,"EPIC_CLASS_GEAR_ART")
 classgear=const(all_source,"CLASS_GEAR_ART")
 sample=lambda d:{str(k):v for k,v in list(d.items())[:8]} if isinstance(d,dict) else str(type(d).__name__)
-legend=re.search(r"\\bLEGENDARY_CRAFT\\s*=\\s*\\[(.*?)\\];",source,re.S)
+legend=re.search(r"\bLEGENDARY_CRAFT\s*=\s*\[(.*?)\];",source,re.S)
 print("PPA_SOURCE_ART_SCHEMA",json.dumps({
  "petImages":pet,
  "petDefNames":list(pets.keys()) if isinstance(pets,dict) else str(type(pets)),
