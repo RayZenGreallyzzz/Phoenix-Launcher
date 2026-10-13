@@ -4,6 +4,7 @@ extends SceneTree
 # press 1 s to inspect until release; short tap opens item menu; gear actions
 # require signed same-owner inventory and never modify the local save.
 const NPC = preload("res://scripts/ppa_npc_screen.gd")
+const ATTR = preload("res://scripts/ppa_item_attribute_view.gd")
 const OWNER := "990000001"
 
 func check(ok: bool, detail: String) -> void:
