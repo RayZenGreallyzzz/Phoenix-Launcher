@@ -567,6 +567,9 @@ func _request_npc_service(service: String) -> void:
         _forge_service.request_state()
         _inventory_service.request_state()
     elif service == "auction":
+        # The sale preview must show the same authenticated player bag as
+        # inventory / blacksmith even while auction trades are disabled.
+        _refresh_server_readonly_save(true)
         _auction_service.request_state()
     elif service == "storage":
         _personal_storage_service.request_state()
