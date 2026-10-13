@@ -583,14 +583,20 @@ func _run() -> void:
         return
     menu._npc_screen.apply_native_auction(auction_packet)
     var picker = menu._npc_screen.find_child("PPARealAuctionGearGrid", true, false) as GridContainer
-    if picker == null or picker.get_child_count() != 100:
-        push_error("PPA_AUCTION_PICKER: signed 100-item inventory grid missing")
+    if picker == null or picker.get_child_count() != 20:
+        push_error("PPA_AUCTION_PICKER: real 100-item inventory must be paged by 20")
         quit(1)
         return
     var first_item = menu._npc_screen.find_child("PPARealAuctionSellUID_qa_original_0", true, false) as Button
+    if first_item == null:
+        push_error("PPA_AUCTION_PICKER: first original item missing")
+        quit(1)
+        return
+    menu._npc_screen._auction_inventory_page = 4
+    menu._npc_screen._render()
     var last_item = menu._npc_screen.find_child("PPARealAuctionSellUID_qa_original_99", true, false) as Button
-    if first_item == null or last_item == null or last_item.disabled:
-        push_error("PPA_AUCTION_PICKER: real gear UID or last item lost")
+    if last_item == null or last_item.disabled:
+        push_error("PPA_AUCTION_PICKER: last item lost on page five")
         quit(1)
         return
     last_item.pressed.emit()
