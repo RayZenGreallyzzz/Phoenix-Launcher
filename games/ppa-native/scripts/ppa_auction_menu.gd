@@ -493,7 +493,9 @@ static func _sell(ui: Control, main: VBoxContainer, state: Dictionary, verified:
         tile.add_theme_stylebox_override("normal",_skin(Color("#141B20"),tint,5))
         var loader: Node = ui.get("_preview_icons")
         if loader != null:
-            loader.call("bind_button",item,"",tile)
+            var save: Dictionary = ui.get("_player_save_readonly")
+            var actual_class := str(save.get("classKey",save.get("class","")))
+            loader.call("bind_button",item,actual_class,tile)
         tile.pressed.connect(_select_sale.bind(ui,key,safe_uid))
         grid.add_child(tile)
     if display_items.is_empty():
