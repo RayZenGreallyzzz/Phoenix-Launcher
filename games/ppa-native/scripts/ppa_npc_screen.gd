@@ -2544,6 +2544,16 @@ func _show_original_forge_recipes() -> void:
             art_item["rarity"] = str((info as Dictionary).get("rarity", "common"))
         elif material_name == "Перо Феникса":
             art_item["img"] = str(stone_art.get("feather", ""))
+        # Recipe material cards used only an icon/name and discarded existing
+        # descriptions from the player's authenticated resource projection.
+        # Copy VERBATIM saved display fields, never invent owned inventory.
+        for raw_saved in _player_view_readonly.get("inventory", []):
+            if raw_saved is Dictionary and bool(raw_saved.get("ppa_native_virtual", false)) \
+                    and str(raw_saved.get("name", "")) == material_name:
+                for source_field in ["useText", "typeName", "description"]:
+                    if raw_saved.has(source_field):
+                        art_item[source_field] = raw_saved[source_field]
+                break
         var material_panel := PanelContainer.new()
         material_panel.custom_minimum_size.x = maxf(125.0,
             (materials_grid.custom_minimum_size.x - float(materials_grid.columns - 1) * 5.0)
