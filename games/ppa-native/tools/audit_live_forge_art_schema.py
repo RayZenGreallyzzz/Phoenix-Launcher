@@ -47,7 +47,7 @@ def source_snippets(src, tokens, cap=1700):
 def declaration_peeks(src, names):
     result={}
     for name in names:
-        m=re.search(r"\\b(?:const|var|let)\\s+"+re.escape(name)+r"\\s*=\\s*",src)
+        m=re.search(r"\b(?:const|var|let)\s+"+re.escape(name)+r"\s*=\s*",src)
         if m:
             result[name]=src[m.start():m.start()+260]
     return result
