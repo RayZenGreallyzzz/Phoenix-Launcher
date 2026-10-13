@@ -232,6 +232,7 @@ func _create_shell() -> void:
     margin.add_child(layout)
 
     var header := PanelContainer.new()
+    header.name = "NpcOriginalTitleHeader"
     header.custom_minimum_size.y = 77
     header.add_theme_stylebox_override("panel", _style(HEAD, Color("#8D5824"), 8))
     layout.add_child(header)
@@ -989,6 +990,9 @@ func _render() -> void:
     _clear(_body)
     _forge_recipe_target = null
     _layout_tabs()
+    var heading_host := find_child("NpcOriginalTitleHeader",true,false) as PanelContainer
+    if heading_host != null:
+        heading_host.visible = service != "auction"
     _heading.text = str(npc.get("name", "NPC"))
     _heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if service in ["forge","auction"] else HORIZONTAL_ALIGNMENT_LEFT
     _subheading.text = ("ПОКУПАЙ · ПРОДАВАЙ · РАЗВИВАЙСЯ" if service == "auction" else ("ЗАТОЧКА · СНАРЯЖЕНИЕ · АКСЕССУАРЫ · ПЕТЫ" if service == "forge" else "МИРНЫЙ ГОРОД · " + _service_name()))
