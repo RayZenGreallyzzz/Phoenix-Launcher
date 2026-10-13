@@ -59,6 +59,50 @@ func _run() -> void:
     var saved_item := npc._body.find_child("PPARealAuctionSellUID_owned-real-1",true,false) as Button
     check(saved_item==null,
         "Read-only save item incorrectly gained server escrow authority")
+    # A real 21-item read-only save must show a 2-page horizontal pager.
+    # Neither arrow may stretch vertically into the long bars seen on Android.
+    var twenty_one: Array = []
+    for idx in range(21):
+        twenty_one.append({"uid":"actual-" + str(idx),
+            "kind":"gear","slot":"weapon","rarity":"rare",
+            "name":"Сохранённая вещь " + str(idx)})
+    npc.apply_player_save_readonly({"bag":twenty_one,"ppa":551,"gram":3})
+    await process_frame
+    var pager := npc._body.find_child("PPAAuctionCompactPager",true,false) as HBoxContainer
+    var back := npc._body.find_child("PPAAuctionInventoryPrevious",true,false) as Button
+    var forward := npc._body.find_child("PPAAuctionInventoryNext",true,false) as Button
+    var number := npc._body.find_child("PPAAuctionInventoryPageCount",true,false) as Label
+    var first_grid := npc._body.find_child("PPARealAuctionGearGrid",true,false) as GridContainer
+    check(pager!=null and back!=null and forward!=null and number!=null,
+        "Compact auction inventory pager missing")
+    check(number.text=="1 / 2" and first_grid.get_child_count()==20,
+        "Auction preview must paginate actual save inventory")
+    check(back.disabled and not forward.disabled,
+        "First page should disable previous arrow only")
+    check(back.size.y <= 42.0 and forward.size.y <= 42.0
+        and pager.size.y <= 44.0 and pager.size.x > pager.size.y * 2.0,
+        "Auction page arrows stretched into tall vertical strips")
+    check(number.autowrap_mode==TextServer.AUTOWRAP_OFF,
+        "Mobile auction page fraction wraps vertically")
+    forward.pressed.emit()
+    await process_frame
+    number = npc._body.find_child("PPAAuctionInventoryPageCount",true,false) as Label
+    back = npc._body.find_child("PPAAuctionInventoryPrevious",true,false) as Button
+    forward = npc._body.find_child("PPAAuctionInventoryNext",true,false) as Button
+    var second_grid := npc._body.find_child("PPARealAuctionGearGrid",true,false) as GridContainer
+    check(number.text=="2 / 2" and second_grid.get_child_count()==1,
+        "Arrow did not switch to final authentic saved item")
+    check(not back.disabled and forward.disabled,
+        "Last page should disable next arrow only")
+    back.pressed.emit()
+    await process_frame
+    number = npc._body.find_child("PPAAuctionInventoryPageCount",true,false) as Label
+    check(number.text=="1 / 2","Previous arrow failed to return to first page")
+    npc.clear_player_save_readonly()
+    npc.apply_player_save_readonly({"bag":[{"uid":"owned-real-1",
+        "slot":"weapon","kind":"gear","name":"Настоящий предмет",
+        "rarity":"epic"}],"potions":{"hp":2},"ppa":551,"gram":3})
+
     var price_preview := npc._body.find_child("PPARealAuctionPrice",true,false) as SpinBox
     var currencies_preview := npc._body.find_child("PPARealAuctionCurrency",true,false) as OptionButton
     check(price_preview!=null and currencies_preview!=null and currencies_preview.item_count==2,
