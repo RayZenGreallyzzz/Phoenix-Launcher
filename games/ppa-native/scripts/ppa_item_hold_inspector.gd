@@ -332,20 +332,20 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
         _content.add_child(_text("Количество: " + str(qty), Color("#E6EBED")))
 
     var descriptions := ITEM_ATTRIBUTES.description_lines_for_item(item)
-    var description_heading := _text("ОПИСАНИЕ", tint, 11)
-    description_heading.name = "PPAInspectorDescriptionHeading"
-    _content.add_child(description_heading)
-    if descriptions.is_empty():
-        var missing := _text("Описание не указано в данных PPA.", SUB, 11)
-        missing.name = "PPAInspectorMissingDescription"
-        _content.add_child(missing)
-    else:
-        for source_line in descriptions:
-            var description := _text(str(source_line), Color("#EEF0ED"), 12)
-            description.name = "PPAInspectorDescription"
-            _content.add_child(description)
-
     var details: Array = ITEM_ATTRIBUTES.stat_lines_for_item(item)
+    if not descriptions.is_empty() or details.is_empty():
+        var description_heading := _text("ОПИСАНИЕ", tint, 11)
+        description_heading.name = "PPAInspectorDescriptionHeading"
+        _content.add_child(description_heading)
+        if descriptions.is_empty():
+            var missing := _text("Описание не указано в данных PPA.", SUB, 11)
+            missing.name = "PPAInspectorMissingDescription"
+            _content.add_child(missing)
+        else:
+            for source_line in descriptions:
+                var description := _text(str(source_line), Color("#EEF0ED"), 12)
+                description.name = "PPAInspectorDescription"
+                _content.add_child(description)
     if not details.is_empty():
         _content.add_child(_text("ХАРАКТЕРИСТИКИ", tint, 11))
         # Do not trap wrapped attributes inside a 168px inner scroller
