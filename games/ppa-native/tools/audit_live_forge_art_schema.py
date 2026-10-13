@@ -35,6 +35,23 @@ epic=const(all_source,"EPIC_CLASS_GEAR_ART")
 classgear=const(all_source,"CLASS_GEAR_ART")
 sample=lambda d:{str(k):v for k,v in list(d.items())[:8]} if isinstance(d,dict) else str(type(d).__name__)
 legend=re.search(r"\bLEGENDARY_CRAFT\s*=\s*\[(.*?)\];",source,re.S)
+
+def source_snippets(src, tokens, cap=1700):
+    out={}
+    for term in tokens:
+        m=re.search(re.escape(term),src,re.I)
+        if m:
+            out[term]=src[max(0,m.start()-150):m.start()+cap]
+    return out
+const_names = sorted(set(re.findall(r"\b(?:const|var|let)\s+([A-Z][A-Z0-9_]+)\s*=",source)))
+outer_names = sorted(set(re.findall(r"\b(?:const|var|let)\s+([A-Z][A-Z0-9_]+)\s*=",all_source)))
+print("PPA_MORE_ART",json.dumps({
+ "sourceNames":[v for v in const_names if any(w in v for w in ["ART","IMG","LEGEND","CRAFT","CLOAK","WING","JEWEL","ACC","PET"])],
+ "outerNames":[v for v in outer_names if any(w in v for w in ["ART","IMG","LEGEND","CLOAK","WING","JEWEL","ACCESSORY","PIC_"])],
+ "accessoryImageLogic":source_snippets(source,["function accessoryImg","function craftImg","function renderAcc","function accImg","PIC_CLOAK_ICON_DATA"],1400),
+ "outerAccessoryLogic":source_snippets(all_source,["PIC_CLOAK_ICON_DATA","PIC_WINGS","PIC_ARTIFACT","JEWELRY_VARIANTS"],700),
+ "legendStatSource":source_snippets(source,["const LEGENDARY_GEAR_STATS"],1000)
+},ensure_ascii=False),flush=True)
 print("PPA_SOURCE_ART_SCHEMA",json.dumps({
  "petImages":pet,
  "petDefNames":list(pets.keys()) if isinstance(pets,dict) else str(type(pets)),
