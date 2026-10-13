@@ -128,6 +128,11 @@ var auction_pending := false
 var _auction_sell_uid := ""
 var _auction_selected_item_key := ""
 var _auction_inventory_page := 0
+var _auction_browse_page := 0
+var _auction_browse_pages := 1
+var _auction_swipe_index := -1
+var _auction_swipe_origin := Vector2.ZERO
+var _auction_mouse_swipe := false
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -432,7 +437,46 @@ func _forge_finish_swipe() -> void:
     _forge_mouse_down = false
 
 
+# Horizontal-only swipe navigation across 10 real buy-listing slots.
+# Do not capture vertical drags: Godot retains native vertical scrolling.
+func _auction_browse_swipe(event: InputEvent) -> void:
+    if _body == null:
+        return
+    if event is InputEventScreenTouch:
+        if event.pressed:
+            if _auction_swipe_index >= 0:
+                return
+            var grid := _body.find_child("PPAAuctionBuyLotsGrid",true,false) as GridContainer
+            if grid != null and grid.get_global_rect().has_point(event.position):
+                _auction_swipe_index = event.index
+                _auction_swipe_origin = event.position
+        elif event.index == _auction_swipe_index:
+            _auction_finish_swipe(event.position)
+            _auction_swipe_index = -1
+        return
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+        if event.pressed:
+            var grid := _body.find_child("PPAAuctionBuyLotsGrid",true,false) as GridContainer
+            _auction_mouse_swipe = grid != null and grid.get_global_rect().has_point(event.position)
+            if _auction_mouse_swipe:
+                _auction_swipe_origin = event.position
+        elif _auction_mouse_swipe:
+            _auction_finish_swipe(event.position)
+            _auction_mouse_swipe = false
+
+func _auction_finish_swipe(point: Vector2) -> void:
+    var delta := point - _auction_swipe_origin
+    if absf(delta.x) < 68.0 or absf(delta.x) <= absf(delta.y) * 1.35:
+        return
+    var target := _auction_browse_page + (1 if delta.x < 0.0 else -1)
+    if target < 0 or target >= _auction_browse_pages:
+        return
+    PHOENIX_AUCTION._browse_page(self,target)
+    get_viewport().set_input_as_handled()
+
 func _input(event: InputEvent) -> void:
+    if visible and service == "auction" and tab == "all":
+        _auction_browse_swipe(event)
     if not visible or service != "forge" or _scroll == null:
         return
     if _item_hold != null and _item_hold.is_open():
@@ -540,6 +584,10 @@ func open_npc(source: Dictionary) -> void:
     _auction_category = "all"
     _auction_search = ""
     _auction_inventory_page = 0
+    _auction_browse_page = 0
+    _auction_browse_pages = 1
+    _auction_swipe_index = -1
+    _auction_mouse_swipe = false
     _auction_selected_item_key = ""
     _auction_level = "all"
     _auction_rarity = "all"
@@ -963,6 +1011,10 @@ func _tab_specs() -> Array:
         _: return []
 
 func _select_tab(key: String) -> void:
+    if service == "auction" and key != tab:
+        _auction_browse_page = 0
+        _auction_swipe_index = -1
+        _auction_mouse_swipe = false
     tab = key
     selected_id = ""
     quantity = 1
