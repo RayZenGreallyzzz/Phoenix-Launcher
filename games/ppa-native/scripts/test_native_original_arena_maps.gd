@@ -77,7 +77,7 @@ func _run() -> void:
                 game._walkable(Vector2(40,40)) and
                 not game._walkable(Vector2(39,40)),
                 "XP arena must use exact 40px original boundaries, no fake mask")
-        var blocked := game._resolve_city_collision(Vector2(-400,-400))
+        var blocked: Vector2 = game._resolve_city_collision(Vector2(-400,-400))
         require(blocked==game.world_pos_px,
             "Player could walk through original arena perimeter")
         count+=1
