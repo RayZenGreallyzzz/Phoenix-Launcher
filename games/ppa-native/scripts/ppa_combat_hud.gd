@@ -7,6 +7,7 @@ signal action_requested(action: String, slot: int)
 
 const GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
 const VERIFIED_PLAYER = preload("res://scripts/ppa_verified_player_projection.gd")
+const SKILL_MEDALLION = preload("res://scripts/ppa_grimoire_skill_icon.gd")
 const GOLD := Color("#AB7740")
 const MAIN_RED := Color("#78252C")
 const DARK := Color("#1B1516")
@@ -183,6 +184,11 @@ func _build_actions() -> void:
         var skill := _round("✦", location, 48.0, Color("#392419"), Color("#AA6C3C"))
         skill.pressed.connect(_emit_skill.bind(_skills.size()))
         _skills.append(skill)
+        # Never render the full grimoire cover on the battle skill ring.
+        var medallion := SKILL_MEDALLION.make_icon("",40.0)
+        medallion.position = Vector2(4.0,4.0)
+        medallion.visible = false
+        skill.add_child(medallion)
         var rank := Label.new()
         rank.text = ""
         rank.position = Vector2(25, 31)
@@ -260,13 +266,14 @@ func _refresh_skills() -> void:
         _ranks[index].text = "I" if rank == 1 else str(rank) if rank > 1 else ""
         button.disabled = rank <= 0
         var card_art := str(data.get("cardArt", ""))
-        if rank > 0 and not card_art.is_empty() and ResourceLoader.exists(card_art):
-            var texture := load(card_art) as Texture2D
-            if texture != null:
-                button.icon = texture
-                button.expand_icon = true
-        else:
-            button.icon = null
+        var medallion := button.get_node_or_null("PPAApprovedGrimoireCenterMedallion") as TextureRect
+        button.icon = null
+        if medallion != null:
+            medallion.texture = SKILL_MEDALLION.load_medallion(card_art) if rank > 0 else null
+            medallion.visible = medallion.texture != null
+            # Preserve the original button and server-verified rank controls.
+            if medallion.visible:
+                button.text = ""
 
 func is_over_action_area(point: Vector2) -> bool:
     return _group != null and _group.visible and _group.get_global_rect().has_point(point)
