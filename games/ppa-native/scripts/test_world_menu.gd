@@ -32,6 +32,7 @@ signal auction_retry_requested
 signal global_snapshot_requested(section: String)
 signal dungeon_visual_test_requested
 signal arena_training_requested
+signal arena_map_preview_requested(mode: String)
 signal native_realtime_requested
 signal refresh_readonly_save_requested
 signal force_refresh_readonly_save_requested
@@ -263,6 +264,8 @@ func _ready() -> void:
     # Never asks for a server entry ticket or records any rewards.
     _npc_screen.dungeon_visual_test_requested.connect(func(): dungeon_visual_test_requested.emit())
     _npc_screen.arena_training_requested.connect(func(): arena_training_requested.emit())
+    _npc_screen.arena_map_preview_requested.connect(
+        func(mode: String): arena_map_preview_requested.emit(mode))
     _npc_screen.native_realtime_requested.connect(func(): native_realtime_requested.emit())
     _global_hub = GLOBAL_HUB.new()
     _global_hub.z_index = 110
