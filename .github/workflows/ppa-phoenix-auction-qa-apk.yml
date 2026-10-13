@@ -475,6 +475,7 @@ jobs:
           test -s games/ppa-native/assets/ppa_coin.webp
           for pair in \
             "test_native_auction_phoenix_layout:PPA_AUCTION_PHOENIX_LAYOUT_OK" \
+            "test_native_auction_buy_pagination:PPA_AUCTION_BUY_PAGES_OK" \
             "test_native_auction_actions:PPA_NATIVE_AUCTION_ESCROW_OK" \
             "test_native_auction_recovery:PPA_NATIVE_AUCTION_RECOVERY_OK" \
             "test_native_auction_credit_claim:PPA_NATIVE_AUCTION_CREDIT_MODE_OK" \
@@ -485,6 +486,14 @@ jobs:
             grep -q "$marker" "/tmp/${file}.log"
             if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' "/tmp/${file}.log"; then exit 1; fi
           done
+
+      - name: Verify original Black Market images and server-backed rarity icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s godot --headless --path games/ppa-native --script res://scripts/test_native_shop_catalog_display.gd --quit-after 600 2>&1 | tee /tmp/ppa-native-shop-display.log
+          grep -q 'PPA_SHOP_DISPLAY_OK' /tmp/ppa-native-shop-display.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-shop-display.log; then exit 1; fi
 
       - name: Verify vertical right-docked Events tab opens the real global hub
         shell: bash
