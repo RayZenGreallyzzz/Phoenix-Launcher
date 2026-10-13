@@ -949,8 +949,26 @@ func _build_test_menu() -> void:
     test_menu.change_class_requested.connect(_back_to_character_select)
     test_menu.dungeon_visual_test_requested.connect(_open_dungeon_map_test)
     test_menu.arena_training_requested.connect(_open_arena_training)
+    test_menu.arena_map_preview_requested.connect(_open_arena_map_preview)
     test_menu.refresh_readonly_save_requested.connect(_refresh_server_readonly_save)
     test_menu.force_refresh_readonly_save_requested.connect(func(): _refresh_server_readonly_save(true))
+
+func _open_arena_map_preview(mode: String) -> void:
+    # Local walk-only inspection of three exact original PPA maps.
+    # Never sends arena queue requests, alters XP or spends attempts.
+    if mode not in ["1x1","3x3","5x5","xp"]:
+        return
+    if test_menu != null:
+        test_menu.close_menu()
+    if _joy_touch_id >= 0 or _joy_mouse_active:
+        _joy_touch_id = -1
+        _joy_mouse_active = false
+        _joy_end()
+    get_tree().root.set_meta("ppa_preview_arena_mode",mode)
+    var error := get_tree().change_scene_to_file("res://arena_map_preview.tscn")
+    if error != OK:
+        get_tree().root.remove_meta("ppa_preview_arena_mode")
+        push_error("PPA_ORIGINAL_ARENA_MAP_ENTRY_FAILED: " + error_string(error))
 
 func _open_arena_training() -> void:
     # Explicit user click starts a real LOCAL AI combat scene. PPA multiplayer
