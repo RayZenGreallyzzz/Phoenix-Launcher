@@ -200,6 +200,24 @@ func _run() -> void:
             "Item name/rarity text must use its rarity tint, not universal gold")
         check(has_label(inspector, "Бонусы из оригинального рецепта PPA"),
             "The original forge description field was missing from tooltip")
+    # Every forge recipe (epic/ACC/pet) must show its TRUE source bonus
+    # as attributes, not an empty "ХАРАКТЕРИСТИКИ" section.
+    var smith_recipe := {"name":"Снаряжение кузнеца","kind":"gear",
+        "rarity":"epic","price":500,"materials":[],
+        "desc":"HP +100, MP +100"}
+    var recipe_lines: Array = ATTR.stat_lines_for_item(smith_recipe)
+    check(recipe_lines.has("Бонус по рецепту PPA: HP +100, MP +100"),
+        "Source recipe bonus was not surfaced as characteristics")
+    inspector._show_item(smith_recipe,"catalog",true)
+    check(has_label(inspector,"Бонус по рецепту PPA: HP +100, MP +100"),
+        "Godot popup did not display official original smith bonus")
+    var unsigned_legend := {"name":"Легендарное снаряжение","rarity":"legendary",
+        "price":12000,"materials":[],"desc":"Легендарный тир"}
+    inspector._show_item(unsigned_legend,"catalog",true)
+    check(has_label(inspector,"Точные характеристики в каталоге этого рецепта не указаны."),
+        "Unknown legendary stats must be clearly marked rather than invented")
+    check(ATTR.stat_lines_for_item(unsigned_legend).is_empty(),
+        "Tier descriptor incorrectly treated as real stats")
     inspector._show_item({"name":"Малоизвестный предмет","rarity":"rare"}, "catalog", true)
     check(has_label(inspector, "Описание не указано в данных PPA."),
         "Missing original item description must be labelled honestly, never invented")
