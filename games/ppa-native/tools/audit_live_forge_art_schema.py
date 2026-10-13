@@ -42,5 +42,8 @@ print("PPA_SOURCE_ART_SCHEMA",json.dumps({
  "jewelry":jewelry if len(str(jewelry))<5000 else sample(jewelry),
  "epicSamples":sample(epic),
  "classGearSamples":sample(classgear),
- "legendaryCraft":legend.group(1)[:2800] if legend else None
+ "legendaryCraft":legend.group(1)[:2800] if legend else None,
+ "sourceConstants":[z for z in re.findall(r"\\b(?:const|let|var)\\s+([A-Z][A-Z0-9_]*)\\s*=",source) if any(k in z for k in ["IMG","ART","LEGEND","STAT","CRAFT","PET","CLOAK","WING","ACCESSORY"])],
+ "legendaryLogic":[source[max(0,m.start()-100):m.start()+900] for m in list(re.finditer(r"(?i)(?:function\\s+[^\\n]{0,30}legend|legendary_craft|legendary.*stat)",source))[:8]],
+ "petArtInOuterHtml":[[k, k.split("/")[-1] in public] for k in (pet or {}).values()]
 },ensure_ascii=False),flush=True)
