@@ -179,6 +179,21 @@ jobs:
           test "$(find games/ppa-native/assets -maxdepth 1 -name 'original_dungeon_boss_*' | wc -l)" -eq 0
           echo "PPA_LEGACY_DUNGEON_ENEMY_ART_REMOVED_OK"
 
+      - name: Fetch EXACT original duel/team/XP arena maps and native collision masks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 games/ppa-native/tools/fetch_original_arena_maps.py 2>&1 | tee /tmp/ppa-exact-arenas.log
+          grep -q 'PPA_ORIGINAL_ARENA_ASSETS_OK maps=3 modes=4 pvp_exact_masks=2 xp_original_bounds=1 server_writes=0' /tmp/ppa-exact-arenas.log
+          for name in duel team; do
+            test -s "games/ppa-native/assets/ppa_original_arena_${name}.png"
+            test -s "games/ppa-native/assets/ppa_original_arena_${name}_walk.png"
+          done
+          test -s games/ppa-native/assets/ppa_original_arena_xp.jpg
+          test -s games/ppa-native/scripts/ppa_arena_maps_generated.gd
+          grep -q 'const PVP_WORLD_SIZE := Vector2(1536,1024)' games/ppa-native/scripts/ppa_arena_maps_generated.gd
+          echo PPA_ORIGINAL_ARENA_ASSETS_BUNDLED_OK
+
       - name: Extract verified CURRENT PPA monster animation sheets (not ancient atlas)
         shell: bash
         run: |
@@ -502,6 +517,14 @@ jobs:
           timeout 120s godot --headless --path games/ppa-native --script res://scripts/test_native_events_edge_tab.gd --quit-after 600 2>&1 | tee /tmp/ppa-events-edge-tab.log
           grep -q 'PPA_VERTICAL_EVENTS_TAB_OK' /tmp/ppa-events-edge-tab.log
           if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-events-edge-tab.log; then exit 1; fi
+
+      - name: Verify original PvP 1x1 3x3 5x5 and XP Arena NPC maps with exact collisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 150s godot --headless --path games/ppa-native --script res://scripts/test_native_original_arena_maps.gd --quit-after 700 2>&1 | tee /tmp/ppa-native-original-arena-maps.log
+          grep -q 'PPA_ORIGINAL_ARENA_MAPS_OK maps=3 modes=4 pvp_masks=2 xp_bounds=1' /tmp/ppa-native-original-arena-maps.log
+          if grep -E 'SCRIPT ERROR:|Invalid call|Parse Error:' /tmp/ppa-native-original-arena-maps.log; then exit 1; fi
 
       - name: Verify original PPA smith art for all 58 recipes and six legendary stat sources
         shell: bash
