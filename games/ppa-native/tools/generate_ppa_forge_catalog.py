@@ -8,6 +8,7 @@ If the real rules drift, fail the build rather than ship misleading prices.
 """
 from __future__ import annotations
 from html.parser import HTMLParser
+import html
 from urllib.request import Request, urlopen
 from pathlib import Path
 import hashlib
@@ -79,6 +80,49 @@ def image_ref(src: str) -> str:
         # Keep the approved original URL format. The Godot art resolver maps\n    # it to bundled assets first, then the same PPA Worker over HTTPS.\n    return "./assets/" + m.group(1)
     return ""
 
+
+def literal_art(source: str, name: str) -> str:
+    # Explicit public PPA icon constants for normal and epic rarity.
+    m = re.search(r"\b(?:const|var|let)\s+" + re.escape(name)
+                  + r"\s*=\s*['\"]([^'\"]+)['\"]", source)
+    return image_ref(m.group(1)) if m else ""
+
+def array_first_art(source: str, name: str) -> str:
+    # The original Telegram smith uses the FIRST approved visual for a
+    # generic recipe. Specific owned items retain their own distinct art.
+    m = re.search(r"\b(?:const|var|let)\s+" + re.escape(name) + r"\s*=\s*", source)
+    if not m:
+        return ""
+    try:
+        images, _ = json.JSONDecoder().raw_decode(source[m.end():].lstrip())
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(images,list) or not images:
+        return ""
+    return image_ref(images[0])
+
+def approved_accessory_art(source: str, kind: str, rarity: str,
+                           wings: dict, jewelry: dict) -> str:
+    # Match parent.PPA_UI_CRAFT_IMG / accessoryImg in deployed Telegram PPA.
+    if kind == "wings":
+        direction = wings.get(rarity, wings.get("rare",{}))
+        return image_ref(direction.get("S",direction.get("E",""))) if isinstance(direction,dict) else ""
+    if rarity == "legendary":
+        list_names = {
+            "ring":"LEGENDARY_RING_ART",
+            "necklace":"LEGENDARY_NECKLACE_ART",
+            "cloak":"LEGENDARY_CLOAK_ART",
+            "artifact":"LEGENDARY_ARTIFACT_ART"
+        }
+        return array_first_art(source,list_names.get(kind,"")) if kind in list_names else ""
+    if kind == "necklace":
+        variants = jewelry.get("necklace",[])
+        return image_ref(variants[0].get("img","")) if variants and isinstance(variants[0],dict) else ""
+    if kind in ["cloak","artifact"]:
+        rarity_prefix = "EPIC_" if rarity == "epic" else ""
+        return literal_art(source,rarity_prefix + kind.upper() + "_ICON_DATA")
+    return ""
+
 def requirement(names: list, amounts: list[int]) -> list[dict]:
     if len(names) < len(amounts) or any(not isinstance(n, str) or not n for n in names[:len(amounts)]):
         raise RuntimeError("Original smith materials list incomplete")
@@ -89,6 +133,11 @@ def main() -> None:
                       headers={"User-Agent":"PPA-Native-Source-Forge/1"})
     with urlopen(request, timeout=80) as r:
         original = r.read(8_000_000).decode("utf-8")
+    # The outer page supplies the exact art bridge used by the smith iframe.
+    # Parse only PUBLIC constants. No real player inventory is read here.
+    outer_source = html.unescape(original)
+    wing_art = object_literal(outer_source, "WING_DIR_ART", dict)
+    jewelry_art = object_literal(outer_source, "JEWELRY_VARIANTS", dict)
     parser = Frames()
     parser.feed(original)
     if len(parser.smith) != 1 or not (75_000 <= len(parser.smith[0]) <= 180_000):
@@ -150,7 +199,8 @@ def main() -> None:
                 "icon":str(item.get("icon","")),
                 "desc":" · ".join(item.get("stats",{}).get(rarity,[])),
                 "sourceStats":list(item.get("stats",{}).get(rarity,[])),
-                "materials":mats, "img":""
+                "materials":mats,
+                "img":approved_accessory_art(outer_source,kind,rarity,wing_art,jewelry_art)
             })
     for name, item in pets.items():
         for rarity, price in (("common",500),("uncommon",1200),("rare",3000)):
@@ -193,6 +243,13 @@ def main() -> None:
             "sourceStats":legendary_bonuses[item["slot"]],
             "materials":[{"name":item["mat"],"count":1000}],"img":""
         })
+    # No silent empty forge images: the current Telegram PPA defines one
+    # canonical preview art source for every accessory rarity and each pet.
+    for offer in rows:
+        if offer["tab"] in ("accessories","pets") or (
+                offer["tab"] == "legendary" and offer["kind"] == "accessory"):
+            if not offer.get("img"):
+                raise RuntimeError("Original smith art missing for "+offer["id"])
     # Price/material parity with server. Differences in images, markup and
     # HTML order must not make two identical recipes appear incompatible.
     signed_rows = [[x["id"], int(x["price"]), x["rarity"],
