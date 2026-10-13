@@ -387,6 +387,7 @@ static func _lots(ui: Control, main: VBoxContainer, entries: Array, mine: bool) 
 static func _browse_page(ui: Control, page: int) -> void:
     var current := int(ui.get("_auction_browse_pages"))
     ui.set("_auction_browse_page",clampi(page,0,maxi(0,current-1)))
+    ui.set("_auction_page_navigate",true)
     ui.call("_render")
 
 static func _buy_card(ui: Control, grid: GridContainer, entry: Dictionary, slot_index: int) -> void:
