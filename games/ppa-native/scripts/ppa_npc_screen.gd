@@ -126,6 +126,8 @@ var auction_loading := false
 var auction_actions: Array = []
 var auction_pending := false
 var _auction_sell_uid := ""
+var _auction_selected_item_key := ""
+var _auction_inventory_page := 0
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -536,6 +538,8 @@ func open_npc(source: Dictionary) -> void:
     quantity = 1
     _auction_category = "all"
     _auction_search = ""
+    _auction_inventory_page = 0
+    _auction_selected_item_key = ""
     _auction_level = "all"
     _auction_rarity = "all"
     _quest_tier = "21-30"
@@ -586,6 +590,8 @@ func open_npc(source: Dictionary) -> void:
     auction_actions.clear()
     auction_pending = false
     _auction_sell_uid = ""
+    _auction_selected_item_key = ""
+    _auction_inventory_page = 0
     inventory_state.clear()
     inventory_actions.clear()
     inventory_notice = ""
