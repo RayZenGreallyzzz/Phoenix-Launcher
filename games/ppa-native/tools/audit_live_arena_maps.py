@@ -39,3 +39,10 @@ for key in important:
     snippet=txt[start:mo.start()+1350].replace("\n"," ")
     res[key]=snippet[:1350]
 print("PPA_ARENA_KEY_DECLARATIONS",json.dumps(res,ensure_ascii=False))
+
+extra={}
+for key in ["const SCENES=","arena:{","pvp1:{","pvpteam:{","PVP_MASK_DUEL.walk","PVP_MASK_TEAM.walk","PVP_MASK_DUEL","PVP_DUEL_SPAWNS","imgArena.src=","imgPvpDuel","arenaCollide","pvpCollision","function movePlayer","function blocked","function isWalkable"]:
+    match=re.search(re.escape(key),txt)
+    if match:
+        extra[key]=txt[max(0,match.start()-200):match.start()+1200].replace("\n"," ")[:1400]
+print("PPA_ARENA_WORLD_COLLISION",json.dumps(extra,ensure_ascii=False))
