@@ -1,0 +1,15 @@
+name: Inspect Real PPA Arena Map Source
+on:
+  push:
+    branches: ["feature/ppa-phoenix-auction-ui-20261012"]
+    paths:
+      - "games/ppa-native/tools/audit_live_arena_maps.py"
+      - ".github/workflows/ppa-arena-map-audit.yml"
+jobs:
+  public-arena-map-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect deployed PPA public map declarations
+        run: python3 games/ppa-native/tools/audit_live_arena_maps.py
