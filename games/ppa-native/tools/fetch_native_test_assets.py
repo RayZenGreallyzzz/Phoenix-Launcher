@@ -45,6 +45,21 @@ WEAPON_POSES = {
         "SunspireScepter": ([0.01, 0.12, 0.02], "mixamorig:RightHand")
     }
 }
+# Pinned authentic NPC bytes from the previously successful Android
+# release. CDN occasionally serves a corrupt image with an intact PNG
+# header and valid dimensions; reject that rather than publishing broken APK.
+NPC_DIGESTS = {
+    "blacksmith": "a933cf293e178ce8a189fd63c5867003a50f5c3557fa740ed70baad127133281",
+    "storage": "b1d79c6c88b8add66545f35583d090d80528ba122c421cf28829e01fd50b13a7",
+    "auction": "fba48b0e5b3e9e7e297f2a9a0a3bc434ab271cebbbc5bd3ecdcc7c80cdf6184b",
+    "arena": "6bad4d829ed1b7a3ff92dff42b055fe27892f9ac6c34f6848d54cdc6ace6b0f2",
+    "clan": "ff9207c640e47f8d48e7ce73aa59a528d39d22a3c4ad9df0a56fcf1343d2d29a",
+    "merchant": "792ac1e215086a7ce2cc5b06a617ddfa57743a7e60e10630acc0d35dcd887a02",
+    "blackmarket": "1dc0efb6142292a8c40a37d82d46bff52acdb68a74251f1c98d03fa0eaa738e3",
+    "dungeon": "cd4c120b0c5831c8f00f4ed452884212c71b930b214c1c44c006a939010698bd",
+    "fartzone_guide": "9d06dac27cf50827448de7fb35f3359db3deb2ab158b5b1394dd9e1960ac9961"
+}
+
 NPC_IMAGES = {
     "blacksmith": "a933cf293e178ce8.png",
     "storage": "b1d79c6c88b8add6.png",
@@ -58,15 +73,26 @@ NPC_IMAGES = {
 }
 
 
-def download(url: str) -> bytes:
+def download(url: str, expected_sha256: str = "") -> bytes:
     error = None
-    for attempt in range(3):
+    for attempt in range(6 if expected_sha256 else 3):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "PPA-Native-Asset-CI/1"})
+            # Re-request directly instead of retrying a corrupted CDN cache key.
+            retry_url = url if attempt == 0 else url + (
+                "&" if "?" in url else "?") + f"ppa_asset_verify={attempt}"
+            req = urllib.request.Request(retry_url, headers={
+                "User-Agent": "PPA-Native-Asset-CI/1",
+                "Cache-Control": "no-cache"})
             with urllib.request.urlopen(req, timeout=90) as response:
                 content = response.read(22_000_000)
             if len(content) < 128:
                 raise ValueError(f"Unexpected empty source {url}")
+            if expected_sha256:
+                received_hash = hashlib.sha256(content).hexdigest()
+                if received_hash != expected_sha256:
+                    raise ValueError(
+                        f"Corrupted original PPA art {url}: "
+                        f"{received_hash} != {expected_sha256}")
             return content
         except Exception as exc:
             error = exc
@@ -158,7 +184,7 @@ def main() -> None:
               hashlib.sha256(corrected).hexdigest(), flush=True)
 
     for key, hashed_name in NPC_IMAGES.items():
-        raw = download(BASE + "/assets/" + hashed_name)
+        raw = download(BASE + "/assets/" + hashed_name, NPC_DIGESTS[key])
         if raw[:8] != bytes.fromhex("89504e470d0a1a0a"):
             raise ValueError(f"NPC art not a PNG: {key}")
         width, height = struct.unpack(">II", raw[16:24])
