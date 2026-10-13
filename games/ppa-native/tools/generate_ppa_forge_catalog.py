@@ -77,7 +77,9 @@ def image_ref(src: str) -> str:
         return ""
     m = re.fullmatch(r"(?:\./|/)?assets/([A-Za-z0-9._/-]+\.(?:png|webp|jpe?g))", src)
     if m and ".." not in m.group(1):
-        # Keep the approved original URL format. The Godot art resolver maps\n    # it to bundled assets first, then the same PPA Worker over HTTPS.\n    return "./assets/" + m.group(1)
+        # Keep the approved original URL format. The Godot art resolver maps
+        # it to bundled assets first, then the same PPA Worker over HTTPS.
+        return "./assets/" + m.group(1)
     return ""
 
 
