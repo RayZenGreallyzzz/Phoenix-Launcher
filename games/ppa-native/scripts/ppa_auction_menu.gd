@@ -3,6 +3,7 @@ extends RefCounted
 # Approved Phoenix auction layout. This screen never issues local money/item
 # mutations: all write buttons delegate to the signed, versioned NPC service.
 const COIN = preload("res://assets/ppa_coin.webp")
+const PHOENIX_EMBLEM = preload("res://assets/ppa_phoenix_emblem.jpg")
 const GOLD = Color("#F5C466")
 const TEXT = Color("#EEE7D9")
 const MUTED = Color("#B0A69A")
@@ -134,30 +135,67 @@ static func render_wallet(ui: Control, host: HBoxContainer) -> void:
         label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
         line.add_child(label)
 
-static func _banner(parent: VBoxContainer) -> void:
+static func _banner(parent: VBoxContainer, ui: Control) -> void:
+    # Real Godot controls under an ornate Phoenix frame, not a flat screenshot.
     var banner := PanelContainer.new()
     banner.name = "PPAAuctionPhoenixBanner"
-    banner.add_theme_stylebox_override("panel",_skin(Color("#190D0A"),GOLD,13))
+    banner.add_theme_stylebox_override("panel",_skin(Color("#180B0C"),Color("#EDA743"),12))
     parent.add_child(banner)
-    var stack := VBoxContainer.new()
-    stack.alignment = BoxContainer.ALIGNMENT_CENTER
-    banner.add_child(stack)
-    var crown := _label("✦  ⚖  ✦", 20, GOLD)
-    crown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    stack.add_child(crown)
-    var title := _label("АУКЦИОН", 23, GOLD)
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation",5)
+    banner.add_child(row)
+    for side in range(2):
+        if side == 1:
+            continue
+        var flag := PanelContainer.new()
+        flag.name = "PPAAuctionLeftFlag"
+        flag.custom_minimum_size.x = 53
+        flag.add_theme_stylebox_override("panel",_skin(Color("#660E19"),Color("#D99736"),5))
+        row.add_child(flag)
+        var words := _label("⚖\nЧЕСТНАЯ\nТОРГОВЛЯ",9,GOLD)
+        words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        flag.add_child(words)
+    var center := VBoxContainer.new()
+    center.name = "PPAAuctionEmblemHeader"
+    center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    center.alignment = BoxContainer.ALIGNMENT_CENTER
+    row.add_child(center)
+    var emblem := TextureRect.new()
+    emblem.name = "PPAAuctionPhoenixEmblem"
+    emblem.texture = PHOENIX_EMBLEM
+    emblem.custom_minimum_size.y = 49
+    emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    center.add_child(emblem)
+    var title := _label("АУКЦИОН",24,GOLD)
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    stack.add_child(title)
-    var caption := _label("ПОКУПАЙ · ПРОДАВАЙ · РАЗВИВАЙСЯ", 10, MUTED)
-    caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    stack.add_child(caption)
+    center.add_child(title)
+    var tagline := _label("ПОКУПАЙ · ПРОДАВАЙ · РАЗВИВАЙСЯ",10,Color("#E0B679"))
+    tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    center.add_child(tagline)
+    var end := VBoxContainer.new()
+    end.custom_minimum_size.x = 55
+    row.add_child(end)
+    var close := _button("✕")
+    close.name = "PPAAuctionClose"
+    close.pressed.connect(func(): ui.emit_signal("close_requested"))
+    end.add_child(close)
+    var flag_right := PanelContainer.new()
+    flag_right.add_theme_stylebox_override("panel",_skin(Color("#660E19"),Color("#D99736"),5))
+    end.add_child(flag_right)
+    var msg := _label("⚖\nРЕДКИЕ\nВЕЩИ",9,GOLD)
+    msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    flag_right.add_child(msg)
 
 static func _matches(item: Dictionary, category: String) -> bool:
     if category == "all":
         return true
     var kind := str(item.get("kind","")).to_lower()
-    var slot := str(item.get("slot","")).to_lower()
-    var equip := str(item.get("equipSlot","")).to_lower()
+    # View-only inventory uses a numeric UI slot: retain the real equipment
+    # position under ppaEquipmentSlot / equipSlot when classifying.
+    var slot := str(item.get("ppaEquipmentSlot",item.get("equipSlot",item.get("slot","")))).to_lower()
+    var equip := str(item.get("equipSlot",slot)).to_lower()
     if category == "weapon":
         return slot == "weapon" or equip == "weapon"
     if category == "armor":
@@ -561,7 +599,7 @@ static func _mine(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
 
 static func render(ui: Control) -> void:
     var body: VBoxContainer = ui.get("_body")
-    _banner(body)
+    _banner(body,ui)
     var notice := str(ui.get("auction_notice"))
     if not notice.is_empty():
         body.add_child(_label(notice,12,GOLD))
