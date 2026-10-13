@@ -141,6 +141,10 @@ func _run() -> void:
     npc._select_item("qa_long_00")
     await process_frame
     await process_frame
+    await process_frame
+    print("PPA_MARKET_DETAIL_SCROLL", scrolled_position,
+        npc._scroll.scroll_vertical, npc._scroll.get_v_scroll_bar().max_value,
+        npc._scroll.get_v_scroll_bar().page)
     check(npc.selected_id=="qa_long_00",
         "Opening market item details stopped working after swipe support")
     check(abs(npc._scroll.scroll_vertical-scrolled_position)<=4,
