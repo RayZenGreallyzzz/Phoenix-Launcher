@@ -23,6 +23,7 @@ signal auction_retry_requested
 # Local offline dungeon visual test, explicitly separate from server entry.
 signal dungeon_visual_test_requested
 signal arena_training_requested
+signal arena_map_preview_requested(mode: String)
 signal native_realtime_requested
 
 const SHOP = preload("res://scripts/test_shop_catalog.gd")
@@ -3197,6 +3198,51 @@ func set_online_failure(reason: String) -> void:
     if service == "arena" and visible and _status != null:
         _status.text = "PPA · " + native_online_status
 
+func _arena_original_map_cards() -> void:
+    _section("ОРИГИНАЛЬНЫЕ КАРТЫ АРЕНЫ PPA",
+        "Выбери карту, чтобы походить по ней и проверить столкновения. "
+        + "Просмотр не создаёт матч и не начисляет опыт или награды.")
+    var modes := [
+        {"key":"1x1","label":"АРЕНА 1 × 1","image":"res://assets/ppa_original_arena_duel.png",
+            "hint":"Дуэль · собственная оригинальная карта и маска стен"},
+        {"key":"3x3","label":"АРЕНА 3 × 3","image":"res://assets/ppa_original_arena_team.png",
+            "hint":"Командная карта PPA · 3 против 3 · родная маска"},
+        {"key":"5x5","label":"АРЕНА 5 × 5","image":"res://assets/ppa_original_arena_team.png",
+            "hint":"Та же оригинальная командная карта · 5 против 5"},
+        {"key":"xp","label":"АРЕНА ОПЫТА","image":"res://assets/ppa_original_arena_xp.jpg",
+            "hint":"Исходная карта 1024×1024 · оригинальные границы движения"}
+    ]
+    for mode in modes:
+        var pane := PanelContainer.new()
+        pane.name = "PPAOriginalArenaMapCard_" + str(mode["key"])
+        pane.add_theme_stylebox_override("panel",_style(Color("#1F1916"), GOLD, 8, 1))
+        _body.add_child(pane)
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation",10)
+        pane.add_child(row)
+        var pic := TextureRect.new()
+        pic.name = "PPAOriginalArenaThumbnail_" + str(mode["key"])
+        pic.custom_minimum_size = Vector2(120,85)
+        pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        var path := str(mode["image"])
+        if ResourceLoader.exists(path):
+            pic.texture = load(path) as Texture2D
+        row.add_child(pic)
+        var desc := VBoxContainer.new()
+        desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        row.add_child(desc)
+        desc.add_child(_label(str(mode["label"]),14,GOLD))
+        var hint := _label(str(mode["hint"]),11,SUB)
+        hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        desc.add_child(hint)
+        var button := _button("ОСМОТРЕТЬ КАРТУ")
+        button.name = "PPAOriginalArenaEnter_" + str(mode["key"])
+        button.custom_minimum_size.y = 38
+        button.pressed.connect(func(): arena_map_preview_requested.emit(str(mode["key"])))
+        desc.add_child(button)
+
 func _show_arena() -> void:
     _section("МЕЧНИК АРЕНЫ", "Telegram PPA · испытания, PvP и рейтинг")
     var wallet: Dictionary = _player_view_readonly.get("money", {})
@@ -3228,7 +3274,9 @@ func _show_arena() -> void:
         "fights":
             _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
             _message("ПРОТИВ ИИ", "Испытание против ботов. Состав и доступность определяет сервер.")
-            _message("PVP АРЕНА", "Режимы 1×1 и 3×3 / 5×5 — где они доступны в живой PPA.")
+            _message("PVP АРЕНА", "Сначала можно осмотреть настоящие карты с коллизиями. "
+                + "Боевой подбор и награды пока требуют общего сервера.")
+            _arena_original_map_cards()
             _message("СЕЗОННЫЙ РЕЙТИНГ", "Позиция и подбор на сервере.")
             var practice := _button("⚔ НАЧАТЬ ТРЕНИРОВКУ ПРОТИВ ИИ")
             practice.name = "NpcArenaAiPractice"
