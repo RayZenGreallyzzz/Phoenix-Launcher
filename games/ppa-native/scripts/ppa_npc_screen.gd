@@ -159,6 +159,9 @@ var _forge_swipe_origin := Vector2.ZERO
 var _forge_swipe_last := Vector2.ZERO
 var _forge_swipe_started := false
 var _forge_fling_velocity := 0.0
+# Black Market shares the smith's direct finger-drag logic: cards and
+# Подробнее buttons must not trap vertical gestures on Android.
+var _blackmarket_restore_scroll := -1
 
 func _ready() -> void:
     name = "PPANativeNpcMenu"
@@ -430,6 +433,9 @@ func _forge_move_swipe(point: Vector2, finger_speed: float = 0.0) -> void:
 
 
 func _forge_finish_swipe() -> void:
+    if _forge_swipe_started and service == "blackmarket":
+        # A completed drag must not trigger the Подробнее button underneath.
+        get_viewport().set_input_as_handled()
     if _forge_swipe_started and absf(_forge_fling_velocity) > 160.0:
         _forge_fling = _forge_swipe
     _forge_swipe = null
@@ -478,7 +484,7 @@ func _auction_finish_swipe(point: Vector2) -> void:
 func _input(event: InputEvent) -> void:
     if visible and service == "auction" and tab == "all":
         _auction_browse_swipe(event)
-    if not visible or service != "forge" or _scroll == null:
+    if not visible or service not in ["forge","blackmarket"] or _scroll == null:
         return
     if _item_hold != null and _item_hold.is_open():
         return
@@ -606,9 +612,10 @@ func open_npc(source: Dictionary) -> void:
     _forge_finger = -1
     _forge_mouse_down = false
     _forge_fling_velocity = 0.0
-    # Other NPCs keep Godot's built-in scrolling. Forge supplies its own
-    # direct vertical swipe even when touch starts on an interactive item.
-    _scroll.scroll_deadzone = 4096 if service == "forge" else 0
+    _blackmarket_restore_scroll = -1
+    # Other NPCs keep Godot's built-in scrolling. Forge and Black Market
+    # supply direct vertical swipes even over interactive cards/buttons.
+    _scroll.scroll_deadzone = 4096 if service in ["forge","blackmarket"] else 0
     _forge_keys = {"equipment":"", "stone":"", "rune":""}
     _enhance_uid = ""
     _enhance_rarity = ""
@@ -1012,6 +1019,12 @@ func _tab_specs() -> Array:
         _: return []
 
 func _select_tab(key: String) -> void:
+    if service == "blackmarket":
+        _blackmarket_restore_scroll = -1
+        _forge_fling = null
+        _forge_fling_velocity = 0.0
+        _forge_finger = -1
+        _forge_mouse_down = false
     if service == "auction" and key != tab:
         _auction_browse_page = 0
         _auction_swipe_index = -1
@@ -1023,6 +1036,11 @@ func _select_tab(key: String) -> void:
     _render()
 
 func _select_item(id: String) -> void:
+    if service == "blackmarket" and _scroll != null:
+        # Selecting a product extends the long list with its description;
+        # don't jump to the top while the player is reading the market.
+        _blackmarket_restore_scroll = _scroll.scroll_vertical
+        _forge_fling = null
     selected_id = id
     quantity = 1
     _render()
@@ -1137,6 +1155,10 @@ func _render() -> void:
     elif service == "auction" and tab == "all" and _auction_page_navigate:
         _auction_page_navigate = false
         call_deferred("_scroll_to_auction_buy_grid")
+    elif service == "blackmarket" and _blackmarket_restore_scroll >= 0:
+        var saved_market_position := _blackmarket_restore_scroll
+        _blackmarket_restore_scroll = -1
+        _scroll.set_deferred("scroll_vertical",saved_market_position)
     else:
         _scroll.set_deferred("scroll_vertical", 0)
 
