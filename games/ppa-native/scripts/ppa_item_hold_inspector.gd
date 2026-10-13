@@ -292,6 +292,14 @@ func _show_item(item: Dictionary, origin: String, preview_only: bool) -> void:
         scroll.add_child(rows)
         for line in details:
             rows.add_child(_text(str(line), Color("#E6EBED"), 11))
+    elif origin == "catalog" and item.get("materials") is Array:
+        # Some official legendary recipes only name a tier. Their exact
+        # bonuses are absent from the public recipe; never fabricate stats.
+        var missing_stats := _text(
+            "Точные характеристики в каталоге этого рецепта не указаны.",
+            SUB, 11)
+        missing_stats.name = "PPAInspectorUnspecifiedRecipeStats"
+        _content.add_child(missing_stats)
 
     if preview_only:
         # This panel may only be read while holding, never used to spend.
