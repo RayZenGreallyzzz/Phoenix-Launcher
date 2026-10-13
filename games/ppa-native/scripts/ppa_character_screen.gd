@@ -13,6 +13,7 @@ signal inventory_action_requested(fields: Dictionary)
 signal refresh_readonly_save_requested
 
 const ORIGINAL_GRIMOIRES = preload("res://scripts/ppa_grimoire_catalog_generated.gd")
+const SKILL_MEDALLION = preload("res://scripts/ppa_grimoire_skill_icon.gd")
 const CAPACITY = preload("res://scripts/ppa_storage_contract.gd")
 const SERVER_VIEW = preload("res://scripts/ppa_server_inventory_view.gd")
 const ATTRIBUTE_VIEW = preload("res://scripts/ppa_item_attribute_view.gd")
@@ -1014,19 +1015,18 @@ func _draw_source_skill_card(skill: Dictionary, passive: bool) -> void:
     row.add_theme_constant_override("separation", 8)
     card.add_child(row)
 
-    var icon := PanelContainer.new()
+    # Keep the compact 58x76 layout, but only show the circular medallion
+    # cropped from the middle of the original book (no cover/book rectangle).
+    var icon := CenterContainer.new()
     icon.name = "OriginalPPASkillIcon"
     icon.custom_minimum_size = Vector2(58.0, 76.0)
     icon.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
     icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    icon.add_theme_stylebox_override("panel", _style_box(Color("#090B0D"), Color("#715936"), 6, 1))
     row.add_child(icon)
     if has_skill:
-        var image := _book_picture(str(skill_def.get("cardArt", "")), Vector2(58.0, 76.0))
-        image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        var image := SKILL_MEDALLION.make_icon(str(skill_def.get("cardArt", "")), 56.0)
         icon.add_child(image)
-        image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
         image.modulate = Color(0.74, 0.73, 0.75, 0.83) if rank == 0 else Color.WHITE
     else:
         var padlock := _text("🔒", 26, Color("#918476"))
