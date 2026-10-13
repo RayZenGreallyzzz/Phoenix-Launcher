@@ -339,8 +339,14 @@ static func _lots(ui: Control, main: VBoxContainer, entries: Array, mine: bool) 
     if shown >= 50:
         main.add_child(_label("Показаны первые 50 предложений. Полная серверная пагинация ещё требуется.",10,MUTED))
 
-static func _select_sale(ui: Control, uid: String) -> void:
+static func _select_sale(ui: Control, key: String, uid: String) -> void:
+    # Selection is VISUAL only until a signed auction contract permits listing.
+    ui.set("_auction_selected_item_key",key)
     ui.set("_auction_sell_uid",uid)
+    ui.call("_render")
+
+static func _sale_page(ui: Control, page: int) -> void:
+    ui.set("_auction_inventory_page",maxi(0,page))
     ui.call("_render")
 
 static func _sale_price_changed(value: float, ui: Control, preview: Label) -> void:
@@ -351,89 +357,170 @@ static func _sale_currency_changed(index: int, ui: Control, preview: Label) -> v
     ui.call("_set_currency",index)
     preview.text = "После комиссии 10%: " + str(snappedf(float(ui.get("_asking_price"))*0.9,0.01)) + " " + str(ui.get("_asking_currency"))
 
+static func _inventory_source(ui: Control, market_state: Dictionary, verified: bool) -> Array:
+    # One authenticated /api/game/state snapshot feeds all native NPCs.
+    # Auction permissions are a SEPARATE signed contract, never inferred.
+    var view: Dictionary = ui.get("_player_view_readonly")
+    if view.get("inventory") is Array and not (view.get("inventory") as Array).is_empty():
+        return (view["inventory"] as Array).duplicate(true)
+    # The signed auction bag may arrive before the general save snapshot.
+    return (market_state.get("bag",[]) as Array).duplicate(true) if verified and market_state.get("bag") is Array else []
+
+static func _item_key(item: Dictionary, pos: int) -> String:
+    var uid := str(item.get("uid",""))
+    if not uid.is_empty():
+        return "uid:" + uid
+    # View-only id points into the authenticated save projection, not escrow.
+    return "view:" + str(item.get("id",pos))
+
+static func _is_server_sellable(item: Dictionary, market_state: Dictionary, verified: bool) -> bool:
+    if not verified:
+        return false
+    if bool(item.get("ppa_native_virtual",false)):
+        return false
+    var uid := str(item.get("uid",""))
+    if uid.is_empty():
+        return false
+    var slot := str(item.get("ppaEquipmentSlot",item.get("equipSlot",item.get("slot",""))))
+    if slot.is_empty() or slot.is_valid_int():
+        return false
+    for raw in market_state.get("bag",[]):
+        if raw is Dictionary and str(raw.get("uid","")) == uid:
+            return true
+    return false
+
 static func _sell(ui: Control, main: VBoxContainer, state: Dictionary, verified: bool) -> void:
-    _section(main,"ПРОДАТЬ","Выбери вещь из сумки. Сделка доступна только после подтверждения общим сервером.")
-    var items: Array = state.get("bag",[]) if verified else []
-    if verified:
-        main.add_child(_label("Торговые места: " + str(state.get("mine",[]).size()) + " / " + str(state.get("maxSellSlots",0)),11,MUTED))
-    else:
-        main.add_child(_label("Торговые места: — / — · ждём сервер PPA",11,MUTED))
+    _section(main,"ПРОДАТЬ","Предметы берутся из твоего инвентаря PPA. Ничего не копируется и не создаётся.")
+    var items := _inventory_source(ui,state,verified)
+    var wallet_seen := not (ui.get("_player_view_readonly") as Dictionary).is_empty()
+    var own_count := str(state.get("mine",[]).size()) if verified else "—"
+    var slots_count := str(state.get("maxSellSlots",0)) if verified else "—"
+    main.add_child(_label("Мои торговые места: " + own_count + " / " + slots_count,11,MUTED))
+    var two_panes := ui.size.x >= 650
+    var layout: BoxContainer = HBoxContainer.new() if two_panes else VBoxContainer.new()
+    layout.add_theme_constant_override("separation",8)
+    layout.name = "PPAAuctionSellerLayout"
+    main.add_child(layout)
+    var left := VBoxContainer.new()
+    left.name = "PPAAuctionRealInventory"
+    left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    layout.add_child(left)
+    left.add_child(_label("СУМКА ПЕРСОНАЖА",13,GOLD))
     var grid := GridContainer.new()
-    grid.columns = 4 if ui.size.x < 520 else 6
+    var columns := 5 if two_panes else 4
+    grid.columns = columns
     grid.name = "PPARealAuctionGearGrid"
-    main.add_child(grid)
-    var first := ""
-    var chosen := str(ui.get("_auction_sell_uid"))
-    var found := false
-    for item in items:
-        if not (item is Dictionary):
+    left.add_child(grid)
+    var selected_key := str(ui.get("_auction_selected_item_key"))
+    var display_items: Array[Dictionary] = []
+    for raw in items:
+        if not (raw is Dictionary) or (raw as Dictionary).is_empty():
             continue
-        var gear: Dictionary = item
-        var uid := str(gear.get("uid",""))
-        if uid.is_empty() or str(gear.get("slot","")).is_empty() or not _matches(gear,str(ui.get("_auction_category"))):
-            continue
-        if first.is_empty():
-            first = uid
-        if chosen == uid:
-            found = true
-        var b := _button(str(gear.get("icon","◆")))
-        b.name = "PPARealAuctionSellUID_" + uid
-        b.tooltip_text = str(gear.get("name","Предмет"))
-        b.custom_minimum_size = Vector2(48,48)
-        var border: Color = GOLD if chosen == uid else RARITY_COLORS.get(str(gear.get("rarity","common")).to_lower(),MUTED)
-        b.add_theme_stylebox_override("normal",_skin(Color("#141B20"),border,4))
+        var item: Dictionary = raw
+        if _matches(item,str(ui.get("_auction_category"))):
+            display_items.append(item)
+    var page_size := 20
+    var pages := maxi(1,ceili(float(display_items.size()) / float(page_size)))
+    var page := clampi(int(ui.get("_auction_inventory_page")),0,pages-1)
+    var first_key := ""
+    var found_selected := false
+    for i in range(display_items.size()):
+        var key := _item_key(display_items[i],i)
+        if first_key.is_empty():
+            first_key = key
+        if key == selected_key:
+            found_selected = true
+    if not found_selected:
+        selected_key = first_key
+        ui.set("_auction_selected_item_key",selected_key)
+    var selected: Dictionary = {}
+    for i in range(display_items.size()):
+        var item: Dictionary = display_items[i]
+        if _item_key(item,i) == selected_key:
+            selected = item
+            break
+    var uid := str(selected.get("uid","")) if _is_server_sellable(selected,state,verified) else ""
+    ui.set("_auction_sell_uid",uid)
+    for i in range(page*page_size,mini(display_items.size(),(page+1)*page_size)):
+        var item: Dictionary = display_items[i]
+        var key := _item_key(item,i)
+        var safe_uid := str(item.get("uid","")) if _is_server_sellable(item,state,verified) else ""
+        var title := str(item.get("name","Предмет PPA"))
+        var tile := _button(str(item.get("icon","◆")))
+        tile.name = ("PPARealAuctionSellUID_" + safe_uid) if not safe_uid.is_empty() else ("PPAAuctionReadOnlyItem_" + str(i))
+        tile.tooltip_text = title + " · " + str(item.get("qty",item.get("count",1))) + " шт."
+        tile.custom_minimum_size = Vector2(49,49)
+        tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var tint: Color = GOLD if key == selected_key else RARITY_COLORS.get(str(item.get("rarity","common")).to_lower(),MUTED)
+        tile.add_theme_stylebox_override("normal",_skin(Color("#141B20"),tint,5))
         var loader: Node = ui.get("_preview_icons")
         if loader != null:
-            loader.call("bind_button",gear,"",b)
-        b.pressed.connect(_select_sale.bind(ui,uid))
-        grid.add_child(b)
-    if not found:
-        chosen = first
-        ui.set("_auction_sell_uid",chosen)
-    if not verified:
-        # An empty inventory grid is a layout placeholder, NOT player items.
-        # Never invent owned gear or enable operations without a signed state.
-        for cell in range(20):
-            var empty := _button("·",false)
-            empty.name = "PPAAuctionOfflineEmptySlot_" + str(cell)
-            empty.custom_minimum_size = Vector2(48,48)
-            grid.add_child(empty)
-        main.add_child(_label("Сетка выбора готова. Предметы появятся после подключения аукциона к сохранению персонажа.",11,MUTED))
-    elif chosen.is_empty():
-        main.add_child(_label("Нет доступной для продажи экипировки. Продажа стопок ресурсов требует отдельной защищённой операции сервера.",11,MUTED))
+            loader.call("bind_button",item,"",tile)
+        tile.pressed.connect(_select_sale.bind(ui,key,safe_uid))
+        grid.add_child(tile)
+    if display_items.is_empty():
+        # Never substitute fake owned items, not even in preview mode.
+        left.add_child(_label("Предметов в выбранной категории нет." if wallet_seen or verified
+            else "Ожидаем подтверждённый инвентарь персонажа PPA.",12,MUTED))
+    var pages_row := HBoxContainer.new()
+    pages_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    left.add_child(pages_row)
+    var prev := _button("◀",page>0)
+    prev.name = "PPAAuctionInventoryPrevious"
+    prev.pressed.connect(_sale_page.bind(ui,page-1))
+    pages_row.add_child(prev)
+    var count := _label("  " + str(page+1) + " / " + str(pages) + "  ",12,GOLD)
+    count.name = "PPAAuctionInventoryPageCount"
+    pages_row.add_child(count)
+    var next := _button("▶",page+1<pages)
+    next.name = "PPAAuctionInventoryNext"
+    next.pressed.connect(_sale_page.bind(ui,page+1))
+    pages_row.add_child(next)
+    var right := VBoxContainer.new()
+    right.name = "PPAAuctionSaleControls"
+    right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    layout.add_child(right)
+    _section(right,"НАСТРОЙКИ ПРОДАЖИ")
+    if selected.is_empty():
+        right.add_child(_label("Выбери свою вещь из сетки слева.",11,MUTED))
     else:
-        for item in items:
-            if item is Dictionary and str(item.get("uid","")) == chosen:
-                main.add_child(_label("Выбрано: " + str(item.get("name","Предмет")),12,GOLD))
-                break
-    main.add_child(_label("Количество: 1 шт. · Срок: 24 часа (ограничение текущего серверного escrow).",11,MUTED))
+        var rarity := str(selected.get("rarity","common")).to_lower()
+        right.add_child(_label(str(selected.get("name","Предмет PPA")),14,
+            RARITY_COLORS.get(rarity,GOLD)))
+        var amount := str(selected.get("qty",selected.get("count",1)))
+        right.add_child(_label("В сумке: " + amount + " шт.",11,MUTED))
+        if uid.is_empty():
+            right.add_child(_label("ПРЕДПРОСМОТР · серверная продажа этого предмета пока недоступна.",11,MUTED))
     var price := SpinBox.new()
     price.name = "PPARealAuctionPrice"
     price.min_value = 1
     price.max_value = 999999999
     price.step = 1
     price.value = float(ui.get("_asking_price"))
-    main.add_child(_label("Цена за вещь",12,GOLD))
-    main.add_child(price)
+    right.add_child(_label("Цена за 1 шт.",12,GOLD))
+    right.add_child(price)
     var currencies := OptionButton.new()
     currencies.name = "PPARealAuctionCurrency"
     currencies.add_item("PPA")
     currencies.add_item("Gram")
     currencies.select(0 if str(ui.get("_asking_currency")) == "PPA" else 1)
-    main.add_child(_label("Валюта (Gold не используется)",12,GOLD))
-    main.add_child(currencies)
-    var preview := _label("После комиссии 10%: " + str(snappedf(price.value*0.9,0.01)) + " " + str(ui.get("_asking_currency")),12,GOLD)
+    right.add_child(_label("Валюта",12,GOLD))
+    right.add_child(currencies)
+    right.add_child(_label("Количество: 1 шт.  ·  Срок: 24 часа",11,MUTED))
+    var preview := _label("После комиссии 10%: " +
+        str(snappedf(price.value*0.9,0.01)) + " " + str(ui.get("_asking_currency")),12,GOLD)
     preview.name = "PPAAuctionSellerNet"
-    main.add_child(preview)
+    right.add_child(preview)
     price.value_changed.connect(_sale_price_changed.bind(ui,preview))
     currencies.item_selected.connect(_sale_currency_changed.bind(ui,preview))
     var actions: Array = ui.get("auction_actions")
-    var enabled: bool = verified and actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not chosen.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
+    var enabled: bool = verified and actions.has("place") and bool(state.get("settlementEnabled",false)) and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending")) and not uid.is_empty() and int(state.get("maxSellSlots",0)) > state.get("mine",[]).size()
     var place := _button("ВЫСТАВИТЬ ЛОТ",enabled)
     place.name = "PPARealAuctionPlace"
     place.pressed.connect(Callable(ui,"_auction_place_selected"))
-    main.add_child(place)
-    main.add_child(_label("Вещь и деньги меняются только после подтверждения общего сервера. Никаких локальных списаний.",10,MUTED))
+    right.add_child(place)
+    if not enabled:
+        right.add_child(_label("Ввод цены и выбор Gram/PPA работают для просмотра. Пока сервер не разрешил сделку, списаний нет.",11,MUTED))
 
 static func _mine(ui: Control, main: VBoxContainer, state: Dictionary) -> void:
     _section(main,"МОИ ЛОТЫ (" + str(state.get("mine",[]).size()) + "/" + str(state.get("maxSellSlots",0)) + ")")
