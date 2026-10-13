@@ -67,6 +67,8 @@ def main():
         source=match_var(html,symbol)
         url=urljoin(HOST,source)
         data=fetch(url,22_000_000)
+        if kind == "xp":
+            print("PPA_ORIGINAL_XP_ASSET_HEADER", data[:80].hex(), "bytes", len(data),flush=True)
         dims=png_dimensions(data)
         if dims!=expected:
             raise RuntimeError(f"Unexpected PPA {kind} art {dims}, expected {expected}")
