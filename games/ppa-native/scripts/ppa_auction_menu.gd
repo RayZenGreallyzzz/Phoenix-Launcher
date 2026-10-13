@@ -19,6 +19,7 @@ const CATEGORIES = [
     {"key":"quest","text":"Квестовые","glyph":"▧"},
     {"key":"misc","text":"Разное","glyph":"✦"}
 ]
+const BUY_PAGE_SIZE := 10
 const RARITIES = ["all","common","uncommon","rare","epic","legendary"]
 const RARITY_NAMES = ["Любое","Обычное","Необычное","Редкое","Эпическое","Легендарное"]
 const RARITY_COLORS = {
@@ -215,6 +216,7 @@ static func _matches(item: Dictionary, category: String) -> bool:
 
 static func _category_changed(ui: Control, category: String) -> void:
     ui.set("_auction_category",category)
+    ui.set("_auction_browse_page",0)
     ui.call("_render")
 
 static func _make_categories(ui: Control, parent: Node, compact: bool) -> void:
@@ -243,11 +245,13 @@ static func _search_changed(new_text: String, ui: Control) -> void:
     ui.set("_auction_search",new_text.strip_edges())
 
 static func _search_submit(_text: String, ui: Control) -> void:
+    ui.set("_auction_browse_page",0)
     ui.call("_render")
 
 static func _filter_changed(index: int, ui: Control, property: String, options: Array) -> void:
     if index >= 0 and index < options.size():
         ui.set(property,options[index])
+        ui.set("_auction_browse_page",0)
         ui.call("_render")
 
 static func _filters(ui: Control, main: VBoxContainer) -> void:
@@ -376,6 +380,116 @@ static func _lots(ui: Control, main: VBoxContainer, entries: Array, mine: bool) 
         main.add_child(_label("Подходящих активных лотов нет.",12,MUTED))
     if shown >= 50:
         main.add_child(_label("Показаны первые 50 предложений. Полная серверная пагинация ещё требуется.",10,MUTED))
+
+# Buy tab: always show exactly TEN slots, but populate them ONLY with
+# server-confirmed real listings. Neither placeholders nor page totals imply
+# that 100/200 stock records exist; full pagination is driven by supplied lots.
+static func _browse_page(ui: Control, page: int) -> void:
+    var current := int(ui.get("_auction_browse_pages"))
+    ui.set("_auction_browse_page",clampi(page,0,maxi(0,current-1)))
+    ui.call("_render")
+
+static func _buy_card(ui: Control, grid: GridContainer, entry: Dictionary, slot_index: int) -> void:
+    var card := PanelContainer.new()
+    card.name = "PPAAuctionBuySlot_" + str(slot_index)
+    card.custom_minimum_size = Vector2(0,100)
+    card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    card.add_theme_stylebox_override("panel",_skin(Color("#10191E"),Color("#73532C"),6))
+    grid.add_child(card)
+    var item: Dictionary = entry.get("item",{}) if entry.get("item") is Dictionary else {}
+    if item.is_empty():
+        var empty := CenterContainer.new()
+        empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        card.add_child(empty)
+        var hint := _label("—",16,Color("#63584A"))
+        hint.name = "PPAAuctionEmptySlot"
+        hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        empty.add_child(hint)
+        return
+    card.set_meta("ppa_real_lot_id",str(entry.get("id","")))
+    var column := VBoxContainer.new()
+    column.add_theme_constant_override("separation",3)
+    card.add_child(column)
+    var header := HBoxContainer.new()
+    header.add_theme_constant_override("separation",5)
+    column.add_child(header)
+    header.add_child(_item_icon(ui,item,38))
+    var words := VBoxContainer.new()
+    words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    header.add_child(words)
+    var rarity := str(item.get("rarity","common")).to_lower()
+    var name := _label(str(item.get("name","Предмет PPA")).left(36),11,
+        RARITY_COLORS.get(rarity,TEXT))
+    name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    words.add_child(name)
+    var currency := str(entry.get("currency","ppa")).to_lower()
+    var qty := str(entry.get("qty",1))
+    words.add_child(_label(qty + " шт. · " + str(entry.get("price","—")) +
+        (" Gram" if currency=="gram" else " PPA"),11,GOLD))
+    var actions: Array = ui.get("auction_actions")
+    var market: Dictionary = ui.get("auction_state")
+    var enabled := actions.has("buy") and bool(entry.get("canBuy",false)) \
+        and bool(market.get("settlementEnabled",false)) \
+        and not bool(ui.get("auction_loading")) and not bool(ui.get("auction_pending"))
+    var buy := _button("КУПИТЬ",enabled)
+    buy.name = "PPARealAuctionBuy_" + str(entry.get("id",""))
+    buy.custom_minimum_size.y = 29
+    buy.add_theme_font_size_override("font_size",10)
+    buy.pressed.connect(Callable(ui,"_auction_buy_lot").bind(
+        str(entry.get("id","")),float(entry.get("price",0)),currency))
+    column.add_child(buy)
+
+static func _browse(ui: Control, main: VBoxContainer, entries: Array) -> void:
+    var matched: Array[Dictionary] = []
+    for raw in entries:
+        if raw is Dictionary and raw.get("item") is Dictionary \
+                and _visible_lot(ui,raw["item"]):
+            matched.append(raw)
+    var pages := maxi(1,ceili(float(matched.size()) / float(BUY_PAGE_SIZE)))
+    ui.set("_auction_browse_pages",pages)
+    var page := clampi(int(ui.get("_auction_browse_page")),0,pages-1)
+    ui.set("_auction_browse_page",page)
+    var grid := GridContainer.new()
+    grid.name = "PPAAuctionBuyLotsGrid"
+    grid.columns = 2
+    grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    grid.add_theme_constant_override("h_separation",6)
+    grid.add_theme_constant_override("v_separation",6)
+    main.add_child(grid)
+    for index in range(BUY_PAGE_SIZE):
+        var position := page * BUY_PAGE_SIZE + index
+        _buy_card(ui,grid,matched[position] if position < matched.size() else {},index)
+    if matched.is_empty():
+        var notice := _label("Реальных лотов по выбранным фильтрам пока нет.",11,MUTED)
+        notice.name = "PPAAuctionNoConfirmedLots"
+        main.add_child(notice)
+    var pager := HBoxContainer.new()
+    pager.name = "PPAAuctionBuyPager"
+    pager.alignment = BoxContainer.ALIGNMENT_CENTER
+    pager.add_theme_constant_override("separation",6)
+    pager.custom_minimum_size.y = 34
+    pager.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    main.add_child(pager)
+    var previous := _button("◀",page>0)
+    previous.name = "PPAAuctionBuyPrevious"
+    previous.custom_minimum_size = Vector2(42,32)
+    previous.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    previous.pressed.connect(_browse_page.bind(ui,page-1))
+    pager.add_child(previous)
+    var counter := _label(str(page+1) + " / " + str(pages),12,GOLD)
+    counter.name = "PPAAuctionBuyPageCount"
+    counter.custom_minimum_size = Vector2(68,32)
+    counter.autowrap_mode = TextServer.AUTOWRAP_OFF
+    counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    counter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    pager.add_child(counter)
+    var following := _button("▶",page+1<pages)
+    following.name = "PPAAuctionBuyNext"
+    following.custom_minimum_size = Vector2(42,32)
+    following.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    following.pressed.connect(_browse_page.bind(ui,page+1))
+    pager.add_child(following)
+    main.add_child(_label("Свайп влево / вправо по лотам — следующая / предыдущая страница",10,MUTED))
 
 static func _select_sale(ui: Control, key: String, uid: String) -> void:
     # Selection is VISUAL only until a signed auction contract permits listing.
@@ -663,11 +777,10 @@ static func render(ui: Control) -> void:
     if tab == "all":
         _section(main,"ПОКУПКА","Общий рынок PPA · цены за штуку")
         _filters(ui,main)
-        if verified:
-            _lots(ui,main,state.get("lots",[]),false)
-        else:
+        if not verified:
             _section(main,"ОБЪЯВЛЕНИЯ ВРЕМЕННО НЕДОСТУПНЫ",
-                "Поиск и фильтры готовы. Не показываем выдуманные лоты, пока сервер не подтвердил объявления.")
+                "Показываем 10 пустых мест, не выдумывая чужие товары. Лоты загрузятся после подтверждения сервера.")
+        _browse(ui,main,state.get("lots",[]) if verified else [])
     elif tab == "sell":
         _sell(ui,main,state,verified)
     elif tab == "mine":
