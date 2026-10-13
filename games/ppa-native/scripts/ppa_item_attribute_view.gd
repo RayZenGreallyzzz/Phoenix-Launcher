@@ -72,7 +72,12 @@ static func lines_for_item(item: Dictionary) -> Array:
 static func description_lines_for_item(item: Dictionary) -> Array:
     var output: Array = []
     var seen := {}
+    var canonical_recipe_bonuses := item.get("sourceStats") is Array and not (item.get("sourceStats") as Array).is_empty() and item.get("materials") is Array
     for field in ["description", "desc", "useText", "skillDescription", "effectText"]:
+        # Forge catalog has the same official bonus text in both sourceStats
+        # and desc. Display it ONLY under characteristics, not twice.
+        if canonical_recipe_bonuses and field == "desc":
+            continue
         var raw: Variant = item.get(field, null)
         if not (raw is String):
             continue
@@ -99,6 +104,15 @@ static func stat_lines_for_item(item: Dictionary) -> Array:
         var raw: Variant = item.get(field, null)
         if raw is Dictionary:
             _append_values(raw as Dictionary, output, seen)
+    # Prefer the original exact recipe bonuses, one separately wrapped line
+    # per entry; never rely on the item's picture to decide whether it has stats.
+    var official_stats: Variant = item.get("sourceStats",null)
+    if official_stats is Array and not (official_stats as Array).is_empty():
+        for entry in official_stats:
+            var line := str(entry).strip_edges()
+            if not line.is_empty() and not output.has(line):
+                output.append(line)
+        return output
     # The original PPA smith has three different schema sources:
     # epic GEAR[].stat, ACC[].stats[rarity], and PETS[].bonus[rarity].
     # Our live catalog preserves all of them VERBATIM under recipe.desc,
