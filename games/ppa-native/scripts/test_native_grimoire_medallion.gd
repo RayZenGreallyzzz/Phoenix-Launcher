@@ -23,14 +23,16 @@ func _check() -> void:
     var path := str((active[0] as Dictionary).get("cardArt",""))
     require(ResourceLoader.exists(path),"Missing authentic book cover")
     var original := load(path) as Texture2D
-    var cropped := MEDALLION.load_medallion(path) as AtlasTexture
-    require(original!=null and cropped!=null,"Original asset was not center-cropped")
-    require(cropped.atlas==original,"Icon no longer comes from the original book")
-    require(cropped.region.size.x==cropped.region.size.y,"Only a centered SQUARE region can be circular")
-    require(cropped.region.size.x < original.get_width(),"Entire grimoire cover is still visible")
-    require(absf(cropped.region.get_center().x-float(original.get_width())/2.0)<1.0
-        and absf(cropped.region.get_center().y-float(original.get_height())/2.0)<1.0,
-        "The crop is not centered on the book emblem")
+    var sample := MEDALLION.make_icon(path,48.0)
+    var crop := (sample.material as ShaderMaterial).get_shader_parameter("crop_fraction") as Vector2
+    require(original!=null and sample.texture==original,
+        "Skill symbol must sample ONLY its authentic original source cover")
+    require(crop.x > 0 and crop.y > 0 and crop.x < 0.8 and crop.y < 0.8,
+        "Crop did not isolate only the middle of the original book")
+    require(absf(crop.x*float(original.get_width())
+        -crop.y*float(original.get_height()))<1.0,
+        "Crop must sample a centered square area before circular mask")
+    sample.free()
 
     var host := Control.new()
     host.size = Vector2(720,900)
@@ -44,7 +46,7 @@ func _check() -> void:
     var button := hud._skills[0]
     var hud_emblem := button.find_child("PPAApprovedGrimoireCenterMedallion",true,false) as TextureRect
     require(hud_emblem!=null and hud_emblem.visible
-        and hud_emblem.texture is AtlasTexture,
+        and hud_emblem.texture is Texture2D,
         "Combat ability button still shows full book art")
     require(button.icon==null,"Uncropped cover leaked to combat Button.icon")
     require(hud_emblem.material is ShaderMaterial,
@@ -68,7 +70,7 @@ func _check() -> void:
     await process_frame
     var skill_slot := rows.find_child("OriginalPPASkillIcon",true,false) as CenterContainer
     var skill_image := rows.find_child("PPAApprovedGrimoireCenterMedallion",true,false) as TextureRect
-    require(skill_slot!=null and skill_image!=null and skill_image.texture is AtlasTexture
+    require(skill_slot!=null and skill_image!=null and skill_image.texture is Texture2D
         and skill_image.material is ShaderMaterial,
         "Character active skill still shows entire cover, not central circle")
     require(skill_image.size.x==skill_image.size.y,
