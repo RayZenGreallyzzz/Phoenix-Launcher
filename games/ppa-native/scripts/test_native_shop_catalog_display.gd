@@ -83,6 +83,93 @@ func _run() -> void:
     check(bm_icons.size()==2,"Materials category lost its premium stone and rune")
     npc.close_npc()
 
+    # Regression from real Android: the Black Market's Подробнее controls
+    # captured finger gestures so the long vertical assortment did not move.
+    # Fake IDs only exist inside THIS read-only scene test, never in game.
+    var long_offers := []
+    for idx in range(18):
+        long_offers.append({"id":"qa_long_%02d" % idx,"category":"materials",
+            "name":"Товар из тестового каталога №"+str(idx),
+            "price":120+idx,"currency":"ppa","limit":1})
+    var long_save := {"blackMarket":{
+        "refreshAt":int(Time.get_unix_time_from_system()*1000.0)+7200000,
+        "offers":long_offers,"bought":{}}}
+    var unchanged_long_save := JSON.stringify(long_save)
+    npc.apply_player_save_readonly(long_save)
+    npc.open_npc({"service":"blackmarket","name":"Блек Маркет"})
+    await process_frame
+    await process_frame
+    await process_frame
+    check(npc._scroll.scroll_deadzone==4096,
+        "Black Market must own touch drag even when it starts on Подробнее")
+    var market_grid := npc._body.find_child("NpcProductGrid",true,false) as GridContainer
+    check(market_grid!=null and market_grid.get_child_count()==18,
+        "Expected 18 server-like test offers in long Black Market list")
+    var market_bar := npc._scroll.get_v_scroll_bar()
+    check(market_bar.max_value>market_bar.page+100.0,
+        "Test market should exceed the mobile viewport and be vertically scrollable")
+    var market_buttons := npc._body.find_children("SelectNpcItem_*","Button",true,false)
+    var swipe_point := npc._scroll.get_global_rect().get_center()
+    var touched_button := false
+    for btn in market_buttons:
+        if npc._scroll.get_global_rect().has_point(btn.get_global_rect().get_center()):
+            swipe_point = btn.get_global_rect().get_center()
+            touched_button = true
+            break
+    check(touched_button,
+        "Swipe must begin over an actual Подробнее button, not empty background")
+    var start_touch := InputEventScreenTouch.new()
+    start_touch.index = 0
+    start_touch.pressed = true
+    start_touch.position = swipe_point
+    npc._input(start_touch)
+    for step in range(1,8):
+        var drag := InputEventScreenDrag.new()
+        drag.index = 0
+        drag.position = swipe_point + Vector2(0,-40.0*float(step))
+        drag.velocity = Vector2(0,-90)
+        npc._input(drag)
+    var lifted := InputEventScreenTouch.new()
+    lifted.index = 0
+    lifted.position = swipe_point+Vector2(0,-280)
+    lifted.pressed = false
+    npc._input(lifted)
+    check(npc._scroll.scroll_vertical>=150,
+        "Upward swipe starting on Подробнее did not scroll the market DOWN")
+    # An ordinary single click must still open the product details.
+    var scrolled_position := npc._scroll.scroll_vertical
+    npc._select_item("qa_long_00")
+    await process_frame
+    await process_frame
+    check(npc.selected_id=="qa_long_00",
+        "Opening market item details stopped working after swipe support")
+    check(abs(npc._scroll.scroll_vertical-scrolled_position)<=4,
+        "Opening Подробнее reset the Black Market list back to its top")
+    # Drag down from content to scroll back up.
+    var down_start := npc._scroll.get_global_rect().get_center()
+    var pressed_down := InputEventScreenTouch.new()
+    pressed_down.index = 1
+    pressed_down.pressed = true
+    pressed_down.position = down_start
+    npc._input(pressed_down)
+    for step in range(1,7):
+        var drag_down := InputEventScreenDrag.new()
+        drag_down.index = 1
+        drag_down.position = down_start+Vector2(0,35.0*float(step))
+        drag_down.velocity = Vector2(0,60)
+        npc._input(drag_down)
+    var released_down := InputEventScreenTouch.new()
+    released_down.index = 1
+    released_down.position = down_start+Vector2(0,210)
+    released_down.pressed = false
+    npc._input(released_down)
+    check(npc._scroll.scroll_vertical<scrolled_position,
+        "Downward swipe did not scroll the Black Market BACK UP")
+    check(JSON.stringify(long_save)==unchanged_long_save,
+        "Black Market swipe test modified the original read-only save")
+    npc.close_npc()
+    npc.clear_player_save_readonly()
+
     var saved := {"blackMarket":{"refreshAt":int(Time.get_unix_time_from_system()*1000.0)+7200000,
         "offers":[{"id":"real_bm_1","category":"materials","price":770,
             "currency":"ppa","limit":2,"item":{"name":"Кристалл PPA","icon":"◆","rarity":"rare"}},
@@ -145,5 +232,5 @@ func _run() -> void:
         "Another account could see a former hero's personal Black Market stock")
     host.queue_free()
     await process_frame
-    print("PPA_SHOP_DISPLAY_OK catalog=12 portrait=1 tablet=2 boosters=4 scrolls=2 personal_bm=2 unknown_prices=hidden no_economy_writes=1")
+    print("PPA_SHOP_DISPLAY_OK bm_vertical_swipe=both card_start=1 detail_keeps_scroll=1 catalog=12 portrait=1 tablet=2 boosters=4 scrolls=2 personal_bm=2 unknown_prices=hidden no_economy_writes=1")
     quit(0)
