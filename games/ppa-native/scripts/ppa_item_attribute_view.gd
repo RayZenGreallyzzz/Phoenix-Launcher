@@ -99,6 +99,17 @@ static func stat_lines_for_item(item: Dictionary) -> Array:
         var raw: Variant = item.get(field, null)
         if raw is Dictionary:
             _append_values(raw as Dictionary, output, seen)
+    # The original PPA smith has three different schema sources:
+    # epic GEAR[].stat, ACC[].stats[rarity], and PETS[].bonus[rarity].
+    # Our live catalog preserves all of them VERBATIM under recipe.desc,
+    # rather than inventing separate numeric fields for newly forged items.
+    # Do not mistake the legendary "tier" label for a real stat.
+    if item.get("materials") is Array and item.get("price") != null:
+        var bonus := str(item.get("desc", "")).strip_edges()
+        if not bonus.is_empty() and bonus != "Легендарный тир":
+            var entry := "Бонус по рецепту PPA: " + bonus.left(480)
+            if not output.has(entry):
+                output.append(entry)
     return output
 
 
