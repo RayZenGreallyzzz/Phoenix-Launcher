@@ -44,10 +44,31 @@ func _run() -> void:
     npc._select_tab("sell")
     var offline_grid := npc._body.find_child("PPARealAuctionGearGrid",true,false) as GridContainer
     var offline_place := npc._body.find_child("PPARealAuctionPlace",true,false) as Button
-    check(offline_grid!=null and offline_grid.get_child_count()>=20,
-        "Offline auction hides its sale inventory layout")
+    check(offline_grid!=null and offline_grid.get_child_count()==0,
+        "Offline auction must not invent owned inventory items")
     check(offline_place!=null and offline_place.disabled,
         "Offline auction must never enable item listing")
+    npc.apply_player_save_readonly({
+        "bag":[{"uid":"owned-real-1","slot":"weapon","kind":"gear",
+            "name":"Настоящий предмет","rarity":"epic"}],
+        "potions":{"hp":2},"ppa":551,"gram":3
+    })
+    offline_grid = npc._body.find_child("PPARealAuctionGearGrid",true,false) as GridContainer
+    check(offline_grid!=null and offline_grid.get_child_count()>=2,
+        "Auction sale tab ignores canonical authenticated save inventory")
+    var saved_item := npc._body.find_child("PPARealAuctionSellUID_owned-real-1",true,false) as Button
+    check(saved_item==null,
+        "Read-only save item incorrectly gained server escrow authority")
+    var price_preview := npc._body.find_child("PPARealAuctionPrice",true,false) as SpinBox
+    var currencies_preview := npc._body.find_child("PPARealAuctionCurrency",true,false) as OptionButton
+    check(price_preview!=null and currencies_preview!=null and currencies_preview.item_count==2,
+        "Read-only auction must allow editing price and selecting Gram/PPA")
+    price_preview.value = 120
+    currencies_preview.select(1)
+    npc._set_currency(1)
+    check(npc._asking_price==120 and npc._asking_currency=="Gram",
+        "Read-only price entry and Gram choice failed")
+    npc.clear_player_save_readonly()
     npc._select_tab("mine")
     check(npc._body.find_child("PPAAuctionMainPanel",true,false)!=null,
         "Offline auction hides the my-lots tab")
@@ -63,6 +84,8 @@ func _run() -> void:
         "bag":[{"uid":"gear-unique-7","name":"Броня мага +7","kind":"gear",
             "slot":"armor","enh":7,"rarity":"epic"}]
     }
+    npc._set_asking_price(1)
+    npc._set_currency(0)
     npc.apply_native_auction({
         "gameId":"phoenix-pix-arena","contract":"ppa-auction-v1",
         "ownerId":OWNER,"actions":["buy","place","cancel","recover"],"state":state})
