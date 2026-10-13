@@ -3198,6 +3198,10 @@ func set_online_failure(reason: String) -> void:
     if service == "arena" and visible and _status != null:
         _status.text = "PPA · " + native_online_status
 
+func _emit_arena_map_preview(mode: String) -> void:
+    if mode in ["1x1","3x3","5x5","xp"]:
+        arena_map_preview_requested.emit(mode)
+
 func _arena_original_map_cards() -> void:
     _section("ОРИГИНАЛЬНЫЕ КАРТЫ АРЕНЫ PPA",
         "Выбери карту, чтобы походить по ней и проверить столкновения. "
@@ -3240,7 +3244,7 @@ func _arena_original_map_cards() -> void:
         var button := _button("ОСМОТРЕТЬ КАРТУ")
         button.name = "PPAOriginalArenaEnter_" + str(mode["key"])
         button.custom_minimum_size.y = 38
-        button.pressed.connect(func(): arena_map_preview_requested.emit(str(mode["key"])))
+        button.pressed.connect(_emit_arena_map_preview.bind(str(mode["key"])))
         desc.add_child(button)
 
 func _show_arena() -> void:
