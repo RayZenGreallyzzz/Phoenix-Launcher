@@ -27,3 +27,15 @@ print("PPA_ARENA_SOURCE_VARIABLES",json.dumps(list(dict.fromkeys(vars_))[:180],e
 matches=re.findall(r"['\"](/assets/[^'\"<> ]+\.(?:png|webp|jpg))['\"]",txt,re.I)
 print("PPA_ARENA_SOURCE_ASSET_CANDIDATES",json.dumps(list(dict.fromkeys(u for u in matches if re.search(r"arena|pvp|exp|xp|training",u,re.I)))[:100]))
 print("PPA_ARENA_SOURCE_SIZE",len(txt))
+
+important=["BG_ARENA","BG_PVP_DUEL","BG_PVP_TEAM","PVP_W","PVP_MASK_DUEL","PVP_MASK_TEAM","PVP_DUEL_SPAWNS","PVP_TEAM_SPAWNS","imgPvpDuel.src","imgPvpTeam.src","imgArena.src","pvpWalk","pvpBlocked","pvpColl","scene==='arena'"]
+res={}
+for key in important:
+    mo=re.search(re.escape(key),txt)
+    if not mo:
+        res[key]=None
+        continue
+    start=max(0,mo.start()-70)
+    snippet=txt[start:mo.start()+1350].replace("\n"," ")
+    res[key]=snippet[:1350]
+print("PPA_ARENA_KEY_DECLARATIONS",json.dumps(res,ensure_ascii=False))
