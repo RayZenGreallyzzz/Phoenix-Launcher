@@ -51,7 +51,9 @@ print("PPA_MORE_ART",json.dumps({
  "accessoryImageLogic":source_snippets(source,["function accessoryImg","function craftImg","function renderAcc","function accImg","PIC_CLOAK_ICON_DATA"],1400),
  "outerAccessoryLogic":source_snippets(all_source,["PIC_CLOAK_ICON_DATA","PIC_WINGS","PIC_ARTIFACT","JEWELRY_VARIANTS"],700),
  "legendStatSource":source_snippets(source,["const LEGENDARY_GEAR_STATS"],1000),
- "forgeVisualsBridge":source_snippets(all_source,["wingsByRarity:","PPA_UI_CRAFT_IMG","EPIC_CLOAK_ICON_DATA","LEGENDARY_CLOAK_ART","artifactsImg:","accessories:{"],2300)
+ "forgeVisualsBridge":source_snippets(all_source,["wingsByRarity:","PPA_UI_CRAFT_IMG","EPIC_CLOAK_ICON_DATA","LEGENDARY_CLOAK_ART","artifactsImg:","accessories:{"],2300),
+ "parentArtArrays":source_snippets(all_source,["const LEGENDARY_CLOAK_ART=","const LEGENDARY_ARTIFACT_ART=","const LEGENDARY_RING_ART=","const LEGENDARY_NECKLACE_ART=","const EPIC_NECKLACE_ART=","const WING_DIR_ART="],450),
+ "uiResolver":source_snippets(all_source,["PPA_UI_CRAFT_IMG=function","function PPA_UI_CRAFT_IMG","window.PPA_UI_CRAFT_IMG","wingsByRarity:{"],2800)
 },ensure_ascii=False),flush=True)
 print("PPA_SOURCE_ART_SCHEMA",json.dumps({
  "petImages":pet,
