@@ -314,25 +314,38 @@ func _button_style(color: Color) -> StyleBoxFlat:
     return style
 
 func _build_buttons() -> void:
-    # The player model already opens the canonical five-page character UI.
-    # A second top-right "ГЕРОЙ" button duplicated that action and covered
-    # valuable mobile screen space. Keep only global "РАЗДЕЛЫ" navigation.
-
-    # Permanent top-level navigation, NOT a child of character or NPC UI.
+    # The character button already opens the 5-page hero UI. Only a slim,
+    # vertically letter-rotated EVENTS edge tab remains on the world map.
+    # This does not alter any tabs INSIDE the arena or global hub.
     var hub_button := Button.new()
     hub_button.name = "OpenGlobalPpaHub"
-    hub_button.text = "РАЗДЕЛЫ"
+    hub_button.tooltip_text = "События и разделы PPA"
+    hub_button.focus_mode = Control.FOCUS_NONE
     hub_button.anchor_left = 1.0
     hub_button.anchor_right = 1.0
-    hub_button.offset_left = -310.0
-    hub_button.offset_right = -160.0
-    hub_button.offset_top = 142.0
-    hub_button.offset_bottom = 185.0
+    hub_button.offset_left = -44.0
+    hub_button.offset_right = -3.0
+    hub_button.offset_top = 190.0
+    hub_button.offset_bottom = 336.0
     hub_button.z_index = 65
     hub_button.add_theme_stylebox_override("normal", _button_style(Color("#32221D")))
-    hub_button.add_theme_color_override("font_color", Color("#F2CC89"))
+    hub_button.add_theme_stylebox_override("hover", _button_style(Color("#4A3021")))
+    hub_button.add_theme_stylebox_override("pressed", _button_style(Color("#644127")))
     hub_button.pressed.connect(func(): open_global_section("events"))
     add_child(hub_button)
+    # A rotated LABEL within a fixed, rectangular touch target. Rotating
+    # the actual Button would rotate its input rect and miss mobile taps.
+    var tab_title := Label.new()
+    tab_title.name = "PPAVerticalEventsTitle"
+    tab_title.text = "СОБЫТИЯ"
+    tab_title.rotation = -PI / 2.0
+    tab_title.size = Vector2(110.0,22.0)
+    tab_title.position = Vector2(31.0,128.0)
+    tab_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    tab_title.add_theme_font_size_override("font_size",13)
+    tab_title.add_theme_color_override("font_color",Color("#F2CC89"))
+    tab_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    hub_button.add_child(tab_title)
 
     _interact_button = Button.new()
     _interact_button.text = "ПОГОВОРИТЬ"
