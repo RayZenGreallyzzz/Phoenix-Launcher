@@ -4,6 +4,7 @@ on:
     branches: ["feature/ppa-phoenix-auction-ui-20261012"]
     paths:
       - "games/ppa-native/tools/audit_live_arena_maps.py"
+      - "games/ppa-native/tools/fetch_original_arena_maps.py"
       - ".github/workflows/ppa-arena-map-audit.yml"
 jobs:
   public-arena-map-audit:
@@ -13,3 +14,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Inspect deployed PPA public map declarations
         run: python3 games/ppa-native/tools/audit_live_arena_maps.py
+      - name: Verify exact original maps and masks can be downloaded
+        run: python3 games/ppa-native/tools/fetch_original_arena_maps.py
