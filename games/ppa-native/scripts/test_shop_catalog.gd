@@ -1,5 +1,7 @@
 extends RefCounted
 
+const OFFICIAL_ART = preload("res://scripts/ppa_item_catalog_generated.gd")
+
 # Canonical NPC catalog, transcribed from the deployed PPA merchantFrame
 # (const PRODUCTS, captured 2026-10-08). These are real PPA names/prices/icons,
 # NOT earlier fabricated local demo offers. "Buy" remains locked until server
@@ -28,6 +30,26 @@ const BLACK_MARKET_REFERENCE = [
     {"id":"rune_stone","category":"materials","name":"Премиум руна заточки","price":650,"currency":"ppa","desc":"+12–16 п.п. к шансу одной попытки заточки. С Премиум камнем работает до +7.","limit":1,"kind":"stone"},
     {"id":"xp_scroll","category":"special","name":"Свиток опыта","price":160,"currency":"ppa","desc":"+10% опыта на 3 минуты.","limit":2,"kind":"consumable"}
 ]
+
+# Original Telegram PPA's verified client artwork for the three
+# known, PERMANENT Black Market reference offers. Never substitute a random
+# pet/wing or fabricate rarity/price/stock for personalized daily listings.
+static func black_market_reference_goods() -> Array:
+    var rows: Array = BLACK_MARKET_REFERENCE.duplicate(true)
+    var catalog: Dictionary = OFFICIAL_ART.ITEMS
+    var stones: Dictionary = catalog.get("stone_art",{})
+    var shop: Dictionary = catalog.get("shop_art",{})
+    var images := {
+        "premium_stone":str(stones.get("premiumStone","")),
+        "rune_stone":str(stones.get("premiumRune","")),
+        "xp_scroll":str(shop.get("xp_scroll",""))
+    }
+    for raw in rows:
+        var entry: Dictionary = raw
+        entry["img"] = str(images.get(str(entry.get("id","")),""))
+        # Rarity is absent from the static price-only reference source;
+        # leave it UNKNOWN rather than calling all premiums "legendary".
+    return rows
 
 # Original PPA panel tab labels and category keys.
 const MERCHANT_TABS = [
