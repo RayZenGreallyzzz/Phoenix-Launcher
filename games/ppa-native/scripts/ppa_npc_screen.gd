@@ -133,6 +133,7 @@ var _auction_browse_pages := 1
 var _auction_swipe_index := -1
 var _auction_swipe_origin := Vector2.ZERO
 var _auction_mouse_swipe := false
+var _auction_page_navigate := false
 var native_online_status := "ОБЩИЙ ОНЛАЙН · не подключён"
 var _player_save_readonly: Dictionary = {}
 var _player_view_readonly: Dictionary = {}
@@ -1133,8 +1134,18 @@ func _render() -> void:
         # A redraw may free the previous recipe before deferred scrolling
         # executes. Resolve the current selected control at callback time.
         call_deferred("_scroll_to_current_forge_recipe", selected_id)
+    elif service == "auction" and tab == "all" and _auction_page_navigate:
+        _auction_page_navigate = false
+        call_deferred("_scroll_to_auction_buy_grid")
     else:
         _scroll.set_deferred("scroll_vertical", 0)
+
+func _scroll_to_auction_buy_grid() -> void:
+    if not visible or service != "auction" or tab != "all" or _scroll == null:
+        return
+    var grid := _body.find_child("PPAAuctionBuyLotsGrid",true,false) as GridContainer
+    if grid != null and _scroll.is_ancestor_of(grid):
+        _scroll.ensure_control_visible(grid)
 
 
 func _scroll_to_current_forge_recipe(expected_id: String) -> void:
