@@ -6,10 +6,16 @@ extends "res://scripts/native_world.gd"
 const MAPS = preload("res://scripts/ppa_arena_maps_generated.gd")
 const PREVIEW_MODES := ["1x1","3x3","5x5","xp"]
 const WALK_RADIUS := 13.0
+# Player-requested lower collision edge adjustment in WORLD pixels.
+# Original Telegram masks and artwork remain byte-for-byte unchanged.
+const LOWER_COLLISION_SHIFT := 50.0
 
 var arena_mode := "1x1"
 var _map_dims := Vector2(1536,1024)
 var _walk_map: Image = null
+# Cached last originally walkable mask row per x, used only to shift the
+# lowest wall DOWN; interior rocks, side walls and top remain original.
+var _lower_walk_row := PackedInt32Array()
 var _caption: Label = null
 var _map_status: Label = null
 
@@ -29,6 +35,7 @@ func _ready() -> void:
         if _walk_map == null or _walk_map.get_size() != MAPS.MASK_SIZE:
             push_error("PPA_ARENA_ORIGINAL_WALK_MASK_INVALID: " + image_path)
             return
+        _cache_lower_boundary()
     super._ready()
     match arena_mode:
         "1x1": world_pos_px = MAPS.DUEL_BLUE
@@ -38,8 +45,8 @@ func _ready() -> void:
     if _caption != null:
         _caption.text = str(MAPS.MODE_NAMES.get(arena_mode,"АРЕНА"))
     if _map_status != null:
-        _map_status.text = ("Исходная маска столкновений PPA · столкновения включены" if arena_mode != "xp"
-            else "Исходные границы арены опыта PPA · столкновения включены")
+        _map_status.text = ("Оригинальная маска PPA · нижняя коллизия +50 px" if arena_mode != "xp"
+            else "Арена опыта PPA · нижняя коллизия +50 px")
 
 func _map_world_size() -> Vector2:
     return _map_dims
@@ -140,21 +147,53 @@ func _back_to_city() -> void:
     if error != OK:
         push_error("PPA_ARENA_MAP_RETURN_CITY_FAILED: " + error_string(error))
 
+func _cache_lower_boundary() -> void:
+    _lower_walk_row.resize(MAPS.MASK_SIZE.x)
+    for x in range(MAPS.MASK_SIZE.x):
+        _lower_walk_row[x] = -1
+        # Source mask stays exact. Find each column's OUTERMOST lower edge;
+        # we do not turn internal obstacles or other disconnected walls into floor.
+        for y in range(MAPS.MASK_SIZE.y-1,-1,-1):
+            if _walk_map.get_pixel(x,y).a > 0.5:
+                _lower_walk_row[x] = y
+                break
+
+func _original_lower_edge_y(mask_x: int) -> float:
+    if mask_x < 0 or mask_x >= _lower_walk_row.size():
+        return -1.0
+    if _lower_walk_row[mask_x] < 0:
+        return -1.0
+    return float(_lower_walk_row[mask_x]+1) * MAPS.PVP_WORLD_SIZE.y / float(MAPS.MASK_SIZE.y)
+
 func _walkable(point: Vector2) -> bool:
     if arena_mode == "xp":
-        # Original scene arena: WORLD=1024 with 40px inset on all sides.
+        # Keep the original map, top/side collision and CENTER unchanged.
+        # Only lower bound moves down by 50 world pixels (984 -> 1034).
         return (point.x >= 40.0 and point.x <= 984.0
-            and point.y >= 40.0 and point.y <= 984.0)
+            and point.y >= 40.0 and point.y <= 984.0 + LOWER_COLLISION_SHIFT)
     if _walk_map == null:
         return false
-    if point.x < 0 or point.y < 0 or point.x >= _map_dims.x or point.y >= _map_dims.y:
+    if point.x < 0.0 or point.x >= _map_dims.x or point.y < 0.0:
+        return false
+    # The original image occupies 1536×1024. The moved lower collision can
+    # exceed its extent only within the requested 50px margin. No map art
+    # or mask pixels are stretched or rewritten.
+    if point.y > _map_dims.y + LOWER_COLLISION_SHIFT:
         return false
     var mx := clampi(int(floorf(point.x * float(MAPS.MASK_SIZE.x) / _map_dims.x)),
-        0, MAPS.MASK_SIZE.x-1)
-    var my := clampi(int(floorf(point.y * float(MAPS.MASK_SIZE.y) / _map_dims.y)),
-        0, MAPS.MASK_SIZE.y-1)
-    # Opaque WHITE = walk; transparent WHITE = collision wall.
-    return _walk_map.get_pixel(mx,my).a > 0.5
+        0,MAPS.MASK_SIZE.x-1)
+    if point.y < _map_dims.y:
+        var my := clampi(int(floorf(point.y * float(MAPS.MASK_SIZE.y) / _map_dims.y)),
+            0,MAPS.MASK_SIZE.y-1)
+        if _walk_map.get_pixel(mx,my).a > 0.5:
+            return true
+    var lower_y := _original_lower_edge_y(mx)
+    if lower_y < 0.0:
+        return false
+    # Only the OUTSIDE lip BELOW the original floor can gain clearance.
+    # A 50px downward shift does not shift the entire bitmap or unlock
+    # blocked columns, side walls or obstacles between walkable cells.
+    return point.y >= lower_y and point.y <= lower_y + LOWER_COLLISION_SHIFT
 
 func _can_stand(point: Vector2) -> bool:
     for offset in [Vector2.ZERO,Vector2(WALK_RADIUS,0),Vector2(-WALK_RADIUS,0),
