@@ -26,6 +26,15 @@ func _run() -> void:
     npc.arena_map_preview_requested.connect(func(mode: String): entries.append(mode))
     npc.open_npc({"id":"arena","service":"arena","name":"Мечник арены"})
     await process_frame
+    require(npc.find_child("NpcTab_maps",true,false) != null,
+        "NPC Arena missing dedicated КАРТЫ tab")
+    var open_gallery := npc.find_child("NpcArenaOpenMapGallery",true,false) as Button
+    require(open_gallery != null and not open_gallery.disabled,
+        "NPC Arena trials should offer prominent shortcut to its real maps")
+    open_gallery.pressed.emit()
+    await process_frame
+    require(npc.tab == "maps",
+        "Tapping Arena maps shortcut did not switch to gallery")
     for mode in ["1x1","3x3","5x5","xp"]:
         var card := npc.find_child("PPAOriginalArenaMapCard_"+mode,true,false)
         var thumbnail := npc.find_child("PPAOriginalArenaThumbnail_"+mode,true,false) as TextureRect
@@ -34,9 +43,20 @@ func _run() -> void:
             "NPC missing real artwork for "+mode)
         require(button!=null and not button.disabled,
             "No clickable map preview route for "+mode)
+        require(npc.find_child("PPAOriginalArenaCollisionBadge_"+mode,
+            true,false) != null,
+            "Original PPA collision preview indication missing for "+mode)
         button.pressed.emit()
     require(entries==["1x1","3x3","5x5","xp"],
         "NPC original map button modes mismatched")
+    npc._select_tab("fights")
+    require(npc.find_child("PPAOriginalArenaMapCard_1x1",true,false)==null,
+        "Map gallery should not be buried in the long arena trials menu")
+    var dedicated := npc.find_child("NpcTab_maps",true,false) as Button
+    dedicated.pressed.emit()
+    require(npc.tab=="maps" and
+        npc.find_child("PPAOriginalArenaMapCard_xp",true,false)!=null,
+        "Arena КАРТЫ tab does not reopen all four actual maps")
     npc.close_npc()
     npc.queue_free()
     await process_frame
