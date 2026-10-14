@@ -1008,9 +1008,9 @@ func _tab_specs() -> Array:
             {"key":"bonuses","label":"БОНУСЫ"}, {"key":"wars","label":"ВОЙНЫ"},
             {"key":"journal","label":"ЖУРНАЛ"}]
         "arena": return [
-            {"key":"fights","label":"ИСПЫТАНИЯ"}, {"key":"attempts","label":"ПОПЫТКИ"},
-            {"key":"rating","label":"РЕЙТИНГ"}, {"key":"shop","label":"МАГАЗИН"},
-            {"key":"history","label":"ИСТОРИЯ"}]
+            {"key":"fights","label":"ИСПЫТАНИЯ"}, {"key":"maps","label":"КАРТЫ"},
+            {"key":"attempts","label":"ПОПЫТКИ"}, {"key":"rating","label":"РЕЙТИНГ"},
+            {"key":"shop","label":"МАГАЗИН"}, {"key":"history","label":"ИСТОРИЯ"}]
         "dungeon": return [
             {"key":"floors","label":"ПОДЗЕМЕЛЬЯ"}, {"key":"quests","label":"ПОРУЧЕНИЯ"},
             {"key":"bosses","label":"БОССЫ"}, {"key":"rewards","label":"ДОБЫЧА"}]
@@ -3203,9 +3203,10 @@ func _emit_arena_map_preview(mode: String) -> void:
         arena_map_preview_requested.emit(mode)
 
 func _arena_original_map_cards() -> void:
-    _section("ОРИГИНАЛЬНЫЕ КАРТЫ АРЕНЫ PPA",
-        "Выбери карту, чтобы походить по ней и проверить столкновения. "
-        + "Просмотр не создаёт матч и не начисляет опыт или награды.")
+    _section("КАРТЫ АРЕНЫ · ОРИГИНАЛЬНАЯ PPA",
+        "4 режима · 3 исходные карты: дуэльная, командная и арена опыта. "
+        + "Выбери карту для прогулки и проверки стен. Боевой подбор, "
+        + "награды и начисление опыта не включены до подключения сервера.")
     var modes := [
         {"key":"1x1","label":"АРЕНА 1 × 1","image":"res://assets/ppa_original_arena_duel.png",
             "hint":"Дуэль · собственная оригинальная карта и маска стен"},
@@ -3241,7 +3242,11 @@ func _arena_original_map_cards() -> void:
         var hint := _label(str(mode["hint"]),11,SUB)
         hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         desc.add_child(hint)
-        var button := _button("ОСМОТРЕТЬ КАРТУ")
+        var status := _label("КОЛЛИЗИИ: ВКЛ. · ПРОСМОТР БЕЗ СЕРВЕРА",10,Color("#9AD7B6"))
+        status.name = "PPAOriginalArenaCollisionBadge_" + str(mode["key"])
+        status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        desc.add_child(status)
+        var button := _button("ВОЙТИ НА КАРТУ")
         button.name = "PPAOriginalArenaEnter_" + str(mode["key"])
         button.custom_minimum_size.y = 38
         button.pressed.connect(_emit_arena_map_preview.bind(str(mode["key"])))
@@ -3276,12 +3281,18 @@ func _show_arena() -> void:
         _mini_row("РЕЙТИНГ И ПОПЫТКИ", "— · нет подтверждённого статуса арены")
     match tab:
         "fights":
+            var go_maps := _button("🗺 КАРТЫ 1×1 · 3×3 · 5×5 · АРЕНА ОПЫТА")
+            go_maps.name = "NpcArenaOpenMapGallery"
+            go_maps.custom_minimum_size.y = 48.0
+            go_maps.add_theme_stylebox_override("normal",
+                _style(Color("#3A2917"), GOLD, 7, 2))
+            go_maps.pressed.connect(_select_tab.bind("maps"))
+            _body.add_child(go_maps)
             _message("БЕСКОНЕЧНЫЕ ВОЛНЫ", "Бой с монстрами, прогресс волн и сезонные награды.")
             _message("ПРОТИВ ИИ", "Испытание против ботов. Состав и доступность определяет сервер.")
-            _message("PVP АРЕНА", "Сначала можно осмотреть настоящие карты с коллизиями. "
-                + "Боевой подбор и награды пока требуют общего сервера.")
-            _arena_original_map_cards()
-            _message("СЕЗОННЫЙ РЕЙТИНГ", "Позиция и подбор на сервере.")
+            _message("PVP АРЕНА", "Карты доступны для локального осмотра. "
+                + "Боевой подбор и награды требуют общего сервера.")
+            _message("СЕЗОННЫЙ РЕЙТИНГ", "Позиция и подбор на сервер.")
             var practice := _button("⚔ НАЧАТЬ ТРЕНИРОВКУ ПРОТИВ ИИ")
             practice.name = "NpcArenaAiPractice"
             practice.custom_minimum_size.y = 50.0
@@ -3296,6 +3307,8 @@ func _show_arena() -> void:
             _body.add_child(online)
             _body.add_child(_label("Это тот же сервер Telegram PPA. Вход заменит онлайн-соединение твоего героя в Telegram. Сетевые бои и награды здесь пока закрыты.", 11, SUB))
             _locked_action("БОЕВОЙ РЕЙТИНГ / СЕТЕВОЙ МАТЧ")
+        "maps":
+            _arena_original_map_cards()
         "attempts":
             _message("PVP · ПОПЫТКИ", "Лимит, остаток попыток, жетоны арены и обновление доступны после синхронизации.")
             _locked_action("НАЧАТЬ МАТЧ")
