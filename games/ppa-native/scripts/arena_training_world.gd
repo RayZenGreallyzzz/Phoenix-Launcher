@@ -5,6 +5,7 @@ extends "res://scripts/native_world.gd"
 # Reuses the approved 3D player, touch joystick, floor camera and FPS counter.
 const CENTER := Vector2(1395.0, 1463.0)
 const ARENA_HALF := Vector2(460.0, 315.0)
+const LOWER_COLLISION_SHIFT := 50.0 # world px, ONLY bottom edge of training arena
 const PLAYER_MAX_HP := 240
 const ATTACK_COOLDOWN := 0.48
 const MELEE_RANGE := 118.0
@@ -46,14 +47,14 @@ func _build_city_2d() -> void:
     var outer := ColorRect.new()
     outer.color = Color("#2B2627")
     outer.position = CENTER - ARENA_HALF - Vector2(36, 36)
-    outer.size = ARENA_HALF * 2.0 + Vector2(72, 72)
+    outer.size = ARENA_HALF * 2.0 + Vector2(72, 72 + LOWER_COLLISION_SHIFT)
     outer.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.add_child(outer)
 
     var floor_rect := ColorRect.new()
     floor_rect.color = Color("#51463D")
     floor_rect.position = CENTER - ARENA_HALF
-    floor_rect.size = ARENA_HALF * 2.0
+    floor_rect.size = ARENA_HALF * 2.0 + Vector2(0, LOWER_COLLISION_SHIFT)
     floor_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
     city_world.add_child(floor_rect)
 
@@ -62,7 +63,7 @@ func _build_city_2d() -> void:
         var stripe := ColorRect.new()
         stripe.color = Color(0.1, 0.08, 0.07, 0.22)
         stripe.position = CENTER + Vector2(float(x) * 90.0, -ARENA_HALF.y)
-        stripe.size = Vector2(2, ARENA_HALF.y * 2)
+        stripe.size = Vector2(2, ARENA_HALF.y * 2 + LOWER_COLLISION_SHIFT)
         stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
         city_world.add_child(stripe)
     for y in range(-3, 4):
@@ -154,7 +155,8 @@ func _back_to_city() -> void:
 func _resolve_city_collision(target: Vector2) -> Vector2:
     return Vector2(
         clampf(target.x, CENTER.x - ARENA_HALF.x + 35.0, CENTER.x + ARENA_HALF.x - 35.0),
-        clampf(target.y, CENTER.y - ARENA_HALF.y + 35.0, CENTER.y + ARENA_HALF.y - 35.0)
+        clampf(target.y, CENTER.y - ARENA_HALF.y + 35.0,
+            CENTER.y + ARENA_HALF.y - 35.0 + LOWER_COLLISION_SHIFT)
     )
 
 func _make_bot(offset: Vector2, index: int, color: Color) -> void:
