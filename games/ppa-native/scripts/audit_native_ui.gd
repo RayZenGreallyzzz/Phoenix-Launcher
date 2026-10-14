@@ -384,7 +384,7 @@ func _run() -> void:
     # native NPC prototype. Guard every real service menu contract.
     var expected_tabs := {
         "clan": 9, "forge": 6, "storage": 4, "auction": 3,
-        "arena": 5, "dungeon": 4, "blackmarket": 9, "merchant": 4, "fartzone": 3
+        "arena": 6, "dungeon": 4, "blackmarket": 9, "merchant": 4, "fartzone": 3
     }
     for npc in NPCS.NPCS:
         menu.open_npc(npc)
