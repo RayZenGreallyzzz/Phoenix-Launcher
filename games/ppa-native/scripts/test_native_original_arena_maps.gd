@@ -87,16 +87,44 @@ func _run() -> void:
             mode+" collision checker rejected original safe ground")
         require(not game._walkable(Vector2(0,0)),
             mode+" must have impassable outside boundary")
+        require(is_equal_approx(game.LOWER_COLLISION_SHIFT,50.0),
+            "Lower arena collider has not moved exactly 50 world pixels")
         if mode!="xp":
             require(game._walk_map.get_size()==MAPS.MASK_SIZE,
                 "PvP collision not using exact original 768x512 mask")
             require(not game._can_stand(Vector2(0,0)),
                 "PvP original wall sample is traversable")
+            var checked_bottom := false
+            # Use a real original walkable column to prove that its last wall
+            # moved 50px down, but blocked sides/interior stayed unchanged.
+            for mx in range(60, MAPS.MASK_SIZE.x-60):
+                var edge: float = game._original_lower_edge_y(mx)
+                if edge < MAPS.PVP_WORLD_SIZE.y * 0.50:
+                    continue
+                var sample_x := (float(mx) + 0.5) * MAPS.PVP_WORLD_SIZE.x / float(MAPS.MASK_SIZE.x)
+                require(game._walkable(Vector2(sample_x,edge-1.0)),
+                    mode+" original last walkable cell was changed")
+                require(game._walkable(Vector2(sample_x,edge+49.0)),
+                    mode+" bottom lip was not extended 50px")
+                require(not game._walkable(Vector2(sample_x,edge+51.0)),
+                    mode+" bottom lip extended more than 50px")
+                checked_bottom = true
+                break
+            require(checked_bottom,mode+" original mask missing lower walkable edge")
+            require(not game._walkable(Vector2(-1.0,500.0)),
+                mode+" LEFT outside wall must stay blocked")
         else:
             require(game._walk_map==null and
                 game._walkable(Vector2(40,40)) and
                 not game._walkable(Vector2(39,40)),
-                "XP arena must use exact 40px original boundaries, no fake mask")
+                "XP arena must keep original top/left boundaries, no fake mask")
+            require(game._walkable(Vector2(512,1033)) and
+                not game._walkable(Vector2(512,1035)) and
+                game._can_stand(Vector2(512,1021)) and
+                not game._can_stand(Vector2(512,1022)),
+                "XP southern edge must move exactly 50px from 984 to 1034")
+            require(not game._walkable(Vector2(985,512)),
+                "XP RIGHT edge must remain unchanged")
         var blocked: Vector2 = game._resolve_city_collision(Vector2(-400,-400))
         require(blocked==game.world_pos_px,
             "Player could walk through original arena perimeter")
@@ -107,5 +135,5 @@ func _run() -> void:
     host.queue_free()
     await process_frame
     print("PPA_ORIGINAL_ARENA_MAPS_OK maps=3 modes="+str(count)+
-        " pvp_masks=2 xp_bounds=1 NPC_buttons=4 read_only=1 no_rewards=1")
+        " pvp_masks=2 xp_bounds=1 NPC_buttons=4 lower_shift=50 read_only=1 no_rewards=1")
     quit(0)
