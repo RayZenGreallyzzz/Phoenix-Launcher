@@ -48,6 +48,22 @@ func _check() -> void:
     if game.bots.size() != 3 or game.player_hp != game.PLAYER_MAX_HP:
         fail("Arena needs three real mobile AI bots and live HP")
         return
+    var lower_before: float = game.CENTER.y + game.ARENA_HALF.y - 35.0
+    var lower_after: float = lower_before + 50.0
+    var test_x: float = game.CENTER.x
+    if not is_equal_approx(game.LOWER_COLLISION_SHIFT,50.0):
+        fail("AI arena bottom collision offset must be exactly 50px")
+        return
+    if not is_equal_approx(game._resolve_city_collision(Vector2(test_x,lower_after)).y,
+            lower_after) or not is_equal_approx(
+            game._resolve_city_collision(Vector2(test_x,lower_after+10.0)).y,lower_after):
+        fail("AI arena lower collision must be shifted down by exactly 50px")
+        return
+    if not is_equal_approx(game._resolve_city_collision(Vector2(
+            test_x,game.CENTER.y-game.ARENA_HALF.y-99)).y,
+            game.CENTER.y-game.ARENA_HALF.y+35.0):
+        fail("AI arena NORTH collider changed when shifting southern edge")
+        return
     # All worlds share ONE original Telegram PPA HUD. The old arena-only
     # _attack_button was intentionally removed; verify the real 80px button.
     if game._combat_hud == null:
