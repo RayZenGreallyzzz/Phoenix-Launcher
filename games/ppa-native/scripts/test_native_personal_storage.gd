@@ -38,6 +38,21 @@ func _run() -> void:
         "personal":[{"uid":"pet-uid+5","name":"Лунный лис +5","slot":"pet",
             "rarity":"epic","enh":5,"stats":{"hp":300}}]}}
     npc.apply_native_personal_storage(live)
+    # The phone's visible storage squares must select a real signed UID,
+    # not merely open item attributes; the actual transfer stays on button.
+    var store_grid := npc._body.find_child("NpcStorageGrid_personal",true,false)
+    var bag_grid := npc._body.find_child("NpcStorageGrid_inventory",true,false)
+    check(store_grid != null and bag_grid != null,
+        "Real personal inventory/storage grids are not visible")
+    npc._storage_grid_chosen("personal","pet-uid+5")
+    check(npc._storage_personal_uid=="pet-uid+5",
+        "Tapping stored item does not choose it for withdrawal")
+    npc._storage_grid_chosen("inventory","epic-uid+7")
+    check(npc._storage_bag_uid=="epic-uid+7",
+        "Tapping bag item does not choose it for deposit")
+    var refresh := npc._body.find_child("PPARefreshPersonalStorage",true,false) as Button
+    check(refresh!=null and not refresh.disabled,
+        "Player cannot safely refresh the original server's withdrawal permissions")
     var dep := npc._body.find_child("PPARealPersonalStorage_put",true,false) as Button
     var take := npc._body.find_child("PPARealPersonalStorage_take",true,false) as Button
     check(dep != null and not dep.disabled and take != null and not take.disabled,
@@ -50,6 +65,17 @@ func _run() -> void:
         "Client must send only exact original PPA UID and version")
     check(npc.personal_storage_state["bag"][0]["enh"] == 7,
         "Godot altered original +7 item without signed confirmation")
+    # A server that permits putting but NOT taking must never lose the
+    # item or pretend that withdrawal succeeded locally.
+    var put_only: Dictionary = live.duplicate(true)
+    put_only["actions"] = ["put"]
+    npc.apply_native_personal_storage(put_only)
+    take = npc._body.find_child("PPARealPersonalStorage_take",true,false) as Button
+    check(take != null and take.disabled,
+        "Server denying withdrawal must not be bypassed by native UI")
+    check(npc.personal_storage_state["personal"].size()==1,
+        "Disabled withdrawal must not remove item from official store")
+    npc.apply_native_personal_storage(live)
     npc.set_personal_storage_loading(false,true)
     dep = npc._body.find_child("PPARealPersonalStorage_put",true,false) as Button
     check(dep != null and dep.disabled,
