@@ -953,14 +953,8 @@ func show_canonical_clan_storage(items: Array) -> void:
     _body.add_child(scroller)
     var grid = VIRTUAL_GRID.new()
     grid.item_inspector = _item_hold
-    # Compacted PPA cloud items often omit class from their individual entry.
-    # The authenticated character class restores the official gear PNG.
     grid.actual_class = str(_player_save_readonly.get("classKey",
         _player_save_readonly.get("class",_player_save_readonly.get("cls",""))))
-    grid.selected_uid = (_storage_bag_uid if scope == "inventory" and tab == "personal"
-        else (_clan_put_uid if scope == "inventory" else (
-        _storage_personal_uid if scope == "personal" else _clan_take_uid)))
-    grid.storage_item_chosen.connect(_storage_grid_chosen)
     grid.custom_minimum_size.x = 300
     scroller.add_child(grid)
     grid.configure("clan", scroller, 5)
@@ -2807,6 +2801,13 @@ func _storage_slot_panel(parent: BoxContainer, scope: String) -> void:
     shell.add_child(scrolling)
     var grid := VIRTUAL_GRID.new()
     grid.item_inspector = _item_hold
+    # The verified character's class is needed for authentic PPA gear images.
+    grid.actual_class = str(_player_save_readonly.get("classKey",
+        _player_save_readonly.get("class",_player_save_readonly.get("cls",""))))
+    grid.selected_uid = (_storage_bag_uid if scope == "inventory" and tab == "personal"
+        else (_clan_put_uid if scope == "inventory" else (
+        _storage_personal_uid if scope == "personal" else _clan_take_uid)))
+    grid.storage_item_chosen.connect(_storage_grid_chosen)
     grid.custom_minimum_size.x = maxf(150.0,
         (_frame.offset_right - _frame.offset_left) / 2.0 - 56.0) if size.x >= 570.0 else maxf(150.0, _frame.offset_right - _frame.offset_left - 60.0)
     scrolling.add_child(grid)
