@@ -1,5 +1,7 @@
 extends Control
 
+signal storage_item_chosen(kind: String, uid: String)
+
 # Cheap continuous scrolling for inventories up to 500 slots.
 # Exactly ONE canvas node represents the whole grid; only visible rows draw.
 # Grid data is a display-only server snapshot, never a mutation source.
@@ -12,6 +14,12 @@ const PAD := 4.0
 const GAP := 5.0
 
 var storage_kind := "inventory"
+var actual_class := ""
+var selected_uid := ""
+var _tap_index := -1
+var _tap_origin := Vector2.ZERO
+var _tap_uid := ""
+var _mouse_tap_active := false
 var columns := 4
 var capacity := 0
 var _cell_size := 48.0
@@ -71,34 +79,68 @@ func item_at_position(local_pos: Vector2) -> Dictionary:
 
 
 func _inspect_canvas_input(event: InputEvent) -> void:
-    if item_inspector == null:
-        return
+    # Short tap selects an ORIGINAL server UID for the Put/Take action.
+    # Long hold still opens stats, while a drag belongs to ScrollContainer.
     var point := Vector2.ZERO
     if event is InputEventScreenTouch:
-        if not event.pressed:
-            return
         point = event.position
-    elif event is InputEventMouseButton:
-        if event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
-            return
+        if event.pressed:
+            if _tap_index >= 0:
+                return
+            _tap_index = event.index
+            _tap_origin = point
+            _tap_uid = str(item_at_position(point).get("uid",""))
+            _inspect_pressed_item(point)
+        elif event.index == _tap_index:
+            _finish_item_tap(point)
+            _tap_index = -1
+    elif event is InputEventScreenDrag and event.index == _tap_index:
+        if (event.position - _tap_origin).length() > 18.0:
+            _tap_uid = ""
+    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
         point = event.position
-    else:
+        if event.pressed:
+            _mouse_tap_active = true
+            _tap_origin = point
+            _tap_uid = str(item_at_position(point).get("uid",""))
+            _inspect_pressed_item(point)
+        elif _mouse_tap_active:
+            _finish_item_tap(point)
+            _mouse_tap_active = false
+    elif event is InputEventMouseMotion and _mouse_tap_active:
+        if (event.position - _tap_origin).length() > 18.0:
+            _tap_uid = ""
+
+func _inspect_pressed_item(point: Vector2) -> void:
+    if item_inspector == null:
         return
     var item := item_at_position(point)
     if item.is_empty():
         return
-    # Conversion to viewport coordinates also works after scrolling because
-    # the canvas lives INSIDE the real ScrollContainer clip.
     var global_point := get_global_transform_with_canvas() * point
     item_inspector.begin_canvas_hold(item,
         "bag" if storage_kind == "inventory" else "storage", global_point)
-    # No accept_event(): vertical dragging must still reach ScrollContainer.
+
+func _finish_item_tap(point: Vector2) -> void:
+    if _tap_uid.is_empty() or (point - _tap_origin).length() > 18.0:
+        _tap_uid = ""
+        return
+    var uid := str(item_at_position(point).get("uid",""))
+    if uid != _tap_uid:
+        _tap_uid = ""
+        return
+    _tap_uid = ""
+    selected_uid = uid
+    queue_redraw()
+    # Defer so replacing storage menu does not free controls mid-GUI event.
+    call_deferred("emit_signal","storage_item_chosen",storage_kind,uid)
 
 
 func _approved_texture(item: Dictionary) -> Texture2D:
     # Same original PPA source as the inventory picker. Original art is
     # bundled by the Android build and never scraped from another user's data.
-    var path: String = ORIGINAL_ITEM_ART.art_path(item, str(item.get("classKey", "")))
+    var path: String = ORIGINAL_ITEM_ART.art_path(item,
+        str(item.get("classKey",item.get("class",actual_class))))
     if path.is_empty():
         return null
     var file: String = path.get_slice("?", 0)
@@ -161,7 +203,10 @@ func _draw() -> void:
         var top_left := Vector2(PAD + float(col) * _stride, PAD + float(row) * _stride)
         var rect := Rect2(top_left, Vector2(_cell_size, _cell_size))
         draw_rect(rect, FILL, true)
-        draw_rect(rect, EDGE, false, 1.2, true)
+        var selected := index < _verified_items.size() and _verified_items[index] is Dictionary \
+            and not selected_uid.is_empty() \
+            and str(_verified_items[index].get("uid","")) == selected_uid
+        draw_rect(rect, Color("#E5AD58") if selected else EDGE, false, 2.2 if selected else 1.2, true)
         draw_line(top_left + Vector2(3, 3),
             top_left + Vector2(_cell_size - 3, 3), SHINE, 1.0, true)
         if index < _verified_items.size() and _verified_items[index] is Dictionary:
