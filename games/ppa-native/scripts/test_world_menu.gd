@@ -25,6 +25,8 @@ signal character_inventory_requested
 signal inventory_retry_requested
 signal personal_storage_action_requested(fields: Dictionary)
 signal personal_storage_retry_requested
+signal personal_storage_refresh_requested
+signal clan_storage_refresh_requested
 signal clan_storage_action_requested(fields: Dictionary)
 signal clan_storage_retry_requested
 signal auction_action_requested(fields: Dictionary)
@@ -256,6 +258,8 @@ func _ready() -> void:
     _npc_screen.inventory_retry_requested.connect(func(): inventory_retry_requested.emit())
     _npc_screen.personal_storage_action_requested.connect(func(fields: Dictionary): personal_storage_action_requested.emit(fields))
     _npc_screen.personal_storage_retry_requested.connect(func(): personal_storage_retry_requested.emit())
+    _npc_screen.personal_storage_refresh_requested.connect(func(): personal_storage_refresh_requested.emit())
+    _npc_screen.clan_storage_refresh_requested.connect(func(): clan_storage_refresh_requested.emit())
     _npc_screen.clan_storage_action_requested.connect(func(fields: Dictionary): clan_storage_action_requested.emit(fields))
     _npc_screen.clan_storage_retry_requested.connect(func(): clan_storage_retry_requested.emit())
     _npc_screen.auction_action_requested.connect(func(fields: Dictionary): auction_action_requested.emit(fields))
