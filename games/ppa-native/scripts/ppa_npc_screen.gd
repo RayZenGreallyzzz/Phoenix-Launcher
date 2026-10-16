@@ -16,6 +16,8 @@ signal inventory_action_requested(fields: Dictionary)
 signal inventory_retry_requested
 signal personal_storage_action_requested(fields: Dictionary)
 signal personal_storage_retry_requested
+signal personal_storage_refresh_requested
+signal clan_storage_refresh_requested
 signal clan_storage_action_requested(fields: Dictionary)
 signal clan_storage_retry_requested
 signal auction_action_requested(fields: Dictionary)
@@ -951,6 +953,14 @@ func show_canonical_clan_storage(items: Array) -> void:
     _body.add_child(scroller)
     var grid = VIRTUAL_GRID.new()
     grid.item_inspector = _item_hold
+    # Compacted PPA cloud items often omit class from their individual entry.
+    # The authenticated character class restores the official gear PNG.
+    grid.actual_class = str(_player_save_readonly.get("classKey",
+        _player_save_readonly.get("class",_player_save_readonly.get("cls",""))))
+    grid.selected_uid = (_storage_bag_uid if scope == "inventory" and tab == "personal"
+        else (_clan_put_uid if scope == "inventory" else (
+        _storage_personal_uid if scope == "personal" else _clan_take_uid)))
+    grid.storage_item_chosen.connect(_storage_grid_chosen)
     grid.custom_minimum_size.x = 300
     scroller.add_child(grid)
     grid.configure("clan", scroller, 5)
@@ -2815,6 +2825,31 @@ func _storage_pair(scope: String) -> void:
     _storage_slot_panel(split, "inventory")
     _storage_slot_panel(split, scope)
 
+func _storage_grid_chosen(scope: String, uid: String) -> void:
+    if uid.is_empty() or not visible or service != "storage":
+        return
+    if tab == "personal" and _owns_verified_state(personal_storage_state):
+        var current: Array = personal_storage_state.get(
+            "bag" if scope == "inventory" else "personal",[])
+        var valid := false
+        for entry in current:
+            if entry is Dictionary and str(entry.get("uid","")) == uid:
+                valid = true
+                break
+        if valid and scope in ["inventory","personal"]:
+            _select_personal_uid("bag" if scope == "inventory" else "personal",uid)
+            _render()
+    elif tab == "clan" and _owns_verified_state(clan_storage_state):
+        var current: Array = clan_storage_state.get(
+            "bag" if scope == "inventory" else "items",[])
+        for entry in current:
+            if entry is Dictionary and str(entry.get("uid","")) == uid:
+                if scope != "inventory" and not bool(entry.get("canTake",false)):
+                    return
+                _choose_clan_vault_uid("bag" if scope == "inventory" else "items",uid)
+                _render()
+                return
+
 func _select_personal_uid(which: String, uid: String) -> void:
     if which == "bag":
         _storage_bag_uid = uid
@@ -2850,11 +2885,18 @@ func _show_personal_storage_controls() -> void:
         _body.add_child(_label("Ожидаем серверный список предметов PPA.", 11, SUB))
         _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
         return
+    var refresh := _button("ОБНОВИТЬ СКЛАД",not personal_storage_busy)
+    refresh.name = "PPARefreshPersonalStorage"
+    refresh.pressed.connect(func(): personal_storage_refresh_requested.emit())
+    _body.add_child(refresh)
     var version := int(personal_storage_state.get("version", 0))
     var bag: Array = personal_storage_state.get("bag", [])
     var stored: Array = personal_storage_state.get("personal", [])
     _mini_row("Настоящая сумка", str(bag.size()) + " / 100")
     _mini_row("Личный склад", str(stored.size()) + " / 200")
+    _body.add_child(_label("Коснись вещи в сумке или складе, затем нажми «Положить» или «Забрать».",11,SUB))
+    if not stored.is_empty() and not personal_storage_actions.has("take"):
+        _body.add_child(_label("Сервер PPA не разрешил возврат со склада. Предметы не удалены · обнови данные.",11,GOLD))
     for direction in ["put","take"]:
         var source_items: Array = bag if direction == "put" else stored
         var which := "bag" if direction == "put" else "personal"
@@ -2941,12 +2983,18 @@ func _show_clan_storage_controls() -> void:
         _body.add_child(_label("Ожидаем подтверждённое состояние кланового склада PPA.", 11, SUB))
         _locked_action("КЛАНОВЫЙ ПЕРЕНОС")
         return
+    var refresh := _button("ОБНОВИТЬ КЛАНОВЫЙ СКЛАД",not clan_storage_busy)
+    refresh.name = "PPARefreshClanStorage"
+    refresh.pressed.connect(func(): clan_storage_refresh_requested.emit())
+    _body.add_child(refresh)
     var version := int(clan_storage_state.get("version", 0))
     var revision := str(clan_storage_state.get("clanRevision", ""))
     var bag: Array = clan_storage_state.get("bag", [])
     var stored: Array = clan_storage_state.get("items", [])
     _mini_row("Инвентарь", str(bag.size()) + " / 100")
     _mini_row("Клановый склад", str(stored.size()) + " / 500")
+    if not stored.is_empty() and not clan_storage_actions.has("take"):
+        _body.add_child(_label("Сервер пока не разрешил выдачу предметов из клана.",11,GOLD))
     if not bool(clan_storage_state.get("storageUnlocked", false)):
         _body.add_child(_label("Склад ещё не открыт главой клана.", 11, SUB))
         _locked_action("ПОЛОЖИТЬ / ЗАБРАТЬ")
